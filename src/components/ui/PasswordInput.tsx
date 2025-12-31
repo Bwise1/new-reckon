@@ -23,7 +23,7 @@ const PasswordInput = ({
   };
 
   return (
-    <div className={`flex items-center w-full border border-primary rounded-lg px-2 py-1 focus-within:border-secondary mb-2 ${className}`}>
+    <div className={`flex items-center w-full border border-gray-300 rounded-lg px-2 py-1 focus-within:border-secondary mb-2 ${className}`}>
       <input
         value={value}
         onChange={onChange}

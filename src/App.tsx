@@ -4,6 +4,8 @@ import { QueryProvider } from './lib/react-query';
 import { useAuthStore } from './stores/auth.store';
 import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
+import Dashboard from './pages/Dashboard';
+import ProjectDetail from './pages/ProjectDetail';
 import './App.css';
 
 function AppRoutes() {
@@ -19,7 +21,8 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       {/* Add more routes as needed */}
-      <Route path="/dashboard" element={<div className="p-8">Dashboard - Coming Soon</div>} />
+      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/project/:id" element={<ProjectDetail />} />
       <Route path="/verify-email" element={<div className="p-8">Verify Email - Coming Soon</div>} />
       <Route path="/forgot-password" element={<div className="p-8">Forgot Password - Coming Soon</div>} />
     </Routes>
