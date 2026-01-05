@@ -2,6 +2,13 @@ import { create } from 'zustand';
 import type { TakeoffItem, TakeoffMode, Measurement, CalibrationLine, EstimationCardData } from '@/types/takeoff';
 import { loadProjectFromStorage, autoSaveProject } from '@/utils/persistence';
 
+// Command pattern for undo/redo
+interface Command {
+  execute: () => void;
+  undo: () => void;
+  description?: string;
+}
+
 interface TakeoffStore {
   // Project tracking
   currentProjectId: string | null;
@@ -22,6 +29,12 @@ interface TakeoffStore {
 
   // Estimation cards
   estimationCards: EstimationCardData[];
+
+  // Undo/Redo
+  undoStack: Command[];
+  redoStack: Command[];
+  canUndo: boolean;
+  canRedo: boolean;
 
   // Persistence
   loadProject: (projectId: string) => void;
@@ -50,9 +63,16 @@ interface TakeoffStore {
   updateEstimationCard: (id: string, updates: Partial<EstimationCardData>) => void;
   deleteEstimationCard: (id: string) => void;
 
+  // Undo/Redo actions
+  undo: () => void;
+  redo: () => void;
+  clearHistory: () => void;
+
   // Reset
   reset: () => void;
 }
+
+const MAX_HISTORY_SIZE = 50;
 
 const initialState = {
   currentProjectId: null,
@@ -65,35 +85,64 @@ const initialState = {
   numPages: 0,
   backgroundImage: null,
   estimationCards: [],
+  undoStack: [] as Command[],
+  redoStack: [] as Command[],
+  canUndo: false,
+  canRedo: false,
 };
 
-export const useTakeoffStore = create<TakeoffStore>((set, get) => ({
-  ...initialState,
-
-  // Persistence methods
-  loadProject: (projectId: string) => {
-    const savedData = loadProjectFromStorage(projectId);
-    if (savedData) {
-      set({
-        currentProjectId: projectId,
-        takeoffItems: savedData.takeoffItems,
-        scales: savedData.scales,
-        calibrationLines: savedData.calibrationLines,
-        currentPage: savedData.currentPage,
-        numPages: savedData.numPages,
-        backgroundImage: savedData.backgroundImage,
-        estimationCards: savedData.estimationCards || [],
+export const useTakeoffStore = create<TakeoffStore>((set, get) => {
+  // Helper to execute a command and add to undo stack
+  const executeCommand = (command: Command, skipHistory: boolean = false) => {
+    command.execute();
+    
+    if (!skipHistory) {
+      set((state) => {
+        const newUndoStack = [...state.undoStack, command];
+        // Limit history size
+        const trimmedStack = newUndoStack.slice(-MAX_HISTORY_SIZE);
+        return {
+          undoStack: trimmedStack,
+          redoStack: [], // Clear redo stack when new action is performed
+          canUndo: trimmedStack.length > 0,
+          canRedo: false,
+        };
       });
-      console.log('Loaded project from storage:', projectId);
-    } else {
-      // New project, reset to initial state but keep the projectId
-      set({
-        ...initialState,
-        currentProjectId: projectId
-      });
-      console.log('Starting new project:', projectId);
+      get().triggerAutoSave();
     }
-  },
+  };
+
+  return {
+    ...initialState,
+
+    // Persistence methods
+    loadProject: (projectId: string) => {
+      const savedData = loadProjectFromStorage(projectId);
+      if (savedData) {
+        set({
+          currentProjectId: projectId,
+          takeoffItems: savedData.takeoffItems,
+          scales: savedData.scales,
+          calibrationLines: savedData.calibrationLines,
+          currentPage: savedData.currentPage,
+          numPages: savedData.numPages,
+          backgroundImage: savedData.backgroundImage,
+          estimationCards: savedData.estimationCards || [],
+          undoStack: [],
+          redoStack: [],
+          canUndo: false,
+          canRedo: false,
+        });
+        console.log('Loaded project from storage:', projectId);
+      } else {
+        // New project, reset to initial state but keep the projectId
+        set({
+          ...initialState,
+          currentProjectId: projectId
+        });
+        console.log('Starting new project:', projectId);
+      }
+    },
 
   triggerAutoSave: () => {
     const state = get();
@@ -111,82 +160,211 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => ({
   },
 
   setTakeoffItems: (items) => {
-    set({ takeoffItems: items });
-    get().triggerAutoSave();
+    const previousItems = get().takeoffItems;
+    executeCommand({
+      execute: () => set({ takeoffItems: items }),
+      undo: () => set({ takeoffItems: previousItems }),
+      description: 'Set takeoff items',
+    });
   },
 
   addTakeoffItem: (item) => {
-    set((state) => ({
-      takeoffItems: [...state.takeoffItems, item],
-      activeItemId: item.id,
-    }));
-    get().triggerAutoSave();
+    executeCommand({
+      execute: () => {
+        set((state) => ({
+          takeoffItems: [...state.takeoffItems, item],
+          activeItemId: item.id,
+        }));
+      },
+      undo: () => {
+        set((state) => ({
+          takeoffItems: state.takeoffItems.filter((i) => i.id !== item.id),
+          activeItemId: state.activeItemId === item.id ? null : state.activeItemId,
+        }));
+      },
+      description: `Add ${item.type} item: ${item.name}`,
+    });
   },
 
   updateTakeoffItem: (id, updates) => {
-    set((state) => ({
-      takeoffItems: state.takeoffItems.map((item) =>
-        item.id === id ? { ...item, ...updates } : item
-      ),
-    }));
-    get().triggerAutoSave();
+    const state = get();
+    const item = state.takeoffItems.find((i) => i.id === id);
+    if (!item) return;
+
+    const previousItem = { ...item };
+    executeCommand({
+      execute: () => {
+        set((state) => ({
+          takeoffItems: state.takeoffItems.map((item) =>
+            item.id === id ? { ...item, ...updates } : item
+          ),
+        }));
+      },
+      undo: () => {
+        set((state) => ({
+          takeoffItems: state.takeoffItems.map((item) =>
+            item.id === id ? previousItem : item
+          ),
+        }));
+      },
+      description: `Update item: ${item.name}`,
+    });
   },
 
   deleteTakeoffItem: (id) => {
-    set((state) => ({
-      takeoffItems: state.takeoffItems.filter((item) => item.id !== id),
-      activeItemId: state.activeItemId === id ? null : state.activeItemId,
-    }));
-    get().triggerAutoSave();
+    const state = get();
+    const item = state.takeoffItems.find((i) => i.id === id);
+    if (!item) return;
+
+    const previousItems = [...state.takeoffItems];
+    const previousActiveId = state.activeItemId;
+    
+    executeCommand({
+      execute: () => {
+        set((state) => ({
+          takeoffItems: state.takeoffItems.filter((item) => item.id !== id),
+          activeItemId: state.activeItemId === id ? null : state.activeItemId,
+        }));
+      },
+      undo: () => {
+        set({
+          takeoffItems: previousItems,
+          activeItemId: previousActiveId,
+        });
+      },
+      description: `Delete item: ${item.name}`,
+    });
   },
 
   setActiveItemId: (id) => set({ activeItemId: id }),
 
   addMeasurement: (itemId, measurement) => {
-    set((state) => ({
-      takeoffItems: state.takeoffItems.map((item) => {
-        if (item.id === itemId) {
-          return {
-            ...item,
-            measurements: [...item.measurements, measurement],
-            totalQuantity: item.totalQuantity + measurement.quantity,
-          };
-        }
-        return item;
-      }),
-    }));
-    get().triggerAutoSave();
+    executeCommand({
+      execute: () => {
+        set((state) => ({
+          takeoffItems: state.takeoffItems.map((item) => {
+            if (item.id === itemId) {
+              return {
+                ...item,
+                measurements: [...item.measurements, measurement],
+                totalQuantity: item.totalQuantity + measurement.quantity,
+              };
+            }
+            return item;
+          }),
+        }));
+      },
+      undo: () => {
+        set((state) => ({
+          takeoffItems: state.takeoffItems.map((item) => {
+            if (item.id === itemId) {
+              return {
+                ...item,
+                measurements: item.measurements.filter((m) => m.id !== measurement.id),
+                totalQuantity: item.totalQuantity - measurement.quantity,
+              };
+            }
+            return item;
+          }),
+        }));
+      },
+      description: 'Add measurement',
+    });
   },
 
   removeMeasurement: (itemId, measurementId) => {
-    set((state) => ({
-      takeoffItems: state.takeoffItems.map((item) => {
-        if (item.id === itemId) {
-          const measurement = item.measurements.find((m) => m.id === measurementId);
-          return {
-            ...item,
-            measurements: item.measurements.filter((m) => m.id !== measurementId),
-            totalQuantity: item.totalQuantity - (measurement?.quantity || 0),
-          };
-        }
-        return item;
-      }),
-    }));
-    get().triggerAutoSave();
+    const state = get();
+    const item = state.takeoffItems.find((i) => i.id === itemId);
+    if (!item) return;
+    
+    const measurement = item.measurements.find((m) => m.id === measurementId);
+    if (!measurement) return;
+
+    executeCommand({
+      execute: () => {
+        set((state) => ({
+          takeoffItems: state.takeoffItems.map((item) => {
+            if (item.id === itemId) {
+              return {
+                ...item,
+                measurements: item.measurements.filter((m) => m.id !== measurementId),
+                totalQuantity: item.totalQuantity - measurement.quantity,
+              };
+            }
+            return item;
+          }),
+        }));
+      },
+      undo: () => {
+        set((state) => ({
+          takeoffItems: state.takeoffItems.map((item) => {
+            if (item.id === itemId) {
+              return {
+                ...item,
+                measurements: [...item.measurements, measurement],
+                totalQuantity: item.totalQuantity + measurement.quantity,
+              };
+            }
+            return item;
+          }),
+        }));
+      },
+      description: 'Remove measurement',
+    });
   },
 
   setScale: (page, scale) => {
-    set((state) => ({
-      scales: { ...state.scales, [page]: scale },
-    }));
-    get().triggerAutoSave();
+    const state = get();
+    const previousScale = state.scales[page];
+    
+    executeCommand({
+      execute: () => {
+        set((state) => ({
+          scales: { ...state.scales, [page]: scale },
+        }));
+      },
+      undo: () => {
+        if (previousScale !== undefined) {
+          set((state) => ({
+            scales: { ...state.scales, [page]: previousScale },
+          }));
+        } else {
+          set((state) => {
+            const newScales = { ...state.scales };
+            delete newScales[page];
+            return { scales: newScales };
+          });
+        }
+      },
+      description: `Set scale for page ${page}`,
+    });
   },
 
   setCalibrationLine: (page, line) => {
-    set((state) => ({
-      calibrationLines: { ...state.calibrationLines, [page]: line },
-    }));
-    get().triggerAutoSave();
+    const state = get();
+    const previousLine = state.calibrationLines[page];
+    
+    executeCommand({
+      execute: () => {
+        set((state) => ({
+          calibrationLines: { ...state.calibrationLines, [page]: line },
+        }));
+      },
+      undo: () => {
+        if (previousLine !== undefined) {
+          set((state) => ({
+            calibrationLines: { ...state.calibrationLines, [page]: previousLine },
+          }));
+        } else {
+          set((state) => {
+            const newLines = { ...state.calibrationLines };
+            delete newLines[page];
+            return { calibrationLines: newLines };
+          });
+        }
+      },
+      description: `Set calibration line for page ${page}`,
+    });
   },
 
   setCalibrationMode: (mode) => set({ calibrationMode: mode }),
@@ -207,27 +385,123 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => ({
   },
 
   addEstimationCard: (card) => {
-    set((state) => ({
-      estimationCards: [...state.estimationCards, card],
-    }));
-    get().triggerAutoSave();
+    executeCommand({
+      execute: () => {
+        set((state) => ({
+          estimationCards: [...state.estimationCards, card],
+        }));
+      },
+      undo: () => {
+        set((state) => ({
+          estimationCards: state.estimationCards.filter((c) => c.id !== card.id),
+        }));
+      },
+      description: `Add estimation card: ${card.header}`,
+    });
   },
 
   updateEstimationCard: (id, updates) => {
-    set((state) => ({
-      estimationCards: state.estimationCards.map((card) =>
-        card.id === id ? { ...card, ...updates } : card
-      ),
-    }));
-    get().triggerAutoSave();
+    const state = get();
+    const card = state.estimationCards.find((c) => c.id === id);
+    if (!card) return;
+
+    const previousCard = { ...card };
+    executeCommand({
+      execute: () => {
+        set((state) => ({
+          estimationCards: state.estimationCards.map((card) =>
+            card.id === id ? { ...card, ...updates } : card
+          ),
+        }));
+      },
+      undo: () => {
+        set((state) => ({
+          estimationCards: state.estimationCards.map((card) =>
+            card.id === id ? previousCard : card
+          ),
+        }));
+      },
+      description: `Update estimation card: ${card.header}`,
+    });
   },
 
   deleteEstimationCard: (id) => {
-    set((state) => ({
-      estimationCards: state.estimationCards.filter((card) => card.id !== id),
-    }));
+    const state = get();
+    const card = state.estimationCards.find((c) => c.id === id);
+    if (!card) return;
+
+    const previousCards = [...state.estimationCards];
+    executeCommand({
+      execute: () => {
+        set((state) => ({
+          estimationCards: state.estimationCards.filter((card) => card.id !== id),
+        }));
+      },
+      undo: () => {
+        set({ estimationCards: previousCards });
+      },
+      description: `Delete estimation card: ${card.header}`,
+    });
+  },
+
+  // Undo/Redo actions
+  undo: () => {
+    const state = get();
+    if (state.undoStack.length === 0) return;
+
+    const command = state.undoStack[state.undoStack.length - 1];
+    command.undo();
+
+    set((state) => {
+      const newUndoStack = state.undoStack.slice(0, -1);
+      const newRedoStack = [...state.redoStack, command];
+      return {
+        undoStack: newUndoStack,
+        redoStack: newRedoStack,
+        canUndo: newUndoStack.length > 0,
+        canRedo: true,
+      };
+    });
     get().triggerAutoSave();
   },
 
-  reset: () => set(initialState),
-}));
+  redo: () => {
+    const state = get();
+    if (state.redoStack.length === 0) return;
+
+    const command = state.redoStack[state.redoStack.length - 1];
+    command.execute();
+
+    set((state) => {
+      const newRedoStack = state.redoStack.slice(0, -1);
+      const newUndoStack = [...state.undoStack, command];
+      return {
+        undoStack: newUndoStack,
+        redoStack: newRedoStack,
+        canUndo: true,
+        canRedo: newRedoStack.length > 0,
+      };
+    });
+    get().triggerAutoSave();
+  },
+
+  clearHistory: () => {
+    set({
+      undoStack: [],
+      redoStack: [],
+      canUndo: false,
+      canRedo: false,
+    });
+  },
+
+  reset: () => {
+    set({
+      ...initialState,
+      undoStack: [],
+      redoStack: [],
+      canUndo: false,
+      canRedo: false,
+    });
+  },
+  };
+});

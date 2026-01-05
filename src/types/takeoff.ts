@@ -5,11 +5,18 @@ export interface Point {
   y: number;
 }
 
+export interface MeasurementMetadata {
+  createdAt: string;
+  lastModified: string;
+  confidence?: number; // 0-1 score for measurement confidence
+}
+
 export interface Measurement {
   id: string;
   points: Point[];
   quantity: number;
   page: number;
+  metadata?: MeasurementMetadata;
 }
 
 export interface TakeoffItem {
