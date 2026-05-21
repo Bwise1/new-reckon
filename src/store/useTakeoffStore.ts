@@ -1,6 +1,15 @@
 import { create } from 'zustand';
-import type { TakeoffItem, TakeoffMode, Measurement, CalibrationLine, EstimationCardData } from '@/types/takeoff';
+import type {
+  TakeoffItem,
+  Measurement,
+  CalibrationLine,
+  EstimationCardData,
+  BoqElementData,
+  BoqPricing,
+} from '@/types/takeoff';
+import { createEmptyBoqElement, createEmptyBoqItem } from '@/utils/boqCalculations';
 import { loadProjectFromStorage, autoSaveProject } from '@/utils/persistence';
+import { generateClientId } from '@/utils/id';
 
 // Command pattern for undo/redo
 interface Command {
@@ -27,8 +36,8 @@ interface TakeoffStore {
   numPages: number;
   backgroundImage: string | null;
 
-  // Estimation cards
-  estimationCards: EstimationCardData[];
+  boqElements: BoqElementData[];
+  pricing: BoqPricing;
 
   // Undo/Redo
   undoStack: Command[];
@@ -45,6 +54,9 @@ interface TakeoffStore {
   addTakeoffItem: (item: TakeoffItem) => void;
   updateTakeoffItem: (id: string, updates: Partial<TakeoffItem>) => void;
   deleteTakeoffItem: (id: string) => void;
+  duplicateTakeoffItem: (id: string) => void;
+  moveTakeoffItemUp: (id: string) => void;
+  moveTakeoffItemDown: (id: string) => void;
   setActiveItemId: (id: string | null) => void;
 
   addMeasurement: (itemId: string, measurement: Measurement) => void;
@@ -57,11 +69,18 @@ interface TakeoffStore {
   setCurrentPage: (page: number) => void;
   setNumPages: (pages: number) => void;
   setBackgroundImage: (image: string | null) => void;
+  setPricing: (pricing: Partial<BoqPricing>) => void;
 
-  // Estimation cards
-  addEstimationCard: (card: EstimationCardData) => void;
-  updateEstimationCard: (id: string, updates: Partial<EstimationCardData>) => void;
-  deleteEstimationCard: (id: string) => void;
+  addBoqElement: () => void;
+  updateBoqElement: (elementId: string, updates: Partial<BoqElementData>) => void;
+  addElementItem: (elementId: string) => void;
+  updateElementItem: (
+    elementId: string,
+    itemId: string,
+    updates: Partial<EstimationCardData>
+  ) => void;
+  deleteElementItem: (elementId: string, itemId: string) => void;
+  duplicateElementItem: (elementId: string, itemId: string) => void;
 
   // Undo/Redo actions
   undo: () => void;
@@ -84,7 +103,11 @@ const initialState = {
   currentPage: 1,
   numPages: 0,
   backgroundImage: null,
-  estimationCards: [],
+  boqElements: [createEmptyBoqElement(0)],
+  pricing: {
+    vatRate: 0,
+    contingency: 0,
+  },
   undoStack: [] as Command[],
   redoStack: [] as Command[],
   canUndo: false,
@@ -127,7 +150,11 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
           currentPage: savedData.currentPage,
           numPages: savedData.numPages,
           backgroundImage: savedData.backgroundImage,
-          estimationCards: savedData.estimationCards || [],
+          boqElements:
+            savedData.boqElements?.length > 0
+              ? savedData.boqElements
+              : [createEmptyBoqElement(0)],
+          pricing: savedData.pricing || { vatRate: 0, contingency: 0 },
           undoStack: [],
           redoStack: [],
           canUndo: false,
@@ -154,7 +181,8 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         currentPage: state.currentPage,
         numPages: state.numPages,
         backgroundImage: state.backgroundImage,
-        estimationCards: state.estimationCards,
+        boqElements: state.boqElements,
+        pricing: state.pricing,
       });
     }
   },
@@ -233,6 +261,82 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         });
       },
       description: `Delete item: ${item.name}`,
+    });
+  },
+
+  duplicateTakeoffItem: (id) => {
+    const state = get();
+    const source = state.takeoffItems.find((i) => i.id === id);
+    if (!source) return;
+
+    const copy: TakeoffItem = {
+      ...source,
+      id: generateClientId(),
+      name: `${source.name} (Copy)`,
+      measurements: source.measurements.map((m) => ({
+        ...m,
+        id: generateClientId(),
+      })),
+    };
+
+    const sourceIndex = state.takeoffItems.findIndex((i) => i.id === id);
+
+    executeCommand({
+      execute: () => {
+        set((current) => {
+          const items = [...current.takeoffItems];
+          items.splice(sourceIndex + 1, 0, copy);
+          return {
+            takeoffItems: items,
+            activeItemId: copy.id,
+          };
+        });
+      },
+      undo: () => {
+        set((current) => ({
+          takeoffItems: current.takeoffItems.filter((i) => i.id !== copy.id),
+          activeItemId: current.activeItemId === copy.id ? id : current.activeItemId,
+        }));
+      },
+      description: `Duplicate item: ${source.name}`,
+    });
+  },
+
+  moveTakeoffItemUp: (id) => {
+    const state = get();
+    const index = state.takeoffItems.findIndex((i) => i.id === id);
+    if (index <= 0) return;
+    const previousItems = [...state.takeoffItems];
+
+    executeCommand({
+      execute: () => {
+        set((current) => {
+          const items = [...current.takeoffItems];
+          [items[index - 1], items[index]] = [items[index], items[index - 1]];
+          return { takeoffItems: items };
+        });
+      },
+      undo: () => set({ takeoffItems: previousItems }),
+      description: 'Move item up',
+    });
+  },
+
+  moveTakeoffItemDown: (id) => {
+    const state = get();
+    const index = state.takeoffItems.findIndex((i) => i.id === id);
+    if (index === -1 || index >= state.takeoffItems.length - 1) return;
+    const previousItems = [...state.takeoffItems];
+
+    executeCommand({
+      execute: () => {
+        set((current) => {
+          const items = [...current.takeoffItems];
+          [items[index], items[index + 1]] = [items[index + 1], items[index]];
+          return { takeoffItems: items };
+        });
+      },
+      undo: () => set({ takeoffItems: previousItems }),
+      description: 'Move item down',
     });
   },
 
@@ -384,63 +488,147 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     get().triggerAutoSave();
   },
 
-  addEstimationCard: (card) => {
+  setPricing: (pricing) => {
+    set((state) => ({
+      pricing: {
+        ...state.pricing,
+        ...pricing,
+      },
+    }));
+    get().triggerAutoSave();
+  },
+
+  addBoqElement: () => {
+    const state = get();
+    const previousElements = [...state.boqElements];
+    const newElement = createEmptyBoqElement(state.boqElements.length);
     executeCommand({
-      execute: () => {
-        set((state) => ({
-          estimationCards: [...state.estimationCards, card],
-        }));
-      },
-      undo: () => {
-        set((state) => ({
-          estimationCards: state.estimationCards.filter((c) => c.id !== card.id),
-        }));
-      },
-      description: `Add estimation card: ${card.header}`,
+      execute: () => set({ boqElements: [...state.boqElements, newElement] }),
+      undo: () => set({ boqElements: previousElements }),
+      description: `Add ${newElement.title}`,
     });
   },
 
-  updateEstimationCard: (id, updates) => {
+  updateBoqElement: (elementId, updates) => {
     const state = get();
-    const card = state.estimationCards.find((c) => c.id === id);
-    if (!card) return;
-
-    const previousCard = { ...card };
+    const element = state.boqElements.find((e) => e.id === elementId);
+    if (!element) return;
+    const previousElement = { ...element, items: [...element.items] };
     executeCommand({
-      execute: () => {
-        set((state) => ({
-          estimationCards: state.estimationCards.map((card) =>
-            card.id === id ? { ...card, ...updates } : card
+      execute: () =>
+        set((current) => ({
+          boqElements: current.boqElements.map((el) =>
+            el.id === elementId ? { ...el, ...updates } : el
           ),
-        }));
-      },
-      undo: () => {
-        set((state) => ({
-          estimationCards: state.estimationCards.map((card) =>
-            card.id === id ? previousCard : card
+        })),
+      undo: () =>
+        set((current) => ({
+          boqElements: current.boqElements.map((el) =>
+            el.id === elementId ? previousElement : el
           ),
-        }));
-      },
-      description: `Update estimation card: ${card.header}`,
+        })),
+      description: `Update ${element.title}`,
     });
   },
 
-  deleteEstimationCard: (id) => {
+  addElementItem: (elementId) => {
     const state = get();
-    const card = state.estimationCards.find((c) => c.id === id);
-    if (!card) return;
-
-    const previousCards = [...state.estimationCards];
+    const element = state.boqElements.find((e) => e.id === elementId);
+    if (!element) return;
+    const newItem = createEmptyBoqItem();
+    const previousElements = state.boqElements.map((el) => ({
+      ...el,
+      items: [...el.items],
+    }));
     executeCommand({
-      execute: () => {
-        set((state) => ({
-          estimationCards: state.estimationCards.filter((card) => card.id !== id),
-        }));
-      },
-      undo: () => {
-        set({ estimationCards: previousCards });
-      },
-      description: `Delete estimation card: ${card.header}`,
+      execute: () =>
+        set((current) => ({
+          boqElements: current.boqElements.map((el) =>
+            el.id === elementId ? { ...el, items: [...el.items, newItem] } : el
+          ),
+        })),
+      undo: () => set({ boqElements: previousElements }),
+      description: `Add item to ${element.title}`,
+    });
+  },
+
+  updateElementItem: (elementId, itemId, updates) => {
+    const state = get();
+    const element = state.boqElements.find((e) => e.id === elementId);
+    const item = element?.items.find((i) => i.id === itemId);
+    if (!element || !item) return;
+    const previousElements = state.boqElements.map((el) => ({
+      ...el,
+      items: [...el.items],
+    }));
+    executeCommand({
+      execute: () =>
+        set((current) => ({
+          boqElements: current.boqElements.map((el) =>
+            el.id === elementId
+              ? {
+                  ...el,
+                  items: el.items.map((i) =>
+                    i.id === itemId ? { ...i, ...updates } : i
+                  ),
+                }
+              : el
+          ),
+        })),
+      undo: () => set({ boqElements: previousElements }),
+      description: `Update item ${item.header || item.description || 'Item'}`,
+    });
+  },
+
+  deleteElementItem: (elementId, itemId) => {
+    const state = get();
+    const element = state.boqElements.find((e) => e.id === elementId);
+    if (!element || element.items.length <= 1) return;
+    const previousElements = state.boqElements.map((el) => ({
+      ...el,
+      items: [...el.items],
+    }));
+    executeCommand({
+      execute: () =>
+        set((current) => ({
+          boqElements: current.boqElements.map((el) =>
+            el.id === elementId
+              ? { ...el, items: el.items.filter((i) => i.id !== itemId) }
+              : el
+          ),
+        })),
+      undo: () => set({ boqElements: previousElements }),
+      description: 'Delete item',
+    });
+  },
+
+  duplicateElementItem: (elementId, itemId) => {
+    const state = get();
+    const element = state.boqElements.find((e) => e.id === elementId);
+    const source = element?.items.find((i) => i.id === itemId);
+    if (!element || !source) return;
+    const copy: EstimationCardData = {
+      ...source,
+      id: generateClientId(),
+      history: source.history.map((h) => ({ ...h, id: generateClientId() })),
+    };
+    const sourceIndex = element.items.findIndex((i) => i.id === itemId);
+    const previousElements = state.boqElements.map((el) => ({
+      ...el,
+      items: [...el.items],
+    }));
+    executeCommand({
+      execute: () =>
+        set((current) => ({
+          boqElements: current.boqElements.map((el) => {
+            if (el.id !== elementId) return el;
+            const items = [...el.items];
+            items.splice(sourceIndex + 1, 0, copy);
+            return { ...el, items };
+          }),
+        })),
+      undo: () => set({ boqElements: previousElements }),
+      description: 'Duplicate item',
     });
   },
 

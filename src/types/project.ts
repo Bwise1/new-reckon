@@ -2,6 +2,7 @@ export interface Project {
   id: string;
   title: string;
   location: string;
+  project_type?: 'bill_of_qty' | 'material_schedule';
   elements?: number;
   createdAt?: string;
   updatedAt?: string;

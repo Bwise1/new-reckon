@@ -1,27 +1,90 @@
-import type { TakeoffItem, CalibrationLine, EstimationCardData } from '@/types/takeoff';
+import type {
+  TakeoffItem,
+  CalibrationLine,
+  EstimationCardData,
+  BoqElementData,
+  BoqPricing,
+} from '@/types/takeoff';
+import { generateClientId } from '@/utils/id';
+import { createEmptyBoqItem, elementTitleFromIndex } from '@/utils/boqCalculations';
 
 export interface PersistedProjectData {
+  schemaVersion: number;
   takeoffItems: TakeoffItem[];
   scales: Record<number, number>;
   calibrationLines: Record<number, CalibrationLine>;
   currentPage: number;
   numPages: number;
   backgroundImage: string | null;
-  estimationCards: EstimationCardData[];
+  boqElements: BoqElementData[];
+  pricing: BoqPricing;
   lastSaved: string;
 }
 
 const STORAGE_PREFIX = 'reckon_project_';
 const AUTO_SAVE_DEBOUNCE = 500; // ms
+const CURRENT_SCHEMA_VERSION = 3;
 
-let saveTimeout: NodeJS.Timeout | null = null;
+let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+
+type LegacyBoqElement = BoqElementData & { header?: string };
+
+const normalizeBoqElements = (elements: LegacyBoqElement[]): BoqElementData[] =>
+  elements.map((element) => {
+    const legacyHeader = element.header?.trim() ?? '';
+    const items = element.items.map((item, index) => ({
+      ...item,
+      header: item.header?.trim() || (index === 0 ? legacyHeader : '') || '',
+    }));
+    return { id: element.id, title: element.title, items };
+  });
+
+const migrateLegacyCardsToElements = (
+  cards: Array<EstimationCardData & { header?: string }>,
+  legacyBoqElement?: { title?: string; header?: string }
+): BoqElementData[] => {
+  if (cards.length === 0) {
+    return [
+      {
+        id: generateClientId(),
+        title: legacyBoqElement?.title ?? elementTitleFromIndex(0),
+        items: [createEmptyBoqItem()],
+      },
+    ];
+  }
+
+  const fallbackHeader = legacyBoqElement?.header?.trim() ?? '';
+
+  return [
+    {
+      id: generateClientId(),
+      title: legacyBoqElement?.title ?? elementTitleFromIndex(0),
+      items: cards.map((card) => ({
+        ...card,
+        header: card.header?.trim() ?? '',
+      })),
+    },
+  ].map((element) => {
+    if (!fallbackHeader || element.items[0]?.header) return element;
+    return {
+      ...element,
+      items: element.items.map((item, index) =>
+        index === 0 ? { ...item, header: fallbackHeader } : item
+      ),
+    };
+  });
+};
 
 /**
  * Save project data to localStorage
  */
-export const saveProjectToStorage = (projectId: string, data: Omit<PersistedProjectData, 'lastSaved'>): void => {
+export const saveProjectToStorage = (
+  projectId: string,
+  data: Omit<PersistedProjectData, 'lastSaved' | 'schemaVersion'>
+): void => {
   try {
     const persistedData: PersistedProjectData = {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
       ...data,
       lastSaved: new Date().toISOString(),
     };
@@ -29,10 +92,10 @@ export const saveProjectToStorage = (projectId: string, data: Omit<PersistedProj
     const key = `${STORAGE_PREFIX}${projectId}`;
     localStorage.setItem(key, JSON.stringify(persistedData));
 
-    // Also update the project list metadata
     updateProjectMetadata(projectId, {
       lastModified: persistedData.lastSaved,
       itemCount: data.takeoffItems.length,
+      elementCount: data.boqElements.length,
     });
   } catch (error) {
     console.error('Failed to save project to localStorage:', error);
@@ -51,7 +114,50 @@ export const loadProjectFromStorage = (projectId: string): PersistedProjectData 
       return null;
     }
 
-    return JSON.parse(data) as PersistedProjectData;
+    const parsed = JSON.parse(data) as Partial<PersistedProjectData> & {
+      estimationCards?: Array<EstimationCardData & { header?: string }>;
+      boqElement?: { title?: string; header?: string };
+    };
+    const schemaVersion = parsed.schemaVersion ?? 1;
+
+    const boqElements = normalizeBoqElements(
+      (parsed.boqElements && parsed.boqElements.length > 0
+        ? parsed.boqElements
+        : migrateLegacyCardsToElements(
+            parsed.estimationCards || [],
+            parsed.boqElement
+          )) as LegacyBoqElement[]
+    );
+
+    const pricing = parsed.pricing ?? { vatRate: 0, contingency: 0 };
+
+    if (schemaVersion < 2) {
+      return {
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        takeoffItems: parsed.takeoffItems || [],
+        scales: parsed.scales || {},
+        calibrationLines: parsed.calibrationLines || {},
+        currentPage: parsed.currentPage || 1,
+        numPages: parsed.numPages || 0,
+        backgroundImage: parsed.backgroundImage || null,
+        boqElements,
+        pricing,
+        lastSaved: parsed.lastSaved || new Date().toISOString(),
+      };
+    }
+
+    return {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      takeoffItems: parsed.takeoffItems || [],
+      scales: parsed.scales || {},
+      calibrationLines: parsed.calibrationLines || {},
+      currentPage: parsed.currentPage || 1,
+      numPages: parsed.numPages || 0,
+      backgroundImage: parsed.backgroundImage || null,
+      boqElements,
+      pricing,
+      lastSaved: parsed.lastSaved || new Date().toISOString(),
+    };
   } catch (error) {
     console.error('Failed to load project from localStorage:', error);
     return null;
@@ -65,8 +171,6 @@ export const deleteProjectFromStorage = (projectId: string): void => {
   try {
     const key = `${STORAGE_PREFIX}${projectId}`;
     localStorage.removeItem(key);
-
-    // Also remove from project metadata
     removeProjectMetadata(projectId);
   } catch (error) {
     console.error('Failed to delete project from localStorage:', error);
@@ -76,7 +180,10 @@ export const deleteProjectFromStorage = (projectId: string): void => {
 /**
  * Auto-save with debouncing
  */
-export const autoSaveProject = (projectId: string, data: Omit<PersistedProjectData, 'lastSaved'>): void => {
+export const autoSaveProject = (
+  projectId: string,
+  data: Omit<PersistedProjectData, 'lastSaved' | 'schemaVersion'>
+): void => {
   if (saveTimeout) {
     clearTimeout(saveTimeout);
   }
@@ -87,20 +194,25 @@ export const autoSaveProject = (projectId: string, data: Omit<PersistedProjectDa
   }, AUTO_SAVE_DEBOUNCE);
 };
 
-/**
- * Project metadata for listing
- */
 interface ProjectMetadata {
   id: string;
   lastModified: string;
   itemCount: number;
+  elementCount?: number;
 }
+
+/**
+ * BOQ element count from local autosave.
+ * Returns null when this project has no local data (use API count instead).
+ */
+export const getLocalBoqElementCount = (projectId: string): number | null => {
+  const data = loadProjectFromStorage(projectId);
+  if (!data) return null;
+  return data.boqElements.length;
+};
 
 const METADATA_KEY = 'reckon_projects_metadata';
 
-/**
- * Get all project metadata
- */
 export const getProjectsMetadata = (): ProjectMetadata[] => {
   try {
     const data = localStorage.getItem(METADATA_KEY);
@@ -111,13 +223,10 @@ export const getProjectsMetadata = (): ProjectMetadata[] => {
   }
 };
 
-/**
- * Update project metadata
- */
 const updateProjectMetadata = (projectId: string, updates: Partial<ProjectMetadata>): void => {
   try {
     const metadata = getProjectsMetadata();
-    const index = metadata.findIndex(p => p.id === projectId);
+    const index = metadata.findIndex((p) => p.id === projectId);
 
     if (index >= 0) {
       metadata[index] = { ...metadata[index], ...updates };
@@ -135,26 +244,20 @@ const updateProjectMetadata = (projectId: string, updates: Partial<ProjectMetada
   }
 };
 
-/**
- * Remove project metadata
- */
 const removeProjectMetadata = (projectId: string): void => {
   try {
     const metadata = getProjectsMetadata();
-    const filtered = metadata.filter(p => p.id !== projectId);
+    const filtered = metadata.filter((p) => p.id !== projectId);
     localStorage.setItem(METADATA_KEY, JSON.stringify(filtered));
   } catch (error) {
     console.error('Failed to remove project metadata:', error);
   }
 };
 
-/**
- * Clear all project data (useful for debugging)
- */
 export const clearAllProjects = (): void => {
   try {
     const keys = Object.keys(localStorage);
-    keys.forEach(key => {
+    keys.forEach((key) => {
       if (key.startsWith(STORAGE_PREFIX)) {
         localStorage.removeItem(key);
       }

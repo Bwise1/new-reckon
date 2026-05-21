@@ -40,6 +40,7 @@ export type UnitType = "m" | "m2" | "m3" | "nrs" | "item";
 export interface HistoryItem {
   id: string;
   value: string;
+  isDeduct?: boolean;
 }
 
 export interface EstimationCardData {
@@ -50,4 +51,15 @@ export interface EstimationCardData {
   qty: string;
   rate: string;
   history: HistoryItem[];
+}
+
+export interface BoqElementData {
+  id: string;
+  title: string;
+  items: EstimationCardData[];
+}
+
+export interface BoqPricing {
+  vatRate: number;
+  contingency: number;
 }

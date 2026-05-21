@@ -26,9 +26,9 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({
         <button
           key={unit.value}
           onClick={() => onChange(unit.value)}
-          className={`flex-1 py-1.5 px-3 text-sm font-medium transition-all duration-200 ${
+          className={`flex-1 py-1.5 px-3 text-sm font-medium transition-all duration-200 cursor-pointer ${
             selectedUnit === unit.value
-              ? "bg-[#2da1a1] text-white"
+              ? "bg-[#289693] text-white"
               : "text-gray-600 hover:bg-gray-50 bg-white"
           } ${unit.value !== "item" ? "border-r border-gray-200" : ""}`}
         >

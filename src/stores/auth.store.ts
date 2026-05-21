@@ -62,3 +62,6 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
   },
 }));
+
+// Hydrate from localStorage before the first render to avoid a login flash on "/".
+useAuthStore.getState().initializeAuth();

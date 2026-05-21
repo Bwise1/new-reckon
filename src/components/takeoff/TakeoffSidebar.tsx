@@ -1,6 +1,6 @@
 import React from "react";
 import type { TakeoffItem, TakeoffMode } from "@/types/takeoff";
-import { Ruler, Square, Hash, Trash2, Plus } from "lucide-react";
+import { Ruler, Square, Hash, Trash2, Plus, Copy, ArrowUp, ArrowDown } from "lucide-react";
 
 interface TakeoffSidebarProps {
   items: TakeoffItem[];
@@ -9,6 +9,9 @@ interface TakeoffSidebarProps {
   onSelectItem: (id: string) => void;
   onCreateItem: (type: TakeoffMode) => void;
   onDeleteItem: (id: string) => void;
+  onDuplicateItem: (id: string) => void;
+  onMoveItemUp: (id: string) => void;
+  onMoveItemDown: (id: string) => void;
   onUpdateItem: (id: string, updates: Partial<TakeoffItem>) => void;
 }
 
@@ -19,6 +22,9 @@ const TakeoffSidebar: React.FC<TakeoffSidebarProps> = ({
   onSelectItem,
   onCreateItem,
   onDeleteItem,
+  onDuplicateItem,
+  onMoveItemUp,
+  onMoveItemDown,
   onUpdateItem,
 }) => {
   const getIcon = (type: TakeoffMode) => {
@@ -66,16 +72,52 @@ const TakeoffSidebar: React.FC<TakeoffSidebarProps> = ({
                     className="bg-transparent font-semibold text-gray-200 text-sm border-none focus:ring-0 w-full p-0"
                   />
                 </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteItem(item.id);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-red-400 transition-opacity"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMoveItemUp(item.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-gray-200 transition-opacity"
+                    title="Move up"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMoveItemDown(item.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-gray-200 transition-opacity"
+                    title="Move down"
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDuplicateItem(item.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-blue-300 transition-opacity"
+                    title="Duplicate"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteItem(item.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-red-400 transition-opacity"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {pages.length > 0 && (

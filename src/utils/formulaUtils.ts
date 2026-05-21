@@ -4,6 +4,15 @@
 
 const OPERATORS = ["+", "-", "*", "/", "√"];
 
+/** Allowed in takeoff formulas — digits, decimal point, operators, brackets, √, spaces. */
+const ALLOWED_FORMULA_CHAR = /^[0-9+\-*/().√\s]$/;
+
+export const sanitizeFormulaInput = (raw: string): string =>
+  [...raw].filter((ch) => ALLOWED_FORMULA_CHAR.test(ch)).join("");
+
+export const containsInvalidFormulaChars = (formula: string): boolean =>
+  sanitizeFormulaInput(formula) !== formula;
+
 /**
  * Checks if adding a new symbol to the current formula creates an invalid sequence.
  */
@@ -51,6 +60,13 @@ export const getSmartBracket = (formula: string): "(" | ")" => {
  */
 export const validateFormula = (formula: string): { isValid: boolean; error?: string } => {
   if (formula.trim() === "") return { isValid: true };
+
+  if (containsInvalidFormulaChars(formula)) {
+    return {
+      isValid: false,
+      error: "Only numbers and operators (+ − × ÷ √ brackets) are allowed",
+    };
+  }
 
   const lastChar = formula.trim().slice(-1);
   if (OPERATORS.includes(lastChar)) {

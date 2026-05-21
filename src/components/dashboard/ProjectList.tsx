@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useProjects, useDeleteProject } from "@/hooks/useProjects";
+import { useProjects, useDeleteProject, useCreateProject } from "@/hooks/useProjects";
 import { FiSearch, FiMoreVertical, FiEdit2, FiTrash2, FiEye } from "react-icons/fi";
 import type { Project } from "@/types/project";
+import { formatProjectCreatedAt } from "@/utils/projectMapper";
 
 const ProjectList = () => {
   const navigate = useNavigate();
@@ -11,6 +12,23 @@ const ProjectList = () => {
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
   const { data: projectsData, isLoading } = useProjects();
   const { mutate: deleteProject } = useDeleteProject();
+  const { mutateAsync: createProject, isPending: isCreatingProject } = useCreateProject();
+  const handleCreateProject = async () => {
+    const title = window.prompt("Project name", "New BOQ Project");
+    if (!title) return;
+
+    const created = await createProject({
+      title,
+      project_type: "bill_of_qty",
+      location: "Lagos, Nigeria",
+    } as Partial<Project>);
+
+    const newProjectId = created.data?.project?.id;
+    if (newProjectId) {
+      navigate(`/project/${newProjectId}`);
+    }
+  };
+
 
   const projects = projectsData?.data?.projects || [];
 
@@ -44,7 +62,11 @@ const ProjectList = () => {
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-brandColor">Projects</h2>
-          <button className="px-4 py-2 bg-secondary text-white rounded-lg hover:bg-opacity-90 transition-colors font-medium text-sm">
+          <button
+            onClick={handleCreateProject}
+            disabled={isCreatingProject}
+            className="px-4 py-2 bg-secondary text-white rounded-lg hover:bg-opacity-90 transition-colors font-medium text-sm disabled:opacity-60"
+          >
             + New Project
           </button>
         </div>
@@ -106,9 +128,7 @@ const ProjectList = () => {
                   </td>
                   <td className="px-6 py-4">
                     <p className="text-sm text-gray-600">
-                      {project.createdAt
-                        ? new Date(project.createdAt).toLocaleDateString()
-                        : "-"}
+                      {formatProjectCreatedAt(project.createdAt)}
                     </p>
                   </td>
                   <td className="px-6 py-4 text-right">

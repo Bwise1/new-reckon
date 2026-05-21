@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectService } from '@/services/project.service';
 import type { Project } from '@/types/project';
+import { deleteProjectFromStorage } from '@/utils/persistence';
 
 export function useProjects() {
   return useQuery({
@@ -53,7 +54,8 @@ export function useDeleteProject() {
 
   return useMutation({
     mutationFn: (id: string) => projectService.deleteProject(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      deleteProjectFromStorage(id);
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       queryClient.invalidateQueries({ queryKey: ['project-stats'] });
     },

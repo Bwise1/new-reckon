@@ -1,68 +1,53 @@
 import React from "react";
 
 interface FormulaToolbarProps {
-  activeMode?: "add" | "deduct";
   onModeChange?: (mode: "add" | "deduct") => void;
   onSymbolClick?: (symbol: string) => void;
   disabled?: boolean;
   className?: string;
-  compact?: boolean;
 }
 
 const symbols = ["()", "+", "*", "-", "/", "√"];
 
 const FormulaToolbar = ({
-  activeMode,
   onModeChange,
   onSymbolClick,
   disabled = false,
   className = "",
-  compact = false,
 }: FormulaToolbarProps) => {
   return (
     <div
-      className={`flex items-center gap-1 p-1 bg-[#141414] rounded-xl shadow-2xl border border-white/5 w-fit ${className} ${
+      className={`inline-flex flex-nowrap items-center gap-1 px-1.5 py-1.5 bg-[#1a1a1a] rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.35)] border border-white/10 ${className} ${
         disabled ? "opacity-50 pointer-events-none" : ""
       }`}
     >
-      {/* Mode Buttons */}
-      <div className="flex items-center gap-1 pr-1 border-r border-white/10">
-        <button
-          onClick={() => onModeChange?.("add")}
-          className={`px-2 py-1 rounded-lg font-semibold transition-all duration-200 transform active:scale-95 ${
-            activeMode === "add"
-              ? "bg-[#eeb952] text-black shadow-[0_0_15px_rgba(238,185,82,0.3)]"
-              : "bg-[#eeb952]/10 text-[#eeb952] hover:bg-[#eeb952]/20"
-          } ${compact ? "px-3 py-1.5 text-sm" : "text-base"}`}
-        >
-          Add
-        </button>
-        <button
-          onClick={() => onModeChange?.("deduct")}
-          className={`px-2 py-1 rounded-lg font-semibold transition-all duration-200 transform active:scale-95 ${
-            activeMode === "deduct"
-              ? "bg-[#f8714b] text-white shadow-[0_0_15px_rgba(248,113,75,0.3)]"
-              : "bg-[#f8714b]/10 text-[#f8714b] hover:bg-[#f8714b]/20"
-          } ${compact ? "px-3 py-1.5 text-sm" : "text-base"}`}
-        >
-          Deduct
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={() => onModeChange?.("add")}
+        className="px-3 py-1.5 rounded-lg font-bold text-xs text-black bg-[#eeb952] hover:bg-[#e5ad42] active:scale-95 transition-transform shrink-0 cursor-pointer"
+      >
+        Add
+      </button>
+      <button
+        type="button"
+        onClick={() => onModeChange?.("deduct")}
+        className="px-3 py-1.5 rounded-lg font-bold text-xs text-white bg-[#f8714b] hover:bg-[#ef6340] active:scale-95 transition-transform shrink-0 cursor-pointer"
+      >
+        Deduct
+      </button>
 
-      {/* Symbol Buttons */}
-      <div className="flex items-center gap-1 pl-0.5">
-        {symbols.map((symbol) => (
-          <button
-            key={symbol}
-            onClick={() => onSymbolClick?.(symbol)}
-            className={`flex items-center justify-center bg-white text-[#4a4a4a] font-bold rounded-lg transition-all duration-200 hover:bg-gray-100 active:scale-90 shadow-sm ${
-              compact ? "w-8 h-8 text-sm" : "w-10 h-10 text-lg"
-            }`}
-          >
-            {symbol}
-          </button>
-        ))}
-      </div>
+      <div className="w-px h-6 bg-white/15 shrink-0 mx-0.5" />
+
+      {symbols.map((symbol) => (
+        <button
+          key={symbol}
+          type="button"
+          onClick={() => onSymbolClick?.(symbol)}
+            className="flex items-center justify-center w-8 h-8 shrink-0 bg-white text-[#3d3d3d] font-bold text-sm rounded-lg hover:bg-gray-100 active:scale-90 transition-transform shadow-sm cursor-pointer"
+        >
+          {symbol}
+        </button>
+      ))}
     </div>
   );
 };
