@@ -1,11 +1,11 @@
 import axios, { AxiosError, AxiosHeaders } from 'axios';
-import type { AxiosInstance, AxiosRequestConfig } from 'axios';
+import type { AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'https://api.reckonio.com/v1';
 export const REQUEST_SOURCE = 'web-app';
 
-const withRequestHeaders = (config: AxiosRequestConfig): AxiosRequestConfig => {
-  const headers = AxiosHeaders.from(config.headers);
+const withRequestHeaders = (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
+  const headers = AxiosHeaders.from(config.headers as AxiosHeaders);
   headers.set('Content-Type', 'application/json');
   headers.set('X-Request-Source', REQUEST_SOURCE);
 

@@ -23,7 +23,7 @@ const DashboardHeader = () => {
           <FiUser className="text-brandColor text-lg" />
         </div>
         <button
-          onClick={logout}
+          onClick={() => logout()}
           disabled={isLoading}
           className="w-10 h-10 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 hover:text-red-500 transition-colors disabled:opacity-50"
           title="Logout"

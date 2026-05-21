@@ -257,7 +257,7 @@ export class SpatialIndex {
     totalPoints: number;
     totalCells: number;
     avgPointsPerCell: number;
-    bounds: typeof this.bounds;
+    bounds: { minX: number; minY: number; maxX: number; maxY: number };
   } {
     let totalPoints = 0;
     for (const cell of this.grid.values()) {
