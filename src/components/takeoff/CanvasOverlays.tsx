@@ -8,9 +8,9 @@ import {
   AlertCircle,
   Move,
   MousePointer2,
-  Scissors,
   Undo2,
   RotateCcw,
+  Magnet,
 } from "lucide-react";
 
 interface CanvasOverlaysProps {
@@ -22,14 +22,14 @@ interface CanvasOverlaysProps {
   currentScale: number | null;
   isPanningMode: boolean;
   isSelectMode: boolean;
-  isDeductionMode: boolean;
   isShiftPressed: boolean;
   onChangePage: (delta: number) => void;
   onTogglePan: () => void;
   onToggleSelect: () => void;
-  onToggleDeduction: () => void;
   onUndoPoint: () => void;
   onClearAll: () => void;
+  snapEnabled: boolean;
+  onToggleSnap: () => void;
 }
 
 const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
@@ -41,14 +41,14 @@ const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
   currentScale,
   isPanningMode,
   isSelectMode,
-  isDeductionMode,
   isShiftPressed,
   onChangePage,
   onTogglePan,
   onToggleSelect,
-  onToggleDeduction,
   onUndoPoint,
   onClearAll,
+  snapEnabled,
+  onToggleSnap,
 }) => {
   return (
     <>
@@ -76,13 +76,13 @@ const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
         </button>
         <button
           type="button"
-          onClick={onToggleDeduction}
-          title="Deduct (X)"
+          onClick={onToggleSnap}
+          title={snapEnabled ? 'Snap: on' : 'Snap: off'}
           className={`p-1.5 rounded-md transition cursor-pointer ${
-            isDeductionMode ? "bg-red-500 text-white" : "hover:bg-gray-100 text-gray-500"
+            snapEnabled ? "bg-secondary text-white" : "hover:bg-gray-100 text-gray-500"
           }`}
         >
-          <Scissors className="w-4 h-4" />
+          <Magnet className="w-4 h-4" />
         </button>
         <div className="h-4 w-px bg-gray-200 mx-0.5" />
         <button
@@ -108,7 +108,7 @@ const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
         <button
           type="button"
           onClick={() => {
-            const newScale = Math.min(5, stageScale * 1.1);
+            const newScale = Math.min(20, stageScale * 1.12);
             setStageScale(newScale);
           }}
           className="p-1.5 hover:bg-gray-100 rounded-md cursor-pointer"
@@ -118,7 +118,7 @@ const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
         <button
           type="button"
           onClick={() => {
-            const newScale = Math.max(0.1, stageScale / 1.1);
+            const newScale = Math.max(0.05, stageScale / 1.12);
             setStageScale(newScale);
           }}
           className="p-1.5 hover:bg-gray-100 rounded-md cursor-pointer"
@@ -181,15 +181,15 @@ const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
         </div>
       )}
 
-      {isDeductionMode && !isSelectMode && (
-        <div className="absolute top-32 left-1/2 -translate-x-1/2 bg-red-600 text-white px-4 py-2 rounded-full shadow-lg z-20 text-xs font-bold uppercase tracking-widest animate-pulse border-2 border-white">
-          Deduction Mode Active
-        </div>
-      )}
-
       {isShiftPressed && !isSelectMode && (
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-blue-600/80 backdrop-blur text-white px-4 py-2 rounded-full shadow-lg z-20 text-xs font-bold uppercase tracking-widest">
           Precision Mode Active (Snapped)
+        </div>
+      )}
+
+      {isSelectMode && (
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-gray-800/85 backdrop-blur text-white px-4 py-2 rounded-full shadow-lg z-20 text-[11px] font-semibold tracking-wide">
+          Arrow keys nudge. Alt = fine, Shift = coarse (scale-aware when calibrated).
         </div>
       )}
     </>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import PasswordInput from "@/components/ui/PasswordInput";
@@ -12,9 +12,18 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const { mutate: login, isPending, error } = useLogin();
+
+  useEffect(() => {
+    const notice = sessionStorage.getItem("reckon_auth_notice");
+    if (notice) {
+      setSessionNotice(notice);
+      sessionStorage.removeItem("reckon_auth_notice");
+    }
+  }, []);
 
   const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -54,6 +63,11 @@ const Login = () => {
       </div>
 
       <form onSubmit={handleLogin}>
+        {sessionNotice && (
+          <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {sessionNotice}
+          </div>
+        )}
         <div>
           <label htmlFor="email" className="font-medium text-sm">
             Email Address

@@ -15,8 +15,35 @@ export interface Measurement {
   id: string;
   points: Point[];
   quantity: number;
+  /** Plan/drawing this markup belongs to. */
+  planId?: string;
   page: number;
+  /** Geometry kind for this markup (linear, area, or count). */
+  type?: TakeoffMode;
+  /** Stroke/fill color for this markup. */
+  color?: string;
+  /** When true, the markup is hidden from the canvas render. */
+  hidden?: boolean;
   metadata?: MeasurementMetadata;
+}
+
+export type PlanDiscipline =
+  | 'architectural'
+  | 'structural'
+  | 'mep'
+  | 'civil'
+  | 'other';
+
+export interface ProjectPlan {
+  id: string;
+  name: string;
+  /** Original uploaded filename (used to infer PDF vs image when mime is missing). */
+  filename?: string;
+  url?: string;
+  mimeType?: string;
+  pageCount: number;
+  sortOrder: number;
+  discipline?: PlanDiscipline;
 }
 
 export interface TakeoffItem {

@@ -48,7 +48,6 @@ export const useCanvasState = ({
 
   const [isPanningMode, setIsPanningMode] = useState(false);
   const [isSelectMode, setIsSelectMode] = useState(false);
-  const [isDeductionMode, setIsDeductionMode] = useState(false);
   const [isDraggingObject, setIsDraggingObject] = useState(false);
   const [isShiftPressed, setIsShiftPressed] = useState(false);
 
@@ -93,8 +92,6 @@ export const useCanvasState = ({
     setIsPanningMode,
     isSelectMode,
     setIsSelectMode,
-    isDeductionMode,
-    setIsDeductionMode,
     isDraggingObject,
     setIsDraggingObject,
     isShiftPressed,

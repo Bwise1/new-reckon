@@ -1,15 +1,34 @@
 import { create } from 'zustand';
 import type {
   TakeoffItem,
+  TakeoffMode,
   Measurement,
   CalibrationLine,
   EstimationCardData,
   BoqElementData,
   BoqPricing,
+  ProjectPlan,
+  PlanDiscipline,
 } from '@/types/takeoff';
+import {
+  emptyPlanDocumentState,
+  type PlanDocumentState,
+  hydrateActivePlanView,
+  resolvePlanBackgroundForCanvas,
+} from '@/utils/planDocument';
+import { inferPlanMediaKind } from '@/utils/planMediaLoader';
+import { mergePlanLists } from '@/utils/planMapper';
+import { clearAllPlanPdfs } from '@/utils/planPdfCache';
+import { MARKUP_COLORS } from '@/constants/takeoffDesign';
 import { createEmptyBoqElement, createEmptyBoqItem } from '@/utils/boqCalculations';
 import { loadProjectFromStorage, autoSaveProject } from '@/utils/persistence';
 import { generateClientId } from '@/utils/id';
+import { scheduleProjectSyncPush } from '@/services/projectSync.service';
+import {
+  CANVAS_TAKEOFF_ITEM_ID,
+  normalizeTakeoffItems,
+  unitForTakeoffMode,
+} from '@/utils/takeoffMeasurement';
 
 // Command pattern for undo/redo
 interface Command {
@@ -25,16 +44,21 @@ interface TakeoffStore {
   // Takeoff Items
   takeoffItems: TakeoffItem[];
   activeItemId: string | null;
+  activeTool: TakeoffMode | null;
+  activeColor: string;
 
   // Calibration
   scales: Record<number, number>;
   calibrationLines: Record<number, CalibrationLine>;
   calibrationMode: boolean;
 
-  // Canvas state
+  // Canvas state (active plan view)
   currentPage: number;
   numPages: number;
   backgroundImage: string | null;
+  plans: ProjectPlan[];
+  activePlanId: string | null;
+  planStates: Record<string, PlanDocumentState>;
 
   boqElements: BoqElementData[];
   pricing: BoqPricing;
@@ -48,6 +72,31 @@ interface TakeoffStore {
   // Persistence
   loadProject: (projectId: string) => void;
   triggerAutoSave: () => void;
+  applyServerSync: (updates: {
+    boqElements?: BoqElementData[];
+    takeoffItems?: TakeoffItem[];
+    scales?: Record<number, number>;
+    calibrationLines?: Record<number, CalibrationLine>;
+    currentPage?: number;
+    numPages?: number;
+    plans?: ProjectPlan[];
+    activePlanId?: string | null;
+    planStates?: Record<string, PlanDocumentState>;
+  }) => void;
+
+  selectPlan: (planId: string) => void;
+  addPlanFromUpload: (
+    name: string,
+    meta?: {
+      url?: string;
+      mimeType?: string;
+      pageCount?: number;
+      filename?: string;
+      discipline?: PlanDiscipline;
+    }
+  ) => string;
+  setPlanDiscipline: (planId: string, discipline: PlanDiscipline) => void;
+  removePlan: (planId: string) => void;
 
   // Actions
   setTakeoffItems: (items: TakeoffItem[]) => void;
@@ -58,9 +107,13 @@ interface TakeoffStore {
   moveTakeoffItemUp: (id: string) => void;
   moveTakeoffItemDown: (id: string) => void;
   setActiveItemId: (id: string | null) => void;
+  setActiveTool: (tool: TakeoffMode | null) => void;
+  setActiveColor: (color: string) => void;
+  ensureCanvasItemId: () => string;
 
   addMeasurement: (itemId: string, measurement: Measurement) => void;
   removeMeasurement: (itemId: string, measurementId: string) => void;
+  toggleMeasurementHidden: (itemId: string, measurementId: string) => void;
 
   setScale: (page: number, scale: number) => void;
   setCalibrationLine: (page: number, line: CalibrationLine) => void;
@@ -93,16 +146,47 @@ interface TakeoffStore {
 
 const MAX_HISTORY_SIZE = 50;
 
+const snapshotActivePlanState = (state: {
+  activePlanId: string | null;
+  plans: ProjectPlan[];
+  planStates: Record<string, PlanDocumentState>;
+  backgroundImage: string | null;
+  numPages: number;
+  currentPage: number;
+  scales: Record<number, number>;
+  calibrationLines: Record<number, CalibrationLine>;
+}): Record<string, PlanDocumentState> => {
+  if (!state.activePlanId) return state.planStates;
+  const plan = state.plans.find((p) => p.id === state.activePlanId);
+  const backgroundImage =
+    plan && inferPlanMediaKind(plan) === 'pdf' ? null : state.backgroundImage;
+  return {
+    ...state.planStates,
+    [state.activePlanId]: {
+      backgroundImage,
+      numPages: state.numPages,
+      currentPage: state.currentPage,
+      scales: state.scales,
+      calibrationLines: state.calibrationLines,
+    },
+  };
+};
+
 const initialState = {
   currentProjectId: null,
   takeoffItems: [],
   activeItemId: null,
+  activeTool: null,
+  activeColor: MARKUP_COLORS[0],
   scales: {},
   calibrationLines: {},
   calibrationMode: false,
   currentPage: 1,
   numPages: 0,
   backgroundImage: null,
+  plans: [],
+  activePlanId: null,
+  planStates: {},
   boqElements: [createEmptyBoqElement(0)],
   pricing: {
     vatRate: 0,
@@ -142,14 +226,14 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     loadProject: (projectId: string) => {
       const savedData = loadProjectFromStorage(projectId);
       if (savedData) {
-        set({
+        const base = {
           currentProjectId: projectId,
-          takeoffItems: savedData.takeoffItems,
-          scales: savedData.scales,
-          calibrationLines: savedData.calibrationLines,
-          currentPage: savedData.currentPage,
-          numPages: savedData.numPages,
-          backgroundImage: savedData.backgroundImage,
+          takeoffItems: normalizeTakeoffItems(savedData.takeoffItems),
+          activeTool: null,
+          activeColor: MARKUP_COLORS[0],
+          plans: savedData.plans ?? [],
+          activePlanId: savedData.activePlanId ?? null,
+          planStates: savedData.planStates ?? {},
           boqElements:
             savedData.boqElements?.length > 0
               ? savedData.boqElements
@@ -159,7 +243,18 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
           redoStack: [],
           canUndo: false,
           canRedo: false,
+        };
+        const view = hydrateActivePlanView({
+          plans: base.plans,
+          activePlanId: base.activePlanId,
+          planStates: base.planStates,
+          numPages: savedData.numPages,
+          currentPage: savedData.currentPage,
+          scales: savedData.scales,
+          calibrationLines: savedData.calibrationLines,
+          backgroundImage: savedData.backgroundImage,
         });
+        set({ ...base, ...view });
         console.log('Loaded project from storage:', projectId);
       } else {
         // New project, reset to initial state but keep the projectId
@@ -174,6 +269,11 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   triggerAutoSave: () => {
     const state = get();
     if (state.currentProjectId) {
+      const planStates = snapshotActivePlanState(state);
+      if (planStates !== state.planStates) {
+        set({ planStates });
+      }
+
       autoSaveProject(state.currentProjectId, {
         takeoffItems: state.takeoffItems,
         scales: state.scales,
@@ -181,8 +281,145 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         currentPage: state.currentPage,
         numPages: state.numPages,
         backgroundImage: state.backgroundImage,
+        plans: state.plans,
+        activePlanId: state.activePlanId,
+        planStates,
         boqElements: state.boqElements,
         pricing: state.pricing,
+      });
+      scheduleProjectSyncPush(state.currentProjectId);
+    }
+  },
+
+  selectPlan: (planId) => {
+    const state = get();
+    if (state.activePlanId === planId) return;
+
+    const planStates = snapshotActivePlanState(state);
+    const next = planStates[planId] ?? emptyPlanDocumentState();
+    const planMeta = state.plans.find((plan) => plan.id === planId);
+    const backgroundImage = resolvePlanBackgroundForCanvas(planMeta, next.backgroundImage);
+    const numPages = next.numPages || planMeta?.pageCount || 0;
+
+    set({
+      planStates,
+      activePlanId: planId,
+      backgroundImage,
+      numPages,
+      currentPage: next.currentPage || 1,
+      scales: next.scales,
+      calibrationLines: next.calibrationLines,
+    });
+    get().triggerAutoSave();
+  },
+
+  addPlanFromUpload: (name, meta) => {
+    const state = get();
+    const planStates = snapshotActivePlanState(state);
+    const id = generateClientId();
+    const plan: ProjectPlan = {
+      id,
+      name,
+      filename: meta?.filename,
+      url: meta?.url,
+      mimeType: meta?.mimeType,
+      pageCount: meta?.pageCount ?? 1,
+      sortOrder: state.plans.length,
+      discipline: meta?.discipline,
+    };
+    const fresh = emptyPlanDocumentState();
+
+    set({
+      plans: [...state.plans, plan],
+      planStates: { ...planStates, [id]: fresh },
+      activePlanId: id,
+      backgroundImage: null,
+      numPages: meta?.pageCount ?? 0,
+      currentPage: 1,
+      scales: {},
+      calibrationLines: {},
+    });
+    get().triggerAutoSave();
+    return id;
+  },
+
+  setPlanDiscipline: (planId, discipline) => {
+    set((state) => ({
+      plans: state.plans.map((plan) =>
+        plan.id === planId ? { ...plan, discipline } : plan
+      ),
+    }));
+    get().triggerAutoSave();
+  },
+
+  removePlan: (planId) => {
+    const state = get();
+    const remaining = state.plans.filter((p) => p.id !== planId);
+    const newActivePlanId =
+      state.activePlanId === planId
+        ? (remaining[remaining.length - 1]?.id ?? null)
+        : state.activePlanId;
+
+    const planStates = { ...state.planStates };
+    delete planStates[planId];
+
+    const view = hydrateActivePlanView({
+      plans: remaining,
+      activePlanId: newActivePlanId,
+      planStates,
+      numPages: state.numPages,
+      currentPage: state.currentPage,
+      scales: state.scales,
+      calibrationLines: state.calibrationLines,
+      backgroundImage: state.backgroundImage,
+    });
+
+    set({ plans: remaining, activePlanId: newActivePlanId, planStates, ...view });
+    get().triggerAutoSave();
+  },
+
+  applyServerSync: (updates) => {
+    set((state) => {
+      const merged = {
+        ...state,
+        ...(updates.boqElements !== undefined ? { boqElements: updates.boqElements } : {}),
+        ...(updates.takeoffItems !== undefined ? { takeoffItems: updates.takeoffItems } : {}),
+        ...(updates.scales !== undefined ? { scales: updates.scales } : {}),
+        ...(updates.calibrationLines !== undefined
+          ? { calibrationLines: updates.calibrationLines }
+          : {}),
+        ...(updates.currentPage !== undefined ? { currentPage: updates.currentPage } : {}),
+        ...(updates.numPages !== undefined ? { numPages: updates.numPages } : {}),
+        ...(updates.plans !== undefined
+          ? { plans: mergePlanLists(state.plans, updates.plans) }
+          : {}),
+        ...(updates.activePlanId !== undefined ? { activePlanId: updates.activePlanId } : {}),
+        ...(updates.planStates !== undefined ? { planStates: updates.planStates } : {}),
+        undoStack: [],
+        redoStack: [],
+        canUndo: false,
+        canRedo: false,
+      };
+      const view = hydrateActivePlanView(merged);
+      return { ...merged, ...view };
+    });
+
+    const projectId = get().currentProjectId;
+    if (projectId) {
+      const latest = get();
+      const planStates = snapshotActivePlanState(latest);
+      autoSaveProject(projectId, {
+        takeoffItems: latest.takeoffItems,
+        scales: latest.scales,
+        calibrationLines: latest.calibrationLines,
+        currentPage: latest.currentPage,
+        numPages: latest.numPages,
+        backgroundImage: latest.backgroundImage,
+        plans: latest.plans,
+        activePlanId: latest.activePlanId,
+        planStates,
+        boqElements: latest.boqElements,
+        pricing: latest.pricing,
       });
     }
   },
@@ -342,6 +579,35 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
 
   setActiveItemId: (id) => set({ activeItemId: id }),
 
+  setActiveTool: (tool) => set({ activeTool: tool }),
+
+  setActiveColor: (color) => set({ activeColor: color }),
+
+  ensureCanvasItemId: () => {
+    const state = get();
+    const existing = state.takeoffItems.find((item) => item.id === CANVAS_TAKEOFF_ITEM_ID);
+    if (existing) {
+      return CANVAS_TAKEOFF_ITEM_ID;
+    }
+
+    const tool = state.activeTool ?? 'linear';
+    const canvasItem: TakeoffItem = {
+      id: CANVAS_TAKEOFF_ITEM_ID,
+      name: 'Canvas markups',
+      type: tool,
+      color: state.activeColor,
+      measurements: [],
+      totalQuantity: 0,
+      unit: unitForTakeoffMode(tool),
+    };
+
+    set((prev) => ({
+      takeoffItems: [...prev.takeoffItems, canvasItem],
+    }));
+
+    return CANVAS_TAKEOFF_ITEM_ID;
+  },
+
   addMeasurement: (itemId, measurement) => {
     executeCommand({
       execute: () => {
@@ -417,6 +683,21 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     });
   },
 
+  toggleMeasurementHidden: (itemId, measurementId) => {
+    set((state) => ({
+      takeoffItems: state.takeoffItems.map((item) => {
+        if (item.id !== itemId) return item;
+        return {
+          ...item,
+          measurements: item.measurements.map((m) =>
+            m.id === measurementId ? { ...m, hidden: !m.hidden } : m
+          ),
+        };
+      }),
+    }));
+    get().triggerAutoSave();
+  },
+
   setScale: (page, scale) => {
     const state = get();
     const previousScale = state.scales[page];
@@ -475,17 +756,14 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
 
   setCurrentPage: (page) => {
     set({ currentPage: page });
-    get().triggerAutoSave();
   },
 
   setNumPages: (pages) => {
     set({ numPages: pages });
-    get().triggerAutoSave();
   },
 
   setBackgroundImage: (image) => {
     set({ backgroundImage: image });
-    get().triggerAutoSave();
   },
 
   setPricing: (pricing) => {
@@ -683,6 +961,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   },
 
   reset: () => {
+    clearAllPlanPdfs();
     set({
       ...initialState,
       undoStack: [],

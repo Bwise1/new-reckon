@@ -160,17 +160,21 @@ const isPointOnSegment = (p1: Point, p2: Point, p: Point): boolean => {
  */
 export const validateMeasurement = (
   measurement: Measurement,
-  type: 'linear' | 'area' | 'count'
+  type: 'linear' | 'area' | 'count' | 'polyline'
 ): { isValid: boolean; error?: string } => {
   // Check for required points
   if (type === 'linear' && measurement.points.length !== 2) {
     return { isValid: false, error: 'Linear measurement requires exactly 2 points' };
   }
-  
+
+  if (type === 'polyline' && measurement.points.length < 2) {
+    return { isValid: false, error: 'Polyline requires at least 2 points' };
+  }
+
   if (type === 'area' && measurement.points.length < 3) {
     return { isValid: false, error: 'Area measurement requires at least 3 points' };
   }
-  
+
   if (type === 'count' && measurement.points.length < 1) {
     return { isValid: false, error: 'Count measurement requires at least 1 point' };
   }
@@ -187,6 +191,14 @@ export const validateMeasurement = (
     const dist = calculateDistance(measurement.points[0], measurement.points[1]);
     if (dist < MIN_DISTANCE) {
       return { isValid: false, error: 'Line segment is too short' };
+    }
+  }
+
+  if (type === 'polyline') {
+    for (let i = 1; i < measurement.points.length; i++) {
+      if (calculateDistance(measurement.points[i - 1], measurement.points[i]) < MIN_DISTANCE) {
+        return { isValid: false, error: 'Polyline segment is too short' };
+      }
     }
   }
   
@@ -224,19 +236,27 @@ export const validateMeasurement = (
  */
 export const calculateQuantity = (
   points: Point[],
-  type: 'linear' | 'area',
+  type: 'linear' | 'area' | 'polyline',
   scale: number | null
 ): number => {
   if (type === 'linear' && points.length === 2) {
     const dist = calculateDistance(points[0], points[1]);
     return scale && scale > 0 ? dist / scale : dist;
   }
-  
+
+  if (type === 'polyline' && points.length >= 2) {
+    let total = 0;
+    for (let i = 1; i < points.length; i++) {
+      total += calculateDistance(points[i - 1], points[i]);
+    }
+    return scale && scale > 0 ? total / scale : total;
+  }
+
   if (type === 'area' && points.length >= 3) {
     const area = calculateArea(points);
     return scale && scale > 0 ? area / (scale * scale) : area;
   }
-  
+
   return 0;
 };
 

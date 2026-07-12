@@ -1,8 +1,10 @@
 import type { Project } from '@/types/project';
 import { getLocalBoqElementCount } from '@/utils/persistence';
+import { getProjectMeta, saveProjectMeta } from '@/utils/projectMeta';
 
 type ApiProjectRow = {
   id: number | string;
+  client_uuid?: string | null;
   title: string;
   location?: string | null;
   project_type?: Project['project_type'];
@@ -26,8 +28,17 @@ export const normalizeProject = (raw: ApiProjectRow): Project => {
   // Prefer local BOQ state when the project was edited on web; API rows can be stale/extra.
   const elements = localElements !== null ? localElements : apiElements;
 
+  const serverId = String(raw.id);
+  if (raw.client_uuid) {
+    const meta = getProjectMeta(serverId);
+    if (!meta?.clientUuid) {
+      saveProjectMeta(serverId, { clientUuid: raw.client_uuid });
+    }
+  }
+
   return {
-    id: String(raw.id),
+    id: serverId,
+    client_uuid: raw.client_uuid ?? undefined,
     title: raw.title ?? '',
     location: raw.location ?? '',
     project_type: raw.project_type,

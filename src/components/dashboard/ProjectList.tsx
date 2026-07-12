@@ -4,6 +4,8 @@ import { useProjects, useDeleteProject, useCreateProject } from "@/hooks/useProj
 import { FiSearch, FiMoreVertical, FiEdit2, FiTrash2, FiEye } from "react-icons/fi";
 import type { Project } from "@/types/project";
 import { formatProjectCreatedAt } from "@/utils/projectMapper";
+import { generateClientId } from "@/utils/id";
+import { saveProjectMeta } from "@/utils/projectMeta";
 
 const ProjectList = () => {
   const navigate = useNavigate();
@@ -17,14 +19,17 @@ const ProjectList = () => {
     const title = window.prompt("Project name", "New BOQ Project");
     if (!title) return;
 
+    const clientUuid = generateClientId();
     const created = await createProject({
       title,
       project_type: "bill_of_qty",
       location: "Lagos, Nigeria",
+      client_uuid: clientUuid,
     } as Partial<Project>);
 
     const newProjectId = created.data?.project?.id;
     if (newProjectId) {
+      saveProjectMeta(String(newProjectId), { clientUuid });
       navigate(`/project/${newProjectId}`);
     }
   };

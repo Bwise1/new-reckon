@@ -1,5 +1,6 @@
 export interface Project {
   id: string;
+  client_uuid?: string;
   title: string;
   location: string;
   project_type?: 'bill_of_qty' | 'material_schedule';

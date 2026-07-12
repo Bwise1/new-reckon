@@ -4,9 +4,14 @@ import type {
   EstimationCardData,
   BoqElementData,
   BoqPricing,
+  ProjectPlan,
 } from '@/types/takeoff';
 import { generateClientId } from '@/utils/id';
 import { createEmptyBoqItem, elementTitleFromIndex } from '@/utils/boqCalculations';
+import {
+  type PlanDocumentState,
+  migrateToPlanDocuments,
+} from '@/utils/planDocument';
 
 export interface PersistedProjectData {
   schemaVersion: number;
@@ -16,6 +21,9 @@ export interface PersistedProjectData {
   currentPage: number;
   numPages: number;
   backgroundImage: string | null;
+  plans: ProjectPlan[];
+  activePlanId: string | null;
+  planStates: Record<string, PlanDocumentState>;
   boqElements: BoqElementData[];
   pricing: BoqPricing;
   lastSaved: string;
@@ -23,7 +31,11 @@ export interface PersistedProjectData {
 
 const STORAGE_PREFIX = 'reckon_project_';
 const AUTO_SAVE_DEBOUNCE = 500; // ms
-const CURRENT_SCHEMA_VERSION = 3;
+const CURRENT_SCHEMA_VERSION = 6;
+// Schema 6: measurement points + calibration switched from stage-pixel space
+// to image-pixel space. Legacy points from earlier versions were captured in
+// a viewport-dependent frame and cannot be recovered, so they're wiped on load.
+const IMAGE_PIXEL_SCHEMA_VERSION = 6;
 
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -118,8 +130,6 @@ export const loadProjectFromStorage = (projectId: string): PersistedProjectData 
       estimationCards?: Array<EstimationCardData & { header?: string }>;
       boqElement?: { title?: string; header?: string };
     };
-    const schemaVersion = parsed.schemaVersion ?? 1;
-
     const boqElements = normalizeBoqElements(
       (parsed.boqElements && parsed.boqElements.length > 0
         ? parsed.boqElements
@@ -131,29 +141,55 @@ export const loadProjectFromStorage = (projectId: string): PersistedProjectData 
 
     const pricing = parsed.pricing ?? { vatRate: 0, contingency: 0 };
 
-    if (schemaVersion < 2) {
-      return {
-        schemaVersion: CURRENT_SCHEMA_VERSION,
-        takeoffItems: parsed.takeoffItems || [],
-        scales: parsed.scales || {},
-        calibrationLines: parsed.calibrationLines || {},
-        currentPage: parsed.currentPage || 1,
-        numPages: parsed.numPages || 0,
-        backgroundImage: parsed.backgroundImage || null,
-        boqElements,
-        pricing,
-        lastSaved: parsed.lastSaved || new Date().toISOString(),
-      };
+    const needsImagePixelWipe =
+      (parsed.schemaVersion ?? 0) < IMAGE_PIXEL_SCHEMA_VERSION;
+
+    if (needsImagePixelWipe) {
+      console.warn(
+        `[persistence] Project ${projectId} has legacy stage-pixel measurements ` +
+          `(schemaVersion=${parsed.schemaVersion ?? 'unknown'}). Clearing measurements + calibration.`
+      );
     }
+
+    const rawPlanStates = (parsed as Partial<PersistedProjectData>).planStates;
+    const wipedPlanStates = needsImagePixelWipe && rawPlanStates
+      ? Object.fromEntries(
+          Object.entries(rawPlanStates).map(([planId, state]) => [
+            planId,
+            { ...state, scales: {}, calibrationLines: {} },
+          ])
+        )
+      : rawPlanStates;
+
+    const migrated = migrateToPlanDocuments({
+      backgroundImage: parsed.backgroundImage || null,
+      numPages: parsed.numPages || 0,
+      currentPage: parsed.currentPage || 1,
+      scales: needsImagePixelWipe ? {} : parsed.scales || {},
+      calibrationLines: needsImagePixelWipe ? {} : parsed.calibrationLines || {},
+      takeoffItems: needsImagePixelWipe
+        ? (parsed.takeoffItems || []).map((item) => ({
+            ...item,
+            measurements: [],
+            totalQuantity: 0,
+          }))
+        : parsed.takeoffItems || [],
+      plans: (parsed as Partial<PersistedProjectData>).plans,
+      activePlanId: (parsed as Partial<PersistedProjectData>).activePlanId,
+      planStates: wipedPlanStates,
+    });
 
     return {
       schemaVersion: CURRENT_SCHEMA_VERSION,
-      takeoffItems: parsed.takeoffItems || [],
-      scales: parsed.scales || {},
-      calibrationLines: parsed.calibrationLines || {},
-      currentPage: parsed.currentPage || 1,
-      numPages: parsed.numPages || 0,
-      backgroundImage: parsed.backgroundImage || null,
+      takeoffItems: migrated.takeoffItems,
+      scales: migrated.scales,
+      calibrationLines: migrated.calibrationLines,
+      currentPage: migrated.currentPage,
+      numPages: migrated.numPages,
+      backgroundImage: migrated.backgroundImage,
+      plans: migrated.plans,
+      activePlanId: migrated.activePlanId || null,
+      planStates: migrated.planStates,
       boqElements,
       pricing,
       lastSaved: parsed.lastSaved || new Date().toISOString(),

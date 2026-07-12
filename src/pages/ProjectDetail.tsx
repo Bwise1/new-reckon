@@ -1,89 +1,71 @@
 import { useParams } from 'react-router-dom';
-import { useEffect, useRef, useCallback } from 'react';
+import { useRef, useCallback } from 'react';
 import PlanNavigator from '@/components/takeoff/PlanNavigator';
 import FloorPlanCanvas from '@/components/takeoff/FloorPlanCanvas';
 import TakeoffRightSidebar from '@/components/takeoff/TakeoffRightSidebar';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useProject } from '@/hooks/useProjects';
-import type { TakeoffItem, TakeoffMode } from '@/types/takeoff';
-import { generateClientId } from '@/utils/id';
-import { MARKUP_COLORS } from '@/constants/takeoffDesign';
+import { useProjectSync } from '@/hooks/useProjectSync';
+import type { TakeoffMode } from '@/types/takeoff';
 
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
   const { data: projectResponse } = useProject(id ?? '');
   const project = projectResponse?.data?.project;
 
+  useProjectSync(id, {
+    clientUuid: project?.client_uuid,
+    title: project?.title,
+    location: project?.location,
+  });
+
   const uploadHandlerRef = useRef<((e: React.ChangeEvent<HTMLInputElement>) => void) | null>(
     null
   );
 
   const {
+    plans,
+    activePlanId,
     takeoffItems,
     activeItemId,
+    activeTool,
+    activeColor,
     setActiveItemId,
-    addTakeoffItem,
-    updateTakeoffItem,
-    deleteTakeoffItem,
-    loadProject,
-    reset,
+    setActiveTool,
+    setActiveColor,
+    selectPlan,
+    removeMeasurement,
   } = useTakeoffStore();
 
-  useEffect(() => {
-    if (id) {
-      loadProject(id);
-    }
-    return () => {
-      reset();
-    };
-  }, [id, loadProject, reset]);
-
-  const handleCreateItem = useCallback(
-    (type: TakeoffMode, color?: string) => {
-      const colorIndex = takeoffItems.length % MARKUP_COLORS.length;
-      const newItem: TakeoffItem = {
-        id: generateClientId(),
-        name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${takeoffItems.length + 1}`,
-        type,
-        color: color ?? MARKUP_COLORS[colorIndex],
-        measurements: [],
-        totalQuantity: 0,
-        unit: type === 'area' ? 'm2' : type === 'count' ? 'ea' : 'm',
-      };
-      addTakeoffItem(newItem);
-      setActiveItemId(newItem.id);
-      return newItem.id;
-    },
-    [takeoffItems.length, addTakeoffItem, setActiveItemId]
-  );
+  // Note: we intentionally do NOT reset() on unmount. Under React StrictMode the mount/
+  // unmount/mount cycle would fire reset() between the two mounts, wiping currentProjectId
+  // and breaking useProjectSync's once-per-project guard. loadProject() on the next
+  // project entry already replaces state, so a lingering store between navigations is fine.
 
   const handleSelectTool = useCallback(
     (type: TakeoffMode) => {
-      const existing = takeoffItems.find(
-        (item) => item.type === type || (type === 'linear' && item.type === 'polyline')
-      );
-      if (existing) {
-        setActiveItemId(existing.id);
-        return;
-      }
-      handleCreateItem(type);
+      setActiveTool(activeTool === type ? null : type);
     },
-    [takeoffItems, setActiveItemId, handleCreateItem]
+    [activeTool, setActiveTool]
   );
+
+  const handleFinishTool = useCallback(() => {
+    setActiveTool(null);
+  }, [setActiveTool]);
 
   const handleColorChange = useCallback(
     (color: string) => {
-      if (activeItemId) {
-        updateTakeoffItem(activeItemId, { color });
-      } else if (takeoffItems.length > 0) {
-        updateTakeoffItem(takeoffItems[0].id, { color });
-      }
+      setActiveColor(color);
     },
-    [activeItemId, takeoffItems, updateTakeoffItem]
+    [setActiveColor]
   );
 
-  const handleSelectItem = (itemId: string) => {
+  const handleSelectMeasurement = (itemId: string, _measurementId: string) => {
     setActiveItemId(itemId);
+  };
+
+  const handleDeleteMeasurement = (itemId: string, measurementId: string) => {
+    removeMeasurement(itemId, measurementId);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,10 +80,13 @@ const ProjectDetail = () => {
     <div className="flex h-screen bg-[#f0f2f5] overflow-hidden">
       <PlanNavigator
         projectTitle={projectTitle}
+        plans={plans}
+        activePlanId={activePlanId}
         takeoffItems={takeoffItems}
         activeItemId={activeItemId}
-        onSelectItem={handleSelectItem}
-        onDeleteItem={deleteTakeoffItem}
+        onSelectPlan={selectPlan}
+        onSelectMeasurement={handleSelectMeasurement}
+        onDeleteMeasurement={handleDeleteMeasurement}
         onFileUpload={handleFileUpload}
       />
 
@@ -109,7 +94,10 @@ const ProjectDetail = () => {
         <FloorPlanCanvas
           takeoffItems={takeoffItems}
           activeItemId={activeItemId}
+          activeTool={activeTool}
+          activeColor={activeColor}
           onSelectTool={handleSelectTool}
+          onFinishTool={handleFinishTool}
           onColorChange={handleColorChange}
           registerUploadHandler={(handler) => {
             uploadHandlerRef.current = handler;

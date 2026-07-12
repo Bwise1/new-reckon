@@ -1,5 +1,5 @@
 import React from "react";
-import { Stage, Layer, Image as KonvaImage, Rect } from "react-konva";
+import { Stage, Layer, Group, Image as KonvaImage, Rect } from "react-konva";
 import type Konva from "konva";
 
 interface CanvasViewportProps {
@@ -18,7 +18,8 @@ interface CanvasViewportProps {
   onStageWheel: (e: Konva.KonvaEventObject<WheelEvent>) => void;
   onStageContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => void;
   onStageDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
-  children: React.ReactNode;
+  measurementsChildren: React.ReactNode;
+  draftChildren: React.ReactNode;
 }
 
 const CanvasViewport: React.FC<CanvasViewportProps> = ({
@@ -37,7 +38,8 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
   onStageWheel,
   onStageContextMenu,
   onStageDragEnd,
-  children,
+  measurementsChildren,
+  draftChildren,
 }) => {
   return (
     <div
@@ -61,7 +63,8 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
         onContextMenu={onStageContextMenu}
         onDragEnd={onStageDragEnd}
       >
-        <Layer>
+        {/* Layer 1: static background — never redraws after plan load */}
+        <Layer listening={false}>
           <Rect
             x={0}
             y={0}
@@ -70,7 +73,22 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
             fill="white"
           />
           {image && <KonvaImage image={image} scaleX={imageScale} scaleY={imageScale} />}
-          {children}
+        </Layer>
+
+        {/* Layer 2: finalized measurements — points stored in image-pixel space,
+            rendered here via a single imageScale transform so nothing drifts when
+            the container width changes across devices. */}
+        <Layer>
+          <Group scaleX={imageScale} scaleY={imageScale}>
+            {measurementsChildren}
+          </Group>
+        </Layer>
+
+        {/* Layer 3: in-progress drawing + snap indicators — redraws on every mouse move */}
+        <Layer listening={false}>
+          <Group scaleX={imageScale} scaleY={imageScale}>
+            {draftChildren}
+          </Group>
         </Layer>
       </Stage>
     </div>

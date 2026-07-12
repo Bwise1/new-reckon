@@ -1,12 +1,53 @@
 import axios, { AxiosError, AxiosHeaders } from 'axios';
 import type { AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
+import { useAuthStore } from '@/stores/auth.store';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'https://api.reckonio.com/v1';
 export const REQUEST_SOURCE = 'web-app';
+let isHandlingAuthFailure = false;
+
+const handleUnauthorized = (message?: string): void => {
+  if (isHandlingAuthFailure) return;
+  const token = localStorage.getItem('token');
+  if (!token) return;
+
+  const normalized = (message ?? '').toLowerCase();
+  const isAuthMessage =
+    normalized.includes('authentication failed') ||
+    normalized.includes('invalid token') ||
+    normalized.includes('jwt') ||
+    normalized.includes('unauthorized');
+
+  if (!isAuthMessage && !normalized) return;
+
+  isHandlingAuthFailure = true;
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem(
+      'reckon_auth_notice',
+      'Your session expired. Please log in again.'
+    );
+  }
+  useAuthStore.getState().clearAuth();
+
+  if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+    window.location.replace('/login');
+  } else {
+    isHandlingAuthFailure = false;
+  }
+};
 
 const withRequestHeaders = (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
   const headers = AxiosHeaders.from(config.headers as AxiosHeaders);
-  headers.set('Content-Type', 'application/json');
+
+  // For multipart uploads (FormData), let Axios/the browser set the
+  // Content-Type with the correct multipart boundary. Forcing
+  // application/json here would break the upload — the server would
+  // see a JSON body and Multer would find no file.
+  const isFormData =
+    typeof FormData !== 'undefined' && config.data instanceof FormData;
+  if (!isFormData) {
+    headers.set('Content-Type', 'application/json');
+  }
   headers.set('X-Request-Source', REQUEST_SOURCE);
 
   const token = localStorage.getItem('token');
@@ -34,10 +75,20 @@ class APIClient {
       (response) => response,
       async (error: AxiosError<{ message?: string; status?: string } | Blob>) => {
         const data = error.response?.data;
+        if (error.response?.status === 401) {
+          const rawMessage =
+            data && typeof data === 'object' && !('arrayBuffer' in data)
+              ? (data as { message?: string }).message
+              : undefined;
+          handleUnauthorized(rawMessage);
+        }
         if (data instanceof Blob) {
           try {
             const text = await data.text();
             const parsed = JSON.parse(text) as { message?: string };
+            if (error.response?.status === 401) {
+              handleUnauthorized(parsed.message);
+            }
             return Promise.reject(new Error(parsed.message || 'Something went wrong'));
           } catch {
             return Promise.reject(new Error(error.message || 'Something went wrong'));
@@ -60,6 +111,23 @@ class APIClient {
 
   async post<T>(url: string, data?: unknown, config?: AxiosRequestConfig) {
     const response = await this.client.post<T>(url, data, config);
+    return response.data;
+  }
+
+  /** Multipart upload without forcing application/json Content-Type. */
+  async postForm<T>(url: string, formData: FormData, config?: AxiosRequestConfig) {
+    const headers = AxiosHeaders.from(config?.headers as AxiosHeaders);
+    headers.set('X-Request-Source', REQUEST_SOURCE);
+    const token = localStorage.getItem('token');
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+    headers.delete('Content-Type');
+
+    const response = await this.client.post<T>(url, formData, {
+      ...config,
+      headers,
+    });
     return response.data;
   }
 
