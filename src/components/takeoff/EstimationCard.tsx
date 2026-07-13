@@ -24,6 +24,26 @@ interface EstimationCardProps {
   onAddItem?: () => void;
   isActive?: boolean;
   onFocus?: () => void;
+  /** Called when the user clicks the Measure toolbar button.
+   * Parent toggles boqTargeting for this card. */
+  onToggleMeasure?: () => void;
+  /** Called when the user clicks Add or Deduct in the toolbar. When
+   * this card is the current measure target, the parent uses this to
+   * update boqTargeting.mode so the next measured value picks up the
+   * correct sign. */
+  onMeasureModeChange?: (mode: "add" | "deduct") => void;
+  /** True when the store's boqTargeting matches this card. Renders a
+   * highlighted ring to make the "you're measuring for THIS" affordance clear. */
+  isTargeting?: boolean;
+  /** Staged value from the most recent measurement, waiting for the user
+   * to Add/Deduct/edit or discard. Only used when isTargeting. */
+  pendingMeasuredValue?: string | null;
+  /** Client uuid of the measurement that produced pendingMeasuredValue.
+   * Attached as sourceMeasurementId on the resulting history chip so
+   * plan-side edits/deletes propagate. */
+  pendingMeasurementId?: string | null;
+  /** Clears the staged measured value (called after commit or Esc). */
+  onClearPendingMeasured?: () => void;
   className?: string;
 }
 
@@ -37,6 +57,12 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
   onAddItem,
   isActive = true,
   onFocus,
+  onToggleMeasure,
+  onMeasureModeChange,
+  isTargeting = false,
+  pendingMeasuredValue = null,
+  pendingMeasurementId = null,
+  onClearPendingMeasured,
   className = "",
 }) => {
   const [unit, setUnit] = useState<UnitType>(data?.unit || "m3");
@@ -61,13 +87,39 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
     });
   };
 
+  // If the user edits the staged value (e.g. types `* 3` after a
+  // measured 12.5), the link to the plan measurement breaks: subsequent
+  // edits on the plan would overwrite the user's formula. To detect
+  // this, keep the pristine staged value in a ref and only tag the
+  // resulting chip when the committed expression exactly matches it.
+  const stagedRef = React.useRef<{ value: string; measurementId: string } | null>(null);
+
+  React.useEffect(() => {
+    if (pendingMeasuredValue !== null && isTargeting && pendingMeasurementId) {
+      setTakeoff(pendingMeasuredValue);
+      stagedRef.current = {
+        value: pendingMeasuredValue,
+        measurementId: pendingMeasurementId,
+      };
+    }
+    // Intentionally not depending on takeoff — user may edit it further.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingMeasuredValue, pendingMeasurementId, isTargeting]);
+
   const handleCommitTakeoff = (expression: string, mode: "add" | "deduct") => {
+    const sourceMeasurementId =
+      stagedRef.current && stagedRef.current.value === expression
+        ? stagedRef.current.measurementId
+        : null;
     const entry: HistoryItem = {
       id: generateClientId(),
       value: expression,
       isDeduct: mode === "deduct",
+      ...(sourceMeasurementId ? { sourceMeasurementId } : {}),
     };
     pushHistory([...history, entry]);
+    stagedRef.current = null;
+    onClearPendingMeasured?.();
   };
 
   const removeHistoryItem = (itemId: string) => {
@@ -90,7 +142,9 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
         if (e.key === "Enter" || e.key === " ") onFocus?.();
       }}
       className={`rounded-[10px] border px-4 pb-4 pt-0 space-y-3 transition-all cursor-pointer overflow-visible ${
-        isActive
+        isTargeting
+          ? "border-[#f97316] bg-[#f97316]/5 shadow-md ring-2 ring-[#f97316]/40"
+          : isActive
           ? "border-[#289693] bg-[#289693]/5 shadow-sm"
           : "border-gray-200 bg-gray-50 opacity-55 hover:opacity-80"
       } ${className}`}
@@ -120,6 +174,9 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
             value={takeoff}
             onChange={setTakeoff}
             onCommit={handleCommitTakeoff}
+            onToggleMeasure={onToggleMeasure}
+            onModeChange={onMeasureModeChange}
+            isMeasuring={isTargeting}
             placeholder="Takeoff (e.g. 250 or 10*3*1 + 5*3*1)"
             className="w-full"
           />

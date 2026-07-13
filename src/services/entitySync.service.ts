@@ -53,6 +53,8 @@ export interface ApiMeasurement {
   project_id: number;
   plan_client_uuid: string;
   takeoff_item_client_uuid: string;
+  boq_element_id: string | null;
+  boq_item_id: string | null;
   page: number;
   type: 'linear' | 'polyline' | 'area' | 'count';
   color: string;
@@ -72,6 +74,8 @@ export interface MeasurementCreateBody {
   client_uuid: string;
   plan_client_uuid: string;
   takeoff_item_client_uuid: string;
+  boq_element_id?: string | null;
+  boq_item_id?: string | null;
   page: number;
   type: 'linear' | 'polyline' | 'area' | 'count';
   color: string;
@@ -84,7 +88,15 @@ export interface MeasurementCreateBody {
 export type MeasurementPatchBody = Partial<
   Pick<
     MeasurementCreateBody,
-    'points' | 'quantity' | 'color' | 'hidden' | 'metadata' | 'page' | 'type'
+    | 'points'
+    | 'quantity'
+    | 'color'
+    | 'hidden'
+    | 'metadata'
+    | 'page'
+    | 'type'
+    | 'boq_element_id'
+    | 'boq_item_id'
   >
 >;
 
@@ -106,5 +118,113 @@ export const measurementSync = {
   delete: (projectId: string, clientUuid: string) =>
     apiClient.delete<{ data?: unknown }>(
       `/projects/${projectId}/measurements/${clientUuid}`
+    ),
+};
+
+// ---------- BOQ (elements + items + history) ----------
+
+export interface ApiBoqHistoryEntry {
+  client_uuid: string;
+  project_id: number;
+  item_client_uuid: string;
+  sort_order: number;
+  value: string;
+  is_deduct: boolean;
+  source_measurement_client_uuid: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ApiBoqItem {
+  client_uuid: string;
+  project_id: number;
+  element_client_uuid: string;
+  sort_order: number;
+  unit: string;
+  header: string;
+  description: string;
+  qty: string;
+  rate: string;
+  history: ApiBoqHistoryEntry[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ApiBoqElement {
+  client_uuid: string;
+  project_id: number;
+  title: string;
+  sort_order: number;
+  items: ApiBoqItem[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface BoqElementUpsertBody {
+  title: string;
+  sort_order?: number;
+}
+
+export interface BoqItemUpsertBody {
+  element_client_uuid: string;
+  sort_order?: number;
+  unit: string;
+  header: string;
+  description?: string | null;
+  qty: string;
+  rate: string;
+}
+
+export interface BoqHistoryUpsertBody {
+  item_client_uuid: string;
+  sort_order?: number;
+  value: string;
+  is_deduct?: boolean;
+  source_measurement_client_uuid?: string | null;
+}
+
+export const boqSync = {
+  list: (projectId: string) =>
+    apiClient.get<{ data: { elements: ApiBoqElement[] } }>(
+      `/projects/${projectId}/boq`
+    ),
+  upsertElement: (
+    projectId: string,
+    clientUuid: string,
+    body: BoqElementUpsertBody
+  ) =>
+    apiClient.put<{ data: { element: ApiBoqElement } }>(
+      `/projects/${projectId}/boq/elements/${clientUuid}`,
+      body
+    ),
+  deleteElement: (projectId: string, clientUuid: string) =>
+    apiClient.delete<{ data?: unknown }>(
+      `/projects/${projectId}/boq/elements/${clientUuid}`
+    ),
+  upsertItem: (
+    projectId: string,
+    clientUuid: string,
+    body: BoqItemUpsertBody
+  ) =>
+    apiClient.put<{ data: { item: ApiBoqItem } }>(
+      `/projects/${projectId}/boq/items/${clientUuid}`,
+      body
+    ),
+  deleteItem: (projectId: string, clientUuid: string) =>
+    apiClient.delete<{ data?: unknown }>(
+      `/projects/${projectId}/boq/items/${clientUuid}`
+    ),
+  upsertHistory: (
+    projectId: string,
+    clientUuid: string,
+    body: BoqHistoryUpsertBody
+  ) =>
+    apiClient.put<{ data: { history: ApiBoqHistoryEntry } }>(
+      `/projects/${projectId}/boq/history/${clientUuid}`,
+      body
+    ),
+  deleteHistory: (projectId: string, clientUuid: string) =>
+    apiClient.delete<{ data?: unknown }>(
+      `/projects/${projectId}/boq/history/${clientUuid}`
     ),
 };

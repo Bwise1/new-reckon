@@ -1,24 +1,31 @@
 import { useEffect, useRef } from 'react';
 import { fetchAndMergeProjectPlans } from '@/services/planSync.service';
 import {
+  boqSync,
   calibrationSync,
   measurementSync,
 } from '@/services/entitySync.service';
 import { syncQueue } from '@/services/syncQueue';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import {
+  boqElementsFromApiTree,
+  boqTreeToUpsertOps,
   mergeApiCalibrations,
   takeoffItemsFromApiMeasurements,
 } from '@/utils/entitySyncMapper';
-import { syncService } from '@/services/sync.service';
-import { mapPulledBoqToElements } from '@/utils/boqSyncPayload';
-import { ensureClientUuid } from '@/utils/projectMeta';
+import {
+  ensureClientUuid,
+  getProjectMeta,
+  saveProjectMeta,
+} from '@/utils/projectMeta';
 
 /**
  * Loads a project's server-authoritative state on mount:
- *   1. Fetch plans, calibrations, measurements in parallel.
- *   2. Fetch BOQ elements (unchanged path).
- *   3. Populate the store.
+ *   1. Fetch plans, calibrations, measurements, BOQ tree in parallel.
+ *   2. Populate the store from the server payloads.
+ *   3. If the server has NO BOQ data but localStorage does, upload the
+ *      local tree once (migration from the old wholesale sync). Marked
+ *      with boqMigratedAt in projectMeta so it never re-runs.
  *   4. Resume the persisted sync queue for this project.
  *
  * Replaces `useProjectSync`. No wholesale JSON-blob push/pull.
@@ -57,8 +64,8 @@ export const useProjectData = (
       try {
         const [boqResponse, plansPromise, calibrationsResponse, measurementsResponse] =
           await Promise.all([
-            syncService.pullBoq(clientUuid).catch((error) => {
-              console.warn('[project-data] BOQ pull failed', error);
+            boqSync.list(projectId).catch((error) => {
+              console.warn('[project-data] BOQ list failed', error);
               return null;
             }),
             fetchAndMergeProjectPlans(projectId).catch((error) => {
@@ -78,6 +85,47 @@ export const useProjectData = (
         // Plans are already merged into the store by fetchAndMergeProjectPlans.
         void plansPromise;
 
+        const serverBoqTree = boqResponse?.data?.elements ?? null;
+        const meta = getProjectMeta(projectId);
+        const alreadyMigrated = Boolean(meta?.boqMigratedAt);
+
+        // One-shot migration: if the server has no BOQ AND we haven't
+        // migrated this project yet AND local has data, upload the local
+        // tree and use it as the seed. Skip in every other case.
+        let didMigrate = false;
+        const preMigrationLocalTree = useTakeoffStore.getState().boqElements;
+        const shouldMigrate =
+          serverBoqTree !== null &&
+          serverBoqTree.length === 0 &&
+          !alreadyMigrated &&
+          preMigrationLocalTree.some((el) => el.items.some((it) => it.header || it.description || it.history.length > 0));
+
+        if (shouldMigrate) {
+          console.log(
+            `[project-data] running one-shot BOQ migration for project=${projectId}`
+          );
+          for (const op of boqTreeToUpsertOps(projectId, preMigrationLocalTree)) {
+            syncQueue.enqueue(op);
+          }
+          try {
+            await syncQueue.flush(projectId);
+            saveProjectMeta(projectId, {
+              ...meta,
+              clientUuid,
+              boqMigratedAt: new Date().toISOString(),
+            });
+            didMigrate = true;
+            console.log(
+              `[project-data] BOQ migration complete for project=${projectId}`
+            );
+          } catch (error) {
+            console.warn(
+              '[project-data] BOQ migration flush failed — will retry on next open',
+              error
+            );
+          }
+        }
+
         useTakeoffStore.setState((state) => {
           const nextPlanStates = calibrationsResponse
             ? mergeApiCalibrations(
@@ -96,17 +144,24 @@ export const useProjectData = (
             ? nextPlanStates[state.activePlanId]
             : undefined;
 
+          // BOQ resolution:
+          //   - If we just migrated: keep the local tree we uploaded.
+          //   - Else if server returned a non-empty tree: use it.
+          //   - Else: keep the local tree.
+          let nextBoqElements = state.boqElements;
+          if (didMigrate) {
+            nextBoqElements = preMigrationLocalTree;
+          } else if (serverBoqTree && serverBoqTree.length > 0) {
+            nextBoqElements = boqElementsFromApiTree(serverBoqTree);
+          }
+
           return {
             takeoffItems: nextTakeoffItems,
             planStates: nextPlanStates,
             scales: activePlanState?.scales ?? state.scales,
             calibrationLines:
               activePlanState?.calibrationLines ?? state.calibrationLines,
-            ...(boqResponse && !boqResponse.data?.boq?.unchanged
-              ? {
-                  boqElements: mapPulledBoqToElements(boqResponse.data.boq),
-                }
-              : {}),
+            boqElements: nextBoqElements,
           };
         });
 

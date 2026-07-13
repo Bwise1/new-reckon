@@ -86,6 +86,10 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     redo,
     canUndo,
     canRedo,
+    boqTargeting,
+    boqElements,
+    exitBoqTargeting,
+    setBoqTargetingPending,
   } = useTakeoffStore();
   const {
     stageRef,
@@ -1204,6 +1208,18 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // Layered Esc when targeting: first press clears the staged
+        // measured value (discarding it); second press exits targeting.
+        // Only after that does Esc fall through to cancel active draw/
+        // calibration.
+        if (boqTargeting) {
+          if (boqTargeting.pendingValue !== null) {
+            setBoqTargetingPending(null, null);
+            return;
+          }
+          exitBoqTargeting();
+          return;
+        }
         setCurrentPoints([]);
         setCalibrationMode(false);
         setCalibrationPoint1(null);
@@ -1292,6 +1308,9 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     canRedo,
     zoomToFit,
     zoomToSelection,
+    boqTargeting,
+    exitBoqTargeting,
+    setBoqTargetingPending,
   ]);
 
   // Handle zoom
@@ -1350,6 +1369,25 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   // stageScale and imageScale, multiplying by strokeScale restores the pre-fix
   // visual weight while still letting strokes grow with zoom.
   const strokeScale = 1 / (imageScale > 0 ? imageScale : 1);
+
+  // Lookup: measurement client_uuid → "1·C" style label from its BOQ binding.
+  // Computed once per render so the render loop doesn't rescan boqElements.
+  const boqBindingLabel = useMemo(() => {
+    const byMeasurementId = new Map<string, string>();
+    boqElements.forEach((element, elIndex) => {
+      element.items.forEach((item, itIndex) => {
+        item.history.forEach((entry) => {
+          if (!entry.sourceMeasurementId) return;
+          const letter = String.fromCharCode(65 + (itIndex % 26));
+          byMeasurementId.set(
+            entry.sourceMeasurementId,
+            `${elIndex + 1}·${letter}`
+          );
+        });
+      });
+    });
+    return byMeasurementId;
+  }, [boqElements]);
 
   return (
     <div className="flex-1 flex flex-col relative overflow-hidden min-h-0">
@@ -1591,6 +1629,22 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           offsetY={LABEL_FONT_SIZE * 0.5 * labelScale}
                           listening={false}
                         />
+
+                        {/* BOQ binding badge — small chip showing which
+                            Element·Item this measurement feeds. Always
+                            visible on bound measurements. */}
+                        {boqBindingLabel.get(m.id) && (
+                          <Text
+                            x={midX + LABEL_FONT_SIZE * 1.2 * labelScale}
+                            y={midY + LABEL_FONT_SIZE * 0.9 * labelScale}
+                            text={boqBindingLabel.get(m.id)!}
+                            fontSize={LABEL_FONT_SIZE * 0.75 * labelScale}
+                            fill="#f97316"
+                            fontStyle="bold"
+                            rotation={angle * (180 / Math.PI)}
+                            listening={false}
+                          />
+                        )}
 
                         {/* Edge hit area for dragging entire segment */}
                         {isSelected && (
@@ -1837,6 +1891,19 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           offsetY={4 * labelScale}
                           listening={false}
                         />
+                        {boqBindingLabel.get(m.id) && (
+                          <Text
+                            x={midX}
+                            y={midY + LABEL_FONT_SIZE * 1.1 * labelScale}
+                            text={boqBindingLabel.get(m.id)!}
+                            fontSize={LABEL_FONT_SIZE * 0.75 * labelScale}
+                            fill="#f97316"
+                            fontStyle="bold"
+                            align="center"
+                            verticalAlign="middle"
+                            listening={false}
+                          />
+                        )}
                       </Group>
                     );
                   } else if (mType === "area") {
@@ -1944,6 +2011,19 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           offsetY={0}
                           listening={false}
                         />
+                        {boqBindingLabel.get(m.id) && (
+                          <Text
+                            x={center.x}
+                            y={center.y + LABEL_FONT_SIZE * 1.1 * labelScale}
+                            text={boqBindingLabel.get(m.id)!}
+                            fontSize={LABEL_FONT_SIZE * 0.75 * labelScale}
+                            fill="#f97316"
+                            fontStyle="bold"
+                            align="center"
+                            verticalAlign="middle"
+                            listening={false}
+                          />
+                        )}
 
                         {/* Edge hit areas for dragging segments */}
                         {isSelected &&
@@ -2011,8 +2091,23 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                     const isSelected =
                       selectedMeasurement?.itemId === item.id &&
                       selectedMeasurement?.measurementId === m.id;
+                    const bindingLabel = boqBindingLabel.get(m.id);
+                    const firstPoint = m.points[0];
 
-                    return m.points.map((p, idx) => {
+                    return (
+                      <React.Fragment key={m.id}>
+                        {bindingLabel && firstPoint && (
+                          <Text
+                            x={firstPoint.x + 10 * strokeScale}
+                            y={firstPoint.y - 8 * strokeScale}
+                            text={bindingLabel}
+                            fontSize={LABEL_FONT_SIZE * 0.75 * labelScale}
+                            fill="#f97316"
+                            fontStyle="bold"
+                            listening={false}
+                          />
+                        )}
+                        {m.points.map((p, idx) => {
                       const isHovered =
                         hoveredMeasurement?.itemId === item.id &&
                         hoveredMeasurement?.measurementId === m.id;
@@ -2088,7 +2183,9 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           }}
                         />
                       );
-                    });
+                    })}
+                      </React.Fragment>
+                    );
                   }
                   return null;
                 })
@@ -2618,6 +2715,40 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
             })()}
         </>}
       />
+
+      {boqTargeting && (() => {
+        // Resolve human-readable "Element X · Item Y" for the pill.
+        const elementIndex = boqElements.findIndex((el) => el.id === boqTargeting.elementId);
+        const element = boqElements[elementIndex];
+        const itemIndex = element
+          ? element.items.findIndex((it) => it.id === boqTargeting.itemId)
+          : -1;
+        const elementLabel = elementIndex >= 0 ? `Element ${elementIndex + 1}` : 'Element';
+        // Match the sidebar's A/B/C letter naming for items.
+        const itemLetter =
+          itemIndex >= 0
+            ? String.fromCharCode(65 + (itemIndex % 26))
+            : '?';
+        const unitLabel =
+          boqTargeting.unit === 'm2'
+            ? 'm²'
+            : boqTargeting.unit === 'm3'
+              ? 'm³'
+              : boqTargeting.unit;
+        return (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-[#f97316] text-white px-3 py-1.5 shadow-lg text-xs font-semibold">
+            <span>Measuring for {elementLabel} · Item {itemLetter} ({unitLabel})</span>
+            <button
+              type="button"
+              onClick={exitBoqTargeting}
+              className="ml-1 rounded-full bg-white/20 hover:bg-white/30 px-2 py-0.5 text-[11px] font-bold cursor-pointer"
+              title="Exit measuring mode (Esc)"
+            >
+              Exit
+            </button>
+          </div>
+        );
+      })()}
 
       {hintVisible && mousePos && (activeTool || calibrationMode) && !isPanningMode && (() => {
         let text: string | null = null;

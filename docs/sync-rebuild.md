@@ -174,3 +174,29 @@ On first load per session, `useProjectData`:
 - Undo/redo across devices. Local undo continues to work; distributed undo needs a separate model.
 - Conflict resolution beyond last-write-wins per entity.
 - Migrating existing `project_web_data` blobs into the new tables. Pre-production data; users re-do work.
+
+## BOQ per-entity sync (added 2026-07-13)
+
+Same shape as measurements/calibrations. Three tables:
+
+- `project_boq_elements` — element rows (title, sort_order, client_uuid).
+- `project_boq_items` — item rows linked to elements by `element_client_uuid`.
+- `project_boq_history` — history entries linked to items by `item_client_uuid`. Carries `source_measurement_client_uuid` for plan-measurement links.
+
+Endpoints under `/projects/:id/boq/{elements|items|history}/:clientUuid` — PUT / DELETE per entity. `GET /projects/:id/boq` returns the nested tree in one call.
+
+Store mutations call `enqueueBoqOpsFromDiff(before)` after each `set()`. The diff walks the tree, emitting the minimum ops (`boq.element.upsert`, `boq.item.upsert`, `boq.history.upsert`, `.delete` variants) needed to bring the server in sync. Dedup rules in `syncQueue.ts` collapse consecutive upserts on the same client_uuid and drop upsert+delete pairs that never flushed.
+
+### One-shot local-BOQ upload migration
+
+Users with BOQ stored in localStorage from before per-entity sync existed keep their data via the migration in `useProjectData`. On project open, if the server returns 0 elements AND `projectMeta.boqMigratedAt` is unset AND local has non-empty BOQ, the whole local tree is enqueued as upserts (preserving client_uuids), flushed, and `boqMigratedAt` is stamped. Skips forever after that.
+
+### Flutter (mobile) equivalent — TODO
+
+The Flutter client in `Reckon-v2/lib/` needs the same three things when it adopts per-entity BOQ:
+
+1. Fetch `GET /projects/:id/boq` on project open. Populate its local BOQ.
+2. On any BOQ mutation, enqueue PUT / DELETE ops to a local persistent queue and drain over HTTP.
+3. One-shot migration: if server returns empty AND local has BOQ AND a `boq_migrated_at` flag is missing in local prefs, upload everything (preserving client_uuids) and set the flag.
+
+The endpoints are HTTP+JSON so no protocol change. Client uuids are shared identity between web and mobile — if both write to the same project, the server upsert semantics on `client_uuid` do the right thing. Duplicate creation (both devices offline creating "Element One") is accepted as a natural consequence of local-first; no auto-dedup.

@@ -11,6 +11,16 @@ interface FormulaInputProps {
   value: string;
   onChange: (value: string) => void;
   onCommit?: (expression: string, mode: "add" | "deduct") => void;
+  onFocus?: () => void;
+  /** Toggled by the Measure button in the floating toolbar. When active,
+   * measurements drawn on the plan land in this card's history using
+   * the current Add/Deduct mode. */
+  onToggleMeasure?: () => void;
+  /** Called when the user toggles Add/Deduct in the toolbar. When
+   * measuring, the parent uses this to update the targeting mode so the
+   * next measured value picks up the right sign. */
+  onModeChange?: (mode: "add" | "deduct") => void;
+  isMeasuring?: boolean;
   placeholder?: string;
   className?: string;
 }
@@ -19,6 +29,10 @@ const FormulaInput: React.FC<FormulaInputProps> = ({
   value,
   onChange,
   onCommit,
+  onFocus: onFocusProp,
+  onToggleMeasure,
+  onModeChange,
+  isMeasuring = false,
   placeholder = "Enter formula...",
   className = "",
 }) => {
@@ -28,6 +42,17 @@ const FormulaInput: React.FC<FormulaInputProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { isValid, error } = validateFormula(value);
+
+  // When measuring, auto-focus the input the moment a measured value
+  // shows up so the user immediately sees the caret and can Add/Deduct
+  // or edit right away.
+  const hadValueRef = useRef(false);
+  useEffect(() => {
+    if (isMeasuring && value && !hadValueRef.current) {
+      inputRef.current?.focus();
+    }
+    hadValueRef.current = Boolean(value);
+  }, [value, isMeasuring]);
 
   // Handle clicks outside the component to close the toolbar
   useEffect(() => {
@@ -75,6 +100,7 @@ const FormulaInput: React.FC<FormulaInputProps> = ({
 
   const handleModeChange = (nextMode: "add" | "deduct") => {
     setMode(nextMode);
+    onModeChange?.(nextMode);
     if (value.trim() && validateFormula(value).isValid) {
       commitExpression(nextMode);
     }
@@ -85,12 +111,17 @@ const FormulaInput: React.FC<FormulaInputProps> = ({
       {/* Floating Toolbar */}
       <div
         className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 transition-all duration-200 origin-bottom ${
-          isFocused
+          isFocused || isMeasuring
             ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
             : "opacity-0 scale-95 translate-y-1 pointer-events-none"
         } z-[60]`}
       >
-        <FormulaToolbar onModeChange={handleModeChange} onSymbolClick={handleSymbolClick} />
+        <FormulaToolbar
+          onModeChange={handleModeChange}
+          onSymbolClick={handleSymbolClick}
+          onToggleMeasure={onToggleMeasure}
+          isMeasuring={isMeasuring}
+        />
       </div>
 
       {/* Input Field */}
@@ -130,7 +161,10 @@ const FormulaInput: React.FC<FormulaInputProps> = ({
               e.preventDefault();
             }
           }}
-          onFocus={() => setIsFocused(true)}
+          onFocus={() => {
+            setIsFocused(true);
+            onFocusProp?.();
+          }}
           placeholder={placeholder}
           className={`w-full px-4 py-2.5 bg-white border rounded-xl shadow-sm outline-none transition-all placeholder:text-gray-400 font-medium text-gray-700 ${
             !isValid && value.length > 0

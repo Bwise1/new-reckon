@@ -24,6 +24,10 @@ export interface Measurement {
   color?: string;
   /** When true, the markup is hidden from the canvas render. */
   hidden?: boolean;
+  /** Bound BOQ Element id, if this measurement feeds a specific line item. */
+  boqElementId?: string;
+  /** Bound BOQ Item id (per-Element card). */
+  boqItemId?: string;
   metadata?: MeasurementMetadata;
 }
 
@@ -68,6 +72,9 @@ export interface HistoryItem {
   id: string;
   value: string;
   isDeduct?: boolean;
+  /** When present, this entry mirrors a plan measurement. Manual edits to
+   * the value strip this reference (unlink-on-edit). */
+  sourceMeasurementId?: string;
 }
 
 export interface EstimationCardData {

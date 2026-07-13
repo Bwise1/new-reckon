@@ -1,6 +1,10 @@
 import {
+  boqSync,
   calibrationSync,
   measurementSync,
+  type BoqElementUpsertBody,
+  type BoqHistoryUpsertBody,
+  type BoqItemUpsertBody,
   type CalibrationUpsertBody,
   type MeasurementCreateBody,
   type MeasurementPatchBody,
@@ -51,6 +55,39 @@ export type SyncOp =
       projectId: string;
       planUuid: string;
       page: number;
+    }
+  | {
+      kind: 'boq.element.upsert';
+      projectId: string;
+      clientUuid: string;
+      body: BoqElementUpsertBody;
+    }
+  | {
+      kind: 'boq.element.delete';
+      projectId: string;
+      clientUuid: string;
+    }
+  | {
+      kind: 'boq.item.upsert';
+      projectId: string;
+      clientUuid: string;
+      body: BoqItemUpsertBody;
+    }
+  | {
+      kind: 'boq.item.delete';
+      projectId: string;
+      clientUuid: string;
+    }
+  | {
+      kind: 'boq.history.upsert';
+      projectId: string;
+      clientUuid: string;
+      body: BoqHistoryUpsertBody;
+    }
+  | {
+      kind: 'boq.history.delete';
+      projectId: string;
+      clientUuid: string;
     };
 
 const QUEUE_KEY = (projectId: string) => `reckon_sync_queue_${projectId}`;
@@ -175,6 +212,40 @@ const dedupOnEnqueue = (queue: SyncOp[], op: SyncOp): SyncOp[] => {
       filtered.push(op);
       return filtered;
     }
+    // BOQ upserts collapse to the latest state per client_uuid. Two upserts
+    // on the same uuid replay-safe if we only keep the newest; older is
+    // wasted network. Delete after a not-yet-flushed upsert cancels both.
+    case 'boq.element.upsert':
+    case 'boq.item.upsert':
+    case 'boq.history.upsert': {
+      const kind = op.kind;
+      const filtered = queue.filter(
+        (q) => !(q.kind === kind && q.clientUuid === op.clientUuid)
+      );
+      filtered.push(op);
+      return filtered;
+    }
+    case 'boq.element.delete':
+    case 'boq.item.delete':
+    case 'boq.history.delete': {
+      const upsertKind =
+        op.kind === 'boq.element.delete'
+          ? 'boq.element.upsert'
+          : op.kind === 'boq.item.delete'
+            ? 'boq.item.upsert'
+            : 'boq.history.upsert';
+      // If the upsert never made it to the server, drop the delete too.
+      const upsertIdx = queue.findIndex(
+        (q) => q.kind === upsertKind && q.clientUuid === op.clientUuid
+      );
+      if (upsertIdx !== -1) {
+        queue.splice(upsertIdx, 1);
+        // No delete needed either — server never saw the row.
+        return queue;
+      }
+      queue.push(op);
+      return queue;
+    }
     case 'measurement.create':
     default:
       queue.push(op);
@@ -198,6 +269,24 @@ const runOp = async (op: SyncOp): Promise<void> => {
       return;
     case 'calibration.delete':
       await calibrationSync.delete(op.projectId, op.planUuid, op.page);
+      return;
+    case 'boq.element.upsert':
+      await boqSync.upsertElement(op.projectId, op.clientUuid, op.body);
+      return;
+    case 'boq.element.delete':
+      await boqSync.deleteElement(op.projectId, op.clientUuid);
+      return;
+    case 'boq.item.upsert':
+      await boqSync.upsertItem(op.projectId, op.clientUuid, op.body);
+      return;
+    case 'boq.item.delete':
+      await boqSync.deleteItem(op.projectId, op.clientUuid);
+      return;
+    case 'boq.history.upsert':
+      await boqSync.upsertHistory(op.projectId, op.clientUuid, op.body);
+      return;
+    case 'boq.history.delete':
+      await boqSync.deleteHistory(op.projectId, op.clientUuid);
       return;
   }
 };

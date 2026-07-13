@@ -4,6 +4,10 @@ export interface ProjectMeta {
   clientUuid: string;
   lastBoqSyncedAt?: string;
   lastWebDataSyncedAt?: string;
+  /** ISO timestamp when the one-shot local BOQ upload migration ran for
+   * this project. Set after a successful upload; presence blocks future
+   * re-migrations even if the server row is later emptied. */
+  boqMigratedAt?: string;
 }
 
 export const getProjectMeta = (serverProjectId: string): ProjectMeta | null => {

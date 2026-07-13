@@ -34,6 +34,12 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
     updateElementItem,
     deleteElementItem,
     duplicateElementItem,
+    boqTargeting,
+    startBoqTargeting,
+    exitBoqTargeting,
+    setBoqTargetingMode,
+    setBoqTargetingPending,
+    setMeasurementBoqBinding,
   } = useTakeoffStore();
 
   const [expandedElements, setExpandedElements] = React.useState<Record<string, boolean>>({});
@@ -195,9 +201,58 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                       isActive={
                         activeElementId === element.id && activeCardId === card.id
                       }
+                      isTargeting={
+                        boqTargeting?.elementId === element.id &&
+                        boqTargeting?.itemId === card.id
+                      }
+                      pendingMeasuredValue={
+                        boqTargeting?.elementId === element.id &&
+                        boqTargeting?.itemId === card.id
+                          ? boqTargeting.pendingValue
+                          : null
+                      }
+                      pendingMeasurementId={
+                        boqTargeting?.elementId === element.id &&
+                        boqTargeting?.itemId === card.id
+                          ? boqTargeting.pendingMeasurementId
+                          : null
+                      }
+                      onClearPendingMeasured={() => {
+                        // Called after the card commits a chip. Persist the
+                        // binding on the underlying measurement and clear
+                        // the staging slot.
+                        const pendingId = boqTargeting?.pendingMeasurementId;
+                        if (pendingId) {
+                          setMeasurementBoqBinding(
+                            pendingId,
+                            element.id,
+                            card.id
+                          );
+                        }
+                        setBoqTargetingPending(null, null);
+                      }}
                       onFocus={() => {
                         setActiveElementId(element.id);
                         setActiveCardId(card.id);
+                      }}
+                      onToggleMeasure={() => {
+                        setActiveElementId(element.id);
+                        setActiveCardId(card.id);
+                        const isThisCardTargeted =
+                          boqTargeting?.elementId === element.id &&
+                          boqTargeting?.itemId === card.id;
+                        if (isThisCardTargeted) {
+                          exitBoqTargeting();
+                        } else {
+                          startBoqTargeting(element.id, card.id, card.unit);
+                        }
+                      }}
+                      onMeasureModeChange={(mode) => {
+                        // Only update targeting if THIS card is the target.
+                        const isThisCardTargeted =
+                          boqTargeting?.elementId === element.id &&
+                          boqTargeting?.itemId === card.id;
+                        if (isThisCardTargeted) setBoqTargetingMode(mode);
                       }}
                       onDelete={(itemId) => handleDeleteItem(element.id, itemId)}
                       onCopy={(itemId) => handleCopyItem(element.id, itemId)}

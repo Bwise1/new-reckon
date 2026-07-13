@@ -25,6 +25,7 @@ import { loadProjectFromStorage, autoSaveProject } from '@/utils/persistence';
 import { generateClientId } from '@/utils/id';
 import { syncQueue } from '@/services/syncQueue';
 import {
+  boqTreeOpsDiff,
   calibrationUpsertBodyFromStore,
   measurementCreateBodyFromStore,
 } from '@/utils/entitySyncMapper';
@@ -70,6 +71,42 @@ interface TakeoffStore {
 
   boqElements: BoqElementData[];
   pricing: BoqPricing;
+
+  /** BOQ line the user is currently measuring for. When set, new
+   * measurements stage their value in `pendingValue` so the user sees
+   * it in the takeoff input and can Add/Deduct/edit before committing.
+   * See docs/plan-measurement-to-boq-linking.md. */
+  boqTargeting: {
+    elementId: string;
+    itemId: string;
+    unit: string;
+    mode: 'add' | 'deduct';
+    /** Numeric string of the most recently measured value, waiting for
+     * the user to commit (Add/Deduct/Enter) or discard (Esc). null when
+     * nothing is pending. */
+    pendingValue: string | null;
+    /** Client uuid of the plan measurement that produced pendingValue.
+     * When the user commits, this is passed as `sourceMeasurementId` on
+     * the history chip so delete/edit propagation stays wired. */
+    pendingMeasurementId: string | null;
+  } | null;
+
+  /** Change just the add/deduct mode of the current targeting without
+   * touching element/item/unit. Called when the user clicks Add or
+   * Deduct in the toolbar while Measure is active. */
+  setBoqTargetingMode: (mode: 'add' | 'deduct') => void;
+  /** Populate the staging slot after a measurement commits. */
+  setBoqTargetingPending: (value: string | null, measurementId: string | null) => void;
+  /** Just write boqElementId/boqItemId onto a measurement and sync it.
+   * Unlike bindMeasurementToItem, does NOT add a history entry — used
+   * when the history entry was committed elsewhere (e.g. by the
+   * EstimationCard commit path after the user clicked Add/Deduct on a
+   * staged measured value). */
+  setMeasurementBoqBinding: (
+    measurementId: string,
+    elementId: string | null,
+    itemId: string | null
+  ) => void;
 
   // Undo/Redo
   undoStack: Command[];
@@ -122,6 +159,30 @@ interface TakeoffStore {
   addMeasurement: (itemId: string, measurement: Measurement) => void;
   removeMeasurement: (itemId: string, measurementId: string) => void;
   toggleMeasurementHidden: (itemId: string, measurementId: string) => void;
+
+  /** Enter measuring-for-a-BOQ-line mode. Auto-switches the drawing tool
+   * to match the target's unit (m→linear, m²→area, nrs→count). New
+   * measurements auto-bind. `mode` defaults to 'add'. */
+  startBoqTargeting: (
+    elementId: string,
+    itemId: string,
+    unit: string,
+    mode?: 'add' | 'deduct'
+  ) => void;
+  exitBoqTargeting: () => void;
+  /** Bind an existing measurement to a BOQ item. Adds a corresponding
+   * history entry on the target item with sourceMeasurementId set.
+   * `mode` defaults to 'add'; passing 'deduct' commits the entry as
+   * isDeduct: true. */
+  bindMeasurementToItem: (
+    measurementId: string,
+    elementId: string,
+    itemId: string,
+    mode?: 'add' | 'deduct'
+  ) => void;
+  /** Remove the binding on a measurement AND drop the corresponding
+   * history entry from whatever item it was on. */
+  unbindMeasurement: (measurementId: string) => void;
 
   setScale: (page: number, scale: number) => void;
   setCalibrationLine: (page: number, line: CalibrationLine) => void;
@@ -197,6 +258,7 @@ const initialState = {
   planStates: {},
   deletedPlanIds: [],
   boqElements: [createEmptyBoqElement(0)],
+  boqTargeting: null,
   pricing: {
     vatRate: 0,
     contingency: 0,
@@ -211,7 +273,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   // Helper to execute a command and add to undo stack
   const executeCommand = (command: Command, skipHistory: boolean = false) => {
     command.execute();
-    
+
     if (!skipHistory) {
       set((state) => {
         const newUndoStack = [...state.undoStack, command];
@@ -225,6 +287,20 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         };
       });
       get().triggerAutoSave();
+    }
+  };
+
+  /**
+   * Compute the ops needed to bring the server BOQ in sync with the current
+   * store BOQ (relative to `before`), and enqueue them. Called at the end of
+   * every BOQ mutation. See docs/sync-rebuild.md and entitySyncMapper.
+   */
+  const enqueueBoqOpsFromDiff = (before: BoqElementData[]) => {
+    const projectId = get().currentProjectId;
+    if (!projectId) return;
+    const after = get().boqElements;
+    for (const op of boqTreeOpsDiff(projectId, before, after)) {
+      syncQueue.enqueue(op);
     }
   };
 
@@ -505,6 +581,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         const projectId = get().currentProjectId;
         if (projectId && updates.measurements) {
           const beforeById = new Map(previousItem.measurements.map((m) => [m.id, m]));
+          const quantityChanges: Array<{ measurementId: string; quantity: number }> = [];
           for (const next of updates.measurements) {
             const prev = beforeById.get(next.id);
             if (!prev) continue; // new measurements ride addMeasurement's path.
@@ -534,6 +611,40 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
                   : null,
               },
             });
+            if (prev.quantity !== next.quantity) {
+              quantityChanges.push({
+                measurementId: next.id,
+                quantity: next.quantity,
+              });
+            }
+          }
+          // If any bound measurement's quantity changed, reflect it in the
+          // linked BOQ history entry so mobile (which can't see the plan)
+          // sees an accurate number.
+          if (quantityChanges.length > 0) {
+            const boqBefore = get().boqElements;
+            set((state) => ({
+              boqElements: state.boqElements.map((element) => ({
+                ...element,
+                items: element.items.map((boqItem) => ({
+                  ...boqItem,
+                  history: boqItem.history.map((entry) => {
+                    if (!entry.sourceMeasurementId) return entry;
+                    const change = quantityChanges.find(
+                      (c) => c.measurementId === entry.sourceMeasurementId
+                    );
+                    if (!change) return entry;
+                    return {
+                      ...entry,
+                      // Preserve the user's Add/Deduct choice; only the
+                      // numeric value changes.
+                      value: Math.abs(change.quantity).toFixed(2),
+                    };
+                  }),
+                })),
+              })),
+            }));
+            enqueueBoqOpsFromDiff(boqBefore);
           }
         }
       },
@@ -655,6 +766,188 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
 
   setActiveColor: (color) => set({ activeColor: color }),
 
+  startBoqTargeting: (elementId, itemId, unit, mode = 'add') => {
+    // Choose a matching tool by the item's unit so the user can start
+    // measuring immediately without picking a tool.
+    let tool: TakeoffMode | null = null;
+    if (unit === 'm') tool = 'linear';
+    else if (unit === 'm2' || unit === 'm3') tool = 'area';
+    else if (unit === 'nrs' || unit === 'item') tool = 'count';
+
+    set({
+      boqTargeting: {
+        elementId,
+        itemId,
+        unit,
+        mode,
+        pendingValue: null,
+        pendingMeasurementId: null,
+      },
+      ...(tool ? { activeTool: tool } : {}),
+    });
+  },
+
+  exitBoqTargeting: () => {
+    set({ boqTargeting: null, activeTool: null });
+  },
+
+  setBoqTargetingMode: (mode) => {
+    set((state) =>
+      state.boqTargeting
+        ? { boqTargeting: { ...state.boqTargeting, mode } }
+        : state
+    );
+  },
+
+  setBoqTargetingPending: (value, measurementId) => {
+    set((state) =>
+      state.boqTargeting
+        ? {
+            boqTargeting: {
+              ...state.boqTargeting,
+              pendingValue: value,
+              pendingMeasurementId: measurementId,
+            },
+          }
+        : state
+    );
+  },
+
+  setMeasurementBoqBinding: (measurementId, elementId, itemId) => {
+    set((state) => ({
+      takeoffItems: state.takeoffItems.map((item) => ({
+        ...item,
+        measurements: item.measurements.map((m) => {
+          if (m.id !== measurementId) return m;
+          if (elementId && itemId) {
+            return { ...m, boqElementId: elementId, boqItemId: itemId };
+          }
+          // Clear the binding.
+          const { boqElementId: _e, boqItemId: _i, ...rest } = m;
+          void _e;
+          void _i;
+          return rest as Measurement;
+        }),
+      })),
+    }));
+    const projectId = get().currentProjectId;
+    if (projectId) {
+      syncQueue.enqueue({
+        kind: 'measurement.update',
+        projectId,
+        clientUuid: measurementId,
+        patch: {
+          boq_element_id: elementId,
+          boq_item_id: itemId,
+        },
+      });
+    }
+    get().triggerAutoSave();
+  },
+
+  bindMeasurementToItem: (measurementId, elementId, itemId, mode = 'add') => {
+    const projectId = get().currentProjectId;
+    const previousBoqElements = get().boqElements;
+
+    set((state) => {
+      let matchedMeasurement: Measurement | null = null;
+      const nextItems = state.takeoffItems.map((item) => {
+        const nextMeasurements = item.measurements.map((m) => {
+          if (m.id !== measurementId) return m;
+          matchedMeasurement = { ...m, boqElementId: elementId, boqItemId: itemId };
+          return matchedMeasurement;
+        });
+        return nextMeasurements === item.measurements
+          ? item
+          : { ...item, measurements: nextMeasurements };
+      });
+
+      if (!matchedMeasurement) return state;
+
+      // Add / update the corresponding history entry on the target item.
+      const nextElements = state.boqElements.map((element) => {
+        if (element.id !== elementId) return element;
+        return {
+          ...element,
+          items: element.items.map((item) => {
+            if (item.id !== itemId) return item;
+            // Replace any existing linked entry for this measurement so
+            // we don't duplicate on re-bind. Use the measurement's
+            // quantity as the value. isDeduct comes from the current
+            // Add/Deduct mode of the toolbar, not the sign of the number.
+            const withoutStale = item.history.filter(
+              (entry) => entry.sourceMeasurementId !== measurementId
+            );
+            withoutStale.push({
+              id: generateClientId(),
+              value: Math.abs(matchedMeasurement!.quantity).toFixed(2),
+              isDeduct: mode === 'deduct',
+              sourceMeasurementId: measurementId,
+            });
+            return { ...item, history: withoutStale };
+          }),
+        };
+      });
+
+      return {
+        takeoffItems: nextItems,
+        boqElements: nextElements,
+      };
+    });
+
+    if (projectId) {
+      syncQueue.enqueue({
+        kind: 'measurement.update',
+        projectId,
+        clientUuid: measurementId,
+        patch: { boq_element_id: elementId, boq_item_id: itemId },
+      });
+    }
+    enqueueBoqOpsFromDiff(previousBoqElements);
+    get().triggerAutoSave();
+  },
+
+  unbindMeasurement: (measurementId) => {
+    const projectId = get().currentProjectId;
+    const previousBoqElements = get().boqElements;
+
+    set((state) => {
+      const nextItems = state.takeoffItems.map((item) => {
+        const nextMeasurements = item.measurements.map((m) => {
+          if (m.id !== measurementId) return m;
+          const { boqElementId: _e, boqItemId: _i, ...rest } = m;
+          void _e;
+          void _i;
+          return rest as Measurement;
+        });
+        return nextMeasurements === item.measurements
+          ? item
+          : { ...item, measurements: nextMeasurements };
+      });
+      const nextElements = state.boqElements.map((element) => ({
+        ...element,
+        items: element.items.map((item) => ({
+          ...item,
+          history: item.history.filter(
+            (entry) => entry.sourceMeasurementId !== measurementId
+          ),
+        })),
+      }));
+      return { takeoffItems: nextItems, boqElements: nextElements };
+    });
+
+    if (projectId) {
+      syncQueue.enqueue({
+        kind: 'measurement.update',
+        projectId,
+        clientUuid: measurementId,
+        patch: { boq_element_id: null, boq_item_id: null },
+      });
+    }
+    enqueueBoqOpsFromDiff(previousBoqElements);
+    get().triggerAutoSave();
+  },
+
   ensureCanvasItemId: () => {
     const state = get();
     const existing = state.takeoffItems.find((item) => item.id === CANVAS_TAKEOFF_ITEM_ID);
@@ -705,6 +998,35 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
           );
           if (body) syncQueue.enqueue({ kind: 'measurement.create', projectId, body });
         }
+        // Targeting: stage the value in the input instead of committing
+        // a chip directly. The user then Add/Deduct/edits to commit.
+        // If a value was already pending, commit that one as a chip first
+        // (binding it to its measurement), then stage the new one — so
+        // drawing continuously never loses a value.
+        const target = get().boqTargeting;
+        if (target) {
+          const mType = measurement.type;
+          const unit = target.unit;
+          const unitMatches =
+            (unit === 'm' && (mType === 'linear' || mType === 'polyline')) ||
+            (unit === 'm2' && mType === 'area') ||
+            (unit === 'm3' && mType === 'area') ||
+            ((unit === 'nrs' || unit === 'item') && mType === 'count');
+          if (unitMatches) {
+            if (target.pendingValue && target.pendingMeasurementId) {
+              get().bindMeasurementToItem(
+                target.pendingMeasurementId,
+                target.elementId,
+                target.itemId,
+                target.mode
+              );
+            }
+            get().setBoqTargetingPending(
+              Math.abs(measurement.quantity).toFixed(2),
+              measurement.id
+            );
+          }
+        }
       },
       undo: () => {
         set((state) => ({
@@ -742,6 +1064,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
 
     executeCommand({
       execute: () => {
+        const boqBefore = get().boqElements;
         set((state) => ({
           takeoffItems: state.takeoffItems.map((item) => {
             if (item.id === itemId) {
@@ -753,6 +1076,16 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
             }
             return item;
           }),
+          // Drop any BOQ history entry that mirrored this measurement.
+          boqElements: state.boqElements.map((element) => ({
+            ...element,
+            items: element.items.map((item) => ({
+              ...item,
+              history: item.history.filter(
+                (entry) => entry.sourceMeasurementId !== measurementId
+              ),
+            })),
+          })),
         }));
         const projectId = get().currentProjectId;
         if (projectId) {
@@ -762,6 +1095,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
             clientUuid: measurementId,
           });
         }
+        enqueueBoqOpsFromDiff(boqBefore);
       },
       undo: () => {
         set((state) => ({
@@ -776,6 +1110,16 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
             return item;
           }),
         }));
+        // If the measurement was bound before deletion, restore the
+        // history entry too. (Best-effort: uses the measurement's current
+        // quantity — matches the current-state contract.)
+        if (measurement.boqElementId && measurement.boqItemId) {
+          get().bindMeasurementToItem(
+            measurement.id,
+            measurement.boqElementId,
+            measurement.boqItemId
+          );
+        }
         const projectId = get().currentProjectId;
         const activePlanId = get().activePlanId;
         if (projectId) {
@@ -940,8 +1284,15 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     const previousElements = [...state.boqElements];
     const newElement = createEmptyBoqElement(state.boqElements.length);
     executeCommand({
-      execute: () => set({ boqElements: [...state.boqElements, newElement] }),
-      undo: () => set({ boqElements: previousElements }),
+      execute: () => {
+        set({ boqElements: [...state.boqElements, newElement] });
+        enqueueBoqOpsFromDiff(previousElements);
+      },
+      undo: () => {
+        const before = get().boqElements;
+        set({ boqElements: previousElements });
+        enqueueBoqOpsFromDiff(before);
+      },
       description: `Add ${newElement.title}`,
     });
   },
@@ -951,19 +1302,25 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     const element = state.boqElements.find((e) => e.id === elementId);
     if (!element) return;
     const previousElement = { ...element, items: [...element.items] };
+    const previousElements = state.boqElements.map((el) => ({ ...el }));
     executeCommand({
-      execute: () =>
+      execute: () => {
         set((current) => ({
           boqElements: current.boqElements.map((el) =>
             el.id === elementId ? { ...el, ...updates } : el
           ),
-        })),
-      undo: () =>
+        }));
+        enqueueBoqOpsFromDiff(previousElements);
+      },
+      undo: () => {
+        const before = get().boqElements;
         set((current) => ({
           boqElements: current.boqElements.map((el) =>
             el.id === elementId ? previousElement : el
           ),
-        })),
+        }));
+        enqueueBoqOpsFromDiff(before);
+      },
       description: `Update ${element.title}`,
     });
   },
@@ -978,13 +1335,19 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       items: [...el.items],
     }));
     executeCommand({
-      execute: () =>
+      execute: () => {
         set((current) => ({
           boqElements: current.boqElements.map((el) =>
             el.id === elementId ? { ...el, items: [...el.items, newItem] } : el
           ),
-        })),
-      undo: () => set({ boqElements: previousElements }),
+        }));
+        enqueueBoqOpsFromDiff(previousElements);
+      },
+      undo: () => {
+        const before = get().boqElements;
+        set({ boqElements: previousElements });
+        enqueueBoqOpsFromDiff(before);
+      },
       description: `Add item to ${element.title}`,
     });
   },
@@ -998,21 +1361,84 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       ...el,
       items: [...el.items],
     }));
+
+    // Unlink-on-edit rule: if the incoming history has an entry whose value
+    // differs from the previous version's linked entry, strip the
+    // sourceMeasurementId AND clear the ids on the referenced measurement.
+    // Mobile users can only edit history (they can't see the plan) — this
+    // makes the divergence explicit instead of letting the plan and BOQ
+    // silently disagree.
+    let sanitizedUpdates = updates;
+    const unlinkMeasurementIds = new Set<string>();
+    if (updates.history) {
+      const prevById = new Map(item.history.map((h) => [h.id, h]));
+      const nextHistory = updates.history.map((next) => {
+        const prev = prevById.get(next.id);
+        if (
+          next.sourceMeasurementId &&
+          prev?.sourceMeasurementId === next.sourceMeasurementId &&
+          prev.value !== next.value
+        ) {
+          unlinkMeasurementIds.add(next.sourceMeasurementId);
+          const { sourceMeasurementId: _stripped, ...unlinked } = next;
+          void _stripped;
+          return unlinked;
+        }
+        return next;
+      });
+      if (unlinkMeasurementIds.size > 0) {
+        sanitizedUpdates = { ...updates, history: nextHistory };
+      }
+    }
+
     executeCommand({
-      execute: () =>
+      execute: () => {
         set((current) => ({
           boqElements: current.boqElements.map((el) =>
             el.id === elementId
               ? {
                   ...el,
                   items: el.items.map((i) =>
-                    i.id === itemId ? { ...i, ...updates } : i
+                    i.id === itemId ? { ...i, ...sanitizedUpdates } : i
                   ),
                 }
               : el
           ),
-        })),
-      undo: () => set({ boqElements: previousElements }),
+        }));
+        // Strip the boq binding on any measurement we just unlinked and
+        // enqueue the sync so mobile agrees with the plan.
+        if (unlinkMeasurementIds.size > 0) {
+          const projectId = get().currentProjectId;
+          set((current) => ({
+            takeoffItems: current.takeoffItems.map((takeoffItem) => ({
+              ...takeoffItem,
+              measurements: takeoffItem.measurements.map((m) => {
+                if (!unlinkMeasurementIds.has(m.id)) return m;
+                const { boqElementId: _e, boqItemId: _i, ...rest } = m;
+                void _e;
+                void _i;
+                return rest as Measurement;
+              }),
+            })),
+          }));
+          if (projectId) {
+            for (const mid of unlinkMeasurementIds) {
+              syncQueue.enqueue({
+                kind: 'measurement.update',
+                projectId,
+                clientUuid: mid,
+                patch: { boq_element_id: null, boq_item_id: null },
+              });
+            }
+          }
+        }
+        enqueueBoqOpsFromDiff(previousElements);
+      },
+      undo: () => {
+        const before = get().boqElements;
+        set({ boqElements: previousElements });
+        enqueueBoqOpsFromDiff(before);
+      },
       description: `Update item ${item.header || item.description || 'Item'}`,
     });
   },
@@ -1026,15 +1452,21 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       items: [...el.items],
     }));
     executeCommand({
-      execute: () =>
+      execute: () => {
         set((current) => ({
           boqElements: current.boqElements.map((el) =>
             el.id === elementId
               ? { ...el, items: el.items.filter((i) => i.id !== itemId) }
               : el
           ),
-        })),
-      undo: () => set({ boqElements: previousElements }),
+        }));
+        enqueueBoqOpsFromDiff(previousElements);
+      },
+      undo: () => {
+        const before = get().boqElements;
+        set({ boqElements: previousElements });
+        enqueueBoqOpsFromDiff(before);
+      },
       description: 'Delete item',
     });
   },
@@ -1055,7 +1487,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       items: [...el.items],
     }));
     executeCommand({
-      execute: () =>
+      execute: () => {
         set((current) => ({
           boqElements: current.boqElements.map((el) => {
             if (el.id !== elementId) return el;
@@ -1063,8 +1495,14 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
             items.splice(sourceIndex + 1, 0, copy);
             return { ...el, items };
           }),
-        })),
-      undo: () => set({ boqElements: previousElements }),
+        }));
+        enqueueBoqOpsFromDiff(previousElements);
+      },
+      undo: () => {
+        const before = get().boqElements;
+        set({ boqElements: previousElements });
+        enqueueBoqOpsFromDiff(before);
+      },
       description: 'Duplicate item',
     });
   },

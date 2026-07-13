@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { ChevronRight, Eye, EyeOff, FileText, Trash2 } from 'lucide-react';
+import { ChevronRight, Eye, EyeOff, FileText, Link2, Trash2 } from 'lucide-react';
 import ReckonLogo from '@/assets/images/logo.svg';
 import type { PlanDiscipline, TakeoffItem, TakeoffMode, ProjectPlan } from '@/types/takeoff';
 import { getMeasurementColor, getMeasurementType } from '@/utils/takeoffMeasurement';
@@ -55,6 +55,9 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
   const setPlanDiscipline = useTakeoffStore((s) => s.setPlanDiscipline);
   const toggleMeasurementHidden = useTakeoffStore((s) => s.toggleMeasurementHidden);
   const removePlan = useTakeoffStore((s) => s.removePlan);
+  const boqElements = useTakeoffStore((s) => s.boqElements);
+  const bindMeasurementToItem = useTakeoffStore((s) => s.bindMeasurementToItem);
+  const unbindMeasurement = useTakeoffStore((s) => s.unbindMeasurement);
   const confirm = useConfirm();
 
   const handleDeletePlan = async (plan: ProjectPlan) => {
@@ -99,6 +102,13 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
   };
 
   const [activeTab, setActiveTab] = useState<SidebarTab>('plan');
+  /** When set, the retro-bind picker is open for this measurement. Filters
+   * the picker's item list by the measurement's implied unit so the user
+   * can only bind to compatible cards. */
+  const [bindPickerFor, setBindPickerFor] = useState<{
+    measurementId: string;
+    type: TakeoffMode;
+  } | null>(null);
   const [pendingDiscipline, setPendingDiscipline] = useState<PlanDiscipline | null>(null);
   const [showUploadPicker, setShowUploadPicker] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -134,6 +144,8 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
           color: string;
           quantity: number;
           hidden: boolean;
+          boqElementId?: string;
+          boqItemId?: string;
         }[];
       }
     >();
@@ -154,6 +166,8 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
           color: getMeasurementColor(measurement, item),
           quantity: measurement.quantity,
           hidden: Boolean(measurement.hidden),
+          boqElementId: measurement.boqElementId,
+          boqItemId: measurement.boqItemId,
         });
       }
     }
@@ -393,6 +407,34 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                             >
                               {typeLetter(entry.type)}
                             </span>
+                            {entry.boqElementId && entry.boqItemId ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  unbindMeasurement(entry.measurementId);
+                                }}
+                                className="p-0.5 text-[#f97316] hover:text-[#c2410c] cursor-pointer"
+                                title="Bound to a BOQ line — click to unlink"
+                              >
+                                <Link2 className="w-3 h-3" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setBindPickerFor({
+                                    measurementId: entry.measurementId,
+                                    type: entry.type,
+                                  });
+                                }}
+                                className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-500 hover:text-[#f97316] cursor-pointer"
+                                title="Bind to a BOQ line"
+                              >
+                                <Link2 className="w-3 h-3" />
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={(e) => {
@@ -466,6 +508,93 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
           </div>
         </div>
       )}
+
+      {bindPickerFor && (() => {
+        // Show every element+item whose unit matches the measurement type.
+        const measurementType = bindPickerFor.type;
+        const unitMatches = (unit: string): boolean => {
+          if (unit === 'm') return measurementType === 'linear' || measurementType === 'polyline';
+          if (unit === 'm2') return measurementType === 'area';
+          if (unit === 'm3') return measurementType === 'area';
+          if (unit === 'nrs' || unit === 'item') return measurementType === 'count';
+          return false;
+        };
+        const options: Array<{
+          elementIndex: number;
+          elementId: string;
+          elementTitle: string;
+          itemLetter: string;
+          itemId: string;
+          itemUnit: string;
+          itemHeader: string;
+        }> = [];
+        boqElements.forEach((element, elIdx) => {
+          element.items.forEach((item, itIdx) => {
+            if (!unitMatches(item.unit)) return;
+            options.push({
+              elementIndex: elIdx,
+              elementId: element.id,
+              elementTitle: element.title,
+              itemLetter: String.fromCharCode(65 + (itIdx % 26)),
+              itemId: item.id,
+              itemUnit: item.unit,
+              itemHeader: item.header || item.description || 'Item',
+            });
+          });
+        });
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+            onClick={() => setBindPickerFor(null)}
+          >
+            <div
+              className="bg-[#111] border border-white/10 rounded-lg p-4 w-[320px] max-h-[70vh] overflow-y-auto shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-sm text-white font-medium mb-1">Bind to BOQ line</p>
+              <p className="text-[11px] text-gray-500 mb-3">
+                Only items whose unit matches the measurement are shown.
+              </p>
+              {options.length === 0 ? (
+                <p className="px-2 py-3 text-xs text-gray-500 text-center">
+                  No BOQ items with a matching unit. Add or change a card's unit first.
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {options.map((opt) => (
+                    <button
+                      key={`${opt.elementId}-${opt.itemId}`}
+                      type="button"
+                      onClick={() => {
+                        bindMeasurementToItem(
+                          bindPickerFor.measurementId,
+                          opt.elementId,
+                          opt.itemId
+                        );
+                        setBindPickerFor(null);
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-200 rounded hover:bg-white/10 cursor-pointer flex items-center gap-2"
+                    >
+                      <span className="text-[10px] font-bold text-[#f97316] w-10 shrink-0">
+                        {opt.elementIndex + 1}·{opt.itemLetter}
+                      </span>
+                      <span className="flex-1 truncate">{opt.elementTitle}</span>
+                      <span className="text-[10px] text-gray-500">{opt.itemUnit}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setBindPickerFor(null)}
+                className="mt-3 w-full text-xs text-gray-500 hover:text-gray-300 cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       <style>{`
         .custom-scrollbar-dark::-webkit-scrollbar { width: 4px; }

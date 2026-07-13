@@ -56,6 +56,9 @@ export interface BoqSyncPayload {
           is_adeduct: boolean;
           calculation: string[];
           result: string;
+          /** Set when this entry mirrors a plan measurement. Mobile reads
+           * it as a read-only hint; editing on either side strips the link. */
+          source_measurement_client_uuid?: string;
         }>;
       };
     }>;
@@ -94,6 +97,9 @@ export const buildBoqSyncPayload = ({
             is_adeduct: !!entry.isDeduct,
             calculation: [entry.value],
             result: entry.value,
+            ...(entry.sourceMeasurementId
+              ? { source_measurement_client_uuid: entry.sourceMeasurementId }
+              : {}),
           })),
         },
       };
@@ -137,6 +143,9 @@ export const mapPulledBoqToElements = (
             ? calc.calculation.join('')
             : String(calc.calculation ?? ''),
           isDeduct: !!calc.is_adeduct,
+          ...(calc.source_measurement_client_uuid
+            ? { sourceMeasurementId: calc.source_measurement_client_uuid }
+            : {}),
         })),
       };
     }),
