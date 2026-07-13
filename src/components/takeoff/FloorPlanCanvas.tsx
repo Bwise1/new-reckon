@@ -2748,13 +2748,9 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         );
       })()}
 
-      {hintVisible && mousePos && (activeTool || calibrationMode) && !isPanningMode && (() => {
+      {hintVisible && mousePos && activeTool && !isPanningMode && (() => {
         let text: string | null = null;
-        if (calibrationMode) {
-          text = calibrationPoint1
-            ? 'Click end point · Esc to cancel'
-            : 'Click start point';
-        } else if (activeTool === 'linear') {
+        if (activeTool === 'linear') {
           text = currentPoints.length === 0
             ? 'Click start point'
             : 'Click end point';

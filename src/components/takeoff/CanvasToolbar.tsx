@@ -42,11 +42,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         >
           {calibrationMode ? 'Calibrating…' : 'Calibrate'}
         </button>
-        {calibrationMode ? (
-          <span className="px-4 py-2 border-l border-gray-200 text-sm font-medium bg-orange-50 text-orange-700 min-w-[220px] text-center">
-            Click start point, then end point
-          </span>
-        ) : (
+        {!calibrationMode && (
           <span
             className={`px-4 py-2 border-l border-gray-200 text-sm font-semibold tabular-nums min-w-[120px] text-center ${
               currentScale ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
