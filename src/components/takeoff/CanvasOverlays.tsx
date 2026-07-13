@@ -41,7 +41,6 @@ const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
   currentScale,
   isPanningMode,
   isSelectMode,
-  isShiftPressed,
   onChangePage,
   onTogglePan,
   onToggleSelect,
@@ -175,23 +174,17 @@ const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
         </div>
       )}
 
+      {/* All three floating banners (Select Mode Active, Precision Mode
+          Active, Arrow keys nudge…) are commented out — they overlapped the
+          calibration pill / zoom controls and duplicated info already
+          visible from the toolbar state and on-canvas crosshair.
+          Re-enable individually if the affordance is missed.
       {isSelectMode && (
-        <div className="absolute top-32 left-1/2 -translate-x-1/2 bg-purple-600 text-white px-4 py-2 rounded-full shadow-lg z-20 text-xs font-bold uppercase tracking-widest border-2 border-white">
-          Select Mode Active - Drag Points (large) or Edges (small)
-        </div>
-      )}
-
-      {isShiftPressed && !isSelectMode && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-blue-600/80 backdrop-blur text-white px-4 py-2 rounded-full shadow-lg z-20 text-xs font-bold uppercase tracking-widest">
-          Precision Mode Active (Snapped)
-        </div>
-      )}
-
-      {isSelectMode && (
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-gray-800/85 backdrop-blur text-white px-4 py-2 rounded-full shadow-lg z-20 text-[11px] font-semibold tracking-wide">
+        <div className="absolute top-32 left-1/2 -translate-x-1/2 bg-gray-800/85 backdrop-blur text-white px-4 py-2 rounded-full shadow-lg z-20 text-[11px] font-semibold tracking-wide">
           Arrow keys nudge. Alt = fine, Shift = coarse (scale-aware when calibrated).
         </div>
       )}
+      */}
     </>
   );
 };

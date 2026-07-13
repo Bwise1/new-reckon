@@ -6,6 +6,7 @@ import type { Project } from "@/types/project";
 import { formatProjectCreatedAt } from "@/utils/projectMapper";
 import { generateClientId } from "@/utils/id";
 import { saveProjectMeta } from "@/utils/projectMeta";
+import { useConfirm, usePrompt } from "@/contexts/ConfirmProvider";
 
 const ProjectList = () => {
   const navigate = useNavigate();
@@ -15,8 +16,17 @@ const ProjectList = () => {
   const { data: projectsData, isLoading } = useProjects();
   const { mutate: deleteProject } = useDeleteProject();
   const { mutateAsync: createProject, isPending: isCreatingProject } = useCreateProject();
+  const confirm = useConfirm();
+  const prompt = usePrompt();
+
   const handleCreateProject = async () => {
-    const title = window.prompt("Project name", "New BOQ Project");
+    const title = await prompt({
+      title: "New project",
+      label: "Project name",
+      placeholder: "e.g. 3-Bedroom Flat",
+      defaultValue: "New BOQ Project",
+      confirmLabel: "Create",
+    });
     if (!title) return;
 
     const clientUuid = generateClientId();
@@ -42,11 +52,27 @@ const ProjectList = () => {
     project.location.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleDelete = (id: string) => {
-    if (window.confirm("Are you sure you want to delete this project?")) {
-      deleteProject(id);
-    }
+  const handleDelete = async (id: string) => {
+    const project = projects.find((p) => String(p.id) === id);
     setOpenMenuId(null);
+    const ok = await confirm({
+      title: "Delete project?",
+      message: (
+        <>
+          <p>
+            <span className="font-medium text-gray-900">
+              {project?.title ?? "This project"}
+            </span>{" "}
+            will be removed permanently.
+          </p>
+          <p className="mt-1 text-xs text-gray-500">This cannot be undone.</p>
+        </>
+      ),
+      confirmLabel: "Delete",
+      variant: "danger",
+    });
+    if (!ok) return;
+    deleteProject(id);
   };
 
   if (isLoading) {

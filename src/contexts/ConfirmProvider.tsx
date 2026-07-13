@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
 import ConfirmDialog, { type ConfirmVariant } from '@/components/ui/ConfirmDialog';
+import PromptDialog, { type PromptVariant } from '@/components/ui/PromptDialog';
 
 export interface ConfirmOptions {
   title: string;
@@ -9,64 +10,131 @@ export interface ConfirmOptions {
   variant?: ConfirmVariant;
 }
 
-type Confirm = (options: ConfirmOptions) => Promise<boolean>;
+export interface PromptOptions {
+  title: string;
+  message?: React.ReactNode;
+  label?: string;
+  placeholder?: string;
+  defaultValue?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  variant?: PromptVariant;
+  validate?: (value: string) => string | null;
+}
 
-const ConfirmContext = createContext<Confirm | null>(null);
+type Confirm = (options: ConfirmOptions) => Promise<boolean>;
+/** Returns the entered value on submit, or `null` on cancel. */
+type Prompt = (options: PromptOptions) => Promise<string | null>;
+
+interface DialogContextValue {
+  confirm: Confirm;
+  prompt: Prompt;
+}
+
+const DialogContext = createContext<DialogContextValue | null>(null);
 
 interface QueuedConfirm extends ConfirmOptions {
   resolve: (value: boolean) => void;
 }
 
+interface QueuedPrompt extends PromptOptions {
+  resolve: (value: string | null) => void;
+}
+
 export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [current, setCurrent] = useState<QueuedConfirm | null>(null);
-  const currentRef = useRef<QueuedConfirm | null>(null);
-  currentRef.current = current;
+  const [currentConfirm, setCurrentConfirm] = useState<QueuedConfirm | null>(null);
+  const currentConfirmRef = useRef<QueuedConfirm | null>(null);
+  currentConfirmRef.current = currentConfirm;
+
+  const [currentPrompt, setCurrentPrompt] = useState<QueuedPrompt | null>(null);
+  const currentPromptRef = useRef<QueuedPrompt | null>(null);
+  currentPromptRef.current = currentPrompt;
 
   const confirm = useCallback<Confirm>((options) => {
     return new Promise<boolean>((resolve) => {
       // If a dialog is somehow already open, cancel it before opening a new one.
-      if (currentRef.current) {
-        currentRef.current.resolve(false);
+      if (currentConfirmRef.current) {
+        currentConfirmRef.current.resolve(false);
       }
-      setCurrent({ ...options, resolve });
+      setCurrentConfirm({ ...options, resolve });
     });
   }, []);
 
-  const handleConfirm = useCallback(() => {
-    const active = currentRef.current;
-    if (!active) return;
-    active.resolve(true);
-    setCurrent(null);
+  const prompt = useCallback<Prompt>((options) => {
+    return new Promise<string | null>((resolve) => {
+      if (currentPromptRef.current) {
+        currentPromptRef.current.resolve(null);
+      }
+      setCurrentPrompt({ ...options, resolve });
+    });
   }, []);
 
-  const handleCancel = useCallback(() => {
-    const active = currentRef.current;
+  const handleConfirmConfirm = useCallback(() => {
+    const active = currentConfirmRef.current;
+    if (!active) return;
+    active.resolve(true);
+    setCurrentConfirm(null);
+  }, []);
+
+  const handleConfirmCancel = useCallback(() => {
+    const active = currentConfirmRef.current;
     if (!active) return;
     active.resolve(false);
-    setCurrent(null);
+    setCurrentConfirm(null);
+  }, []);
+
+  const handlePromptConfirm = useCallback((value: string) => {
+    const active = currentPromptRef.current;
+    if (!active) return;
+    active.resolve(value);
+    setCurrentPrompt(null);
+  }, []);
+
+  const handlePromptCancel = useCallback(() => {
+    const active = currentPromptRef.current;
+    if (!active) return;
+    active.resolve(null);
+    setCurrentPrompt(null);
   }, []);
 
   return (
-    <ConfirmContext.Provider value={confirm}>
+    <DialogContext.Provider value={{ confirm, prompt }}>
       {children}
       <ConfirmDialog
-        open={current !== null}
-        title={current?.title ?? ''}
-        message={current?.message ?? ''}
-        confirmLabel={current?.confirmLabel}
-        cancelLabel={current?.cancelLabel}
-        variant={current?.variant}
-        onConfirm={handleConfirm}
-        onCancel={handleCancel}
+        open={currentConfirm !== null}
+        title={currentConfirm?.title ?? ''}
+        message={currentConfirm?.message ?? ''}
+        confirmLabel={currentConfirm?.confirmLabel}
+        cancelLabel={currentConfirm?.cancelLabel}
+        variant={currentConfirm?.variant}
+        onConfirm={handleConfirmConfirm}
+        onCancel={handleConfirmCancel}
       />
-    </ConfirmContext.Provider>
+      <PromptDialog
+        open={currentPrompt !== null}
+        title={currentPrompt?.title ?? ''}
+        message={currentPrompt?.message}
+        label={currentPrompt?.label}
+        placeholder={currentPrompt?.placeholder}
+        defaultValue={currentPrompt?.defaultValue}
+        confirmLabel={currentPrompt?.confirmLabel}
+        cancelLabel={currentPrompt?.cancelLabel}
+        variant={currentPrompt?.variant}
+        validate={currentPrompt?.validate}
+        onConfirm={handlePromptConfirm}
+        onCancel={handlePromptCancel}
+      />
+    </DialogContext.Provider>
   );
 };
 
-export const useConfirm = (): Confirm => {
-  const ctx = useContext(ConfirmContext);
+const useDialogContext = (hookName: string): DialogContextValue => {
+  const ctx = useContext(DialogContext);
   if (!ctx) {
-    throw new Error('useConfirm must be used within a <ConfirmProvider>');
+    throw new Error(`${hookName} must be used within a <ConfirmProvider>`);
   }
   return ctx;
 };
+
+export const useConfirm = (): Confirm => useDialogContext('useConfirm').confirm;
+export const usePrompt = (): Prompt => useDialogContext('usePrompt').prompt;
