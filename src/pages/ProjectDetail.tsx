@@ -5,7 +5,7 @@ import FloorPlanCanvas from '@/components/takeoff/FloorPlanCanvas';
 import TakeoffRightSidebar from '@/components/takeoff/TakeoffRightSidebar';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useProject } from '@/hooks/useProjects';
-import { useProjectSync } from '@/hooks/useProjectSync';
+import { useProjectData } from '@/hooks/useProjectData';
 import type { TakeoffMode } from '@/types/takeoff';
 
 const ProjectDetail = () => {
@@ -13,7 +13,7 @@ const ProjectDetail = () => {
   const { data: projectResponse } = useProject(id ?? '');
   const project = projectResponse?.data?.project;
 
-  useProjectSync(id, {
+  useProjectData(id, {
     clientUuid: project?.client_uuid,
     title: project?.title,
     location: project?.location,

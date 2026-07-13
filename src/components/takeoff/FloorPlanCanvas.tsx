@@ -32,6 +32,7 @@ import {
   getMeasurementType,
 } from "@/utils/takeoffMeasurement";
 import { measurementBelongsToPlan } from "@/utils/planDocument";
+import { useConfirm } from "@/contexts/ConfirmProvider";
 
 const MIN_DISTANCE = 0.001; // Minimum valid distance in pixels
 const MIN_LINEAR_EDIT_DISTANCE = 2; // Prevent collapsing line while editing
@@ -139,6 +140,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     currentPage,
   });
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const confirm = useConfirm();
   const snapSettings = useMemo(
     () => ({
       vertex: snapEnabled,
@@ -799,9 +801,15 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     [handleDblClick]
   );
 
-  const handleClearAllMeasurements = useCallback(() => {
+  const handleClearAllMeasurements = useCallback(async () => {
     if (!activePlanId) return;
-    if (!confirm("Clear all measurements on this plan?")) return;
+    const ok = await confirm({
+      title: 'Clear all measurements?',
+      message: 'Every measurement on this plan will be removed. This cannot be undone.',
+      confirmLabel: 'Clear all',
+      variant: 'danger',
+    });
+    if (!ok) return;
 
     const nextItems = takeoffItems.map((item) => {
       const keptMeasurements = item.measurements.filter(
@@ -826,7 +834,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     setCurrentPoints([]);
     activeCountMeasurementRef.current = null;
     setTakeoffItems(nextItems);
-  }, [activePlanId, setTakeoffItems, setCurrentPoints, takeoffItems]);
+  }, [activePlanId, setTakeoffItems, setCurrentPoints, takeoffItems, confirm]);
 
   // Apply Shift-lock to a vertex drag position so the ghost matches commit.
   // Anchor = other endpoint (linear) or previous polygon vertex (area).
@@ -1337,6 +1345,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   // size in screen pixels regardless of monitor.
   const labelScale = 1 / (stageScale * (imageScale > 0 ? imageScale : 1));
   const LABEL_FONT_SIZE = 12; // logical screen pixels
+  // Compensates strokeWidth/radius values that were tuned when only stageScale
+  // wrapped the layer. Now that the layer sits inside a Group scaled by both
+  // stageScale and imageScale, multiplying by strokeScale restores the pre-fix
+  // visual weight while still letting strokes grow with zoom.
+  const strokeScale = 1 / (imageScale > 0 ? imageScale : 1);
 
   return (
     <div className="flex-1 flex flex-col relative overflow-hidden min-h-0">
@@ -1411,21 +1424,38 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                     const dx = p2.x - p1.x;
                     const dy = p2.y - p1.y;
                     const angle = Math.atan2(dy, dx);
-                    const tickLen = 6;
+                    // Screen-constant cap length (perpendicular tick at each endpoint).
+                    // Match the label height so the caps read as dimension-line ends.
+                    const tickLen = LABEL_FONT_SIZE * 0.6 * strokeScale;
                     const tickDX = Math.sin(angle) * tickLen;
                     const tickDY = Math.cos(angle) * tickLen;
+                    // Length of the segment and midpoint used to open a gap
+                    // around the dimension label — |---- 300.13m ----|
+                    const lineLen = Math.sqrt(dx * dx + dy * dy);
+                    const ux = lineLen > 0 ? dx / lineLen : 0;
+                    const uy = lineLen > 0 ? dy / lineLen : 0;
+                    const midX = (p1.x + p2.x) / 2;
+                    const midY = (p1.y + p2.y) / 2;
+                    const labelText = formatDistance(
+                      calculateQuantity(displayPoints, "linear", currentScale)
+                    );
+                    // Estimate label half-width in image-pixels. Konva Text width
+                    // isn't known until render, so we use a generous character-count
+                    // estimate (0.6× font size per char + padding) to guarantee the
+                    // gap clears the text on any font/DPR.
+                    const labelHalfWidth =
+                      (labelText.length * LABEL_FONT_SIZE * 0.6 * 0.5 + 8) * labelScale;
+                    const gapHalfMax = lineLen / 2 - 2 * strokeScale;
+                    const gapHalf = Math.min(labelHalfWidth, Math.max(0, gapHalfMax));
+                    const showGap = gapHalf > 0 && lineLen > 2 * gapHalf + 4 * strokeScale;
+                    const gapStart = { x: midX - ux * gapHalf, y: midY - uy * gapHalf };
+                    const gapEnd = { x: midX + ux * gapHalf, y: midY + uy * gapHalf };
                     const isSelected =
                       selectedMeasurement?.itemId === item.id &&
                       selectedMeasurement?.measurementId === m.id;
                     const isHovered =
                       hoveredMeasurement?.itemId === item.id &&
                       hoveredMeasurement?.measurementId === m.id;
-
-                    const currentQty = calculateQuantity(
-                      displayPoints,
-                      "linear",
-                      currentScale
-                    );
 
                     return (
                       <Group
@@ -1481,7 +1511,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           <Line
                             points={[p1.x, p1.y, p2.x, p2.y]}
                             stroke={mColor}
-                            strokeWidth={7}
+                            strokeWidth={7 * strokeScale}
                             opacity={0.22}
                             listening={false}
                           />
@@ -1496,15 +1526,31 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                             opacity={0.7}
                             listening={false}
                           />
+                        ) : showGap ? (
+                          <>
+                            {/* Split into two segments so the label sits in a gap */}
+                            <Line
+                              points={[p1.x, p1.y, gapStart.x, gapStart.y]}
+                              stroke={mColor}
+                              strokeWidth={(isSelected || isHovered ? 3 : 2) * strokeScale}
+                              opacity={isHovered ? 0.7 : 1}
+                            />
+                            <Line
+                              points={[gapEnd.x, gapEnd.y, p2.x, p2.y]}
+                              stroke={mColor}
+                              strokeWidth={(isSelected || isHovered ? 3 : 2) * strokeScale}
+                              opacity={isHovered ? 0.7 : 1}
+                            />
+                          </>
                         ) : (
                           <Line
                             points={[p1.x, p1.y, p2.x, p2.y]}
                             stroke={mColor}
-                            strokeWidth={isSelected || isHovered ? 3 : 2}
+                            strokeWidth={(isSelected || isHovered ? 3 : 2) * strokeScale}
                             opacity={isHovered ? 0.7 : 1}
                           />
                         )}
-                        {/* Perpendicular end-ticks — suppressed while dragging an endpoint,
+                        {/* Perpendicular end-caps — suppressed while dragging an endpoint,
                             since the edit handle already renders its own tick. */}
                         {!(dragging?.itemId === item.id && dragging?.measurementId === m.id) && (
                           <>
@@ -1516,7 +1562,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                                 p1.y - tickDY,
                               ]}
                               stroke={mColor}
-                              strokeWidth={isSelected || isHovered ? 3 : 2}
+                              strokeWidth={(isSelected || isHovered ? 3.5 : 2.5) * strokeScale}
+                              lineCap="round"
                             />
                             <Line
                               points={[
@@ -1526,21 +1573,22 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                                 p2.y - tickDY,
                               ]}
                               stroke={mColor}
-                              strokeWidth={isSelected || isHovered ? 3 : 2}
+                              strokeWidth={(isSelected || isHovered ? 3.5 : 2.5) * strokeScale}
+                              lineCap="round"
                             />
                           </>
                         )}
-                        {/* Dimension label — scaled inversely so it stays readable at any zoom */}
+                        {/* Dimension label — sits in the gap so it reads
+                            like a printed dimension: |---- 500.07m ----| */}
                         <Text
-                          x={(p1.x + p2.x) / 2}
-                          y={(p1.y + p2.y) / 2}
-                          text={formatDistance(currentQty)}
+                          x={midX}
+                          y={midY}
+                          text={labelText}
                           fontSize={LABEL_FONT_SIZE * labelScale}
                           fill={mColor}
                           rotation={angle * (180 / Math.PI)}
-                          align="center"
-                          verticalAlign="bottom"
-                          offsetY={4 * labelScale}
+                          offsetX={labelText.length * LABEL_FONT_SIZE * 0.3 * labelScale}
+                          offsetY={LABEL_FONT_SIZE * 0.5 * labelScale}
                           listening={false}
                         />
 
@@ -1592,7 +1640,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           <Line
                             points={[p1.x, p1.y, p2.x, p2.y]}
                             stroke={mColor}
-                            strokeWidth={6}
+                            strokeWidth={6 * strokeScale}
                             opacity={0.5}
                             listening={false}
                           />
@@ -1764,7 +1812,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                         <Line
                           points={displayPoints.flatMap((p) => [p.x, p.y])}
                           stroke={mColor}
-                          strokeWidth={2}
+                          strokeWidth={2 * strokeScale}
                           lineJoin="round"
                           lineCap="round"
                         />
@@ -1773,7 +1821,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                             key={i}
                             x={p.x}
                             y={p.y}
-                            radius={2}
+                            radius={2 * strokeScale}
                             fill={mColor}
                             listening={false}
                           />
@@ -1868,7 +1916,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                         <Line
                           points={displayPoints.flatMap((p) => [p.x, p.y])}
                           stroke={mColor}
-                          strokeWidth={isSelected || isHovered ? 4 : 2}
+                          strokeWidth={(isSelected || isHovered ? 4 : 2) * strokeScale}
                           fill={mColor + "44"}
                           opacity={isHovered ? 0.8 : 1}
                           closed
@@ -1878,7 +1926,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           <Line
                             points={displayPoints.flatMap((p) => [p.x, p.y])}
                             stroke={mColor}
-                            strokeWidth={8}
+                            strokeWidth={8 * strokeScale}
                             opacity={0.3}
                             closed
                             listening={false}
@@ -1912,7 +1960,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                               <Line
                                 points={[p1.x, p1.y, p2.x, p2.y]}
                                 stroke="transparent"
-                                strokeWidth={15}
+                                strokeWidth={15 * strokeScale}
                                 draggable={true}
                                 onDragStart={() => setIsDraggingObject(true)}
                                 onDragMove={(e) => {
@@ -1949,7 +1997,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                                 <Line
                                   points={[p1.x, p1.y, p2.x, p2.y]}
                                   stroke={mColor}
-                                  strokeWidth={6}
+                                  strokeWidth={6 * strokeScale}
                                   opacity={0.5}
                                   listening={false}
                                 />
@@ -1974,10 +2022,10 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           key={`${m.id}-${idx}`}
                           x={p.x}
                           y={p.y}
-                          radius={isSelected || isHovered ? 8 : 6}
+                          radius={(isSelected || isHovered ? 8 : 6) * strokeScale}
                           fill={mColor}
                           stroke="white"
-                          strokeWidth={isSelected || isHovered ? 3 : 2}
+                          strokeWidth={(isSelected || isHovered ? 3 : 2) * strokeScale}
                           draggable={isSelectMode}
                           onDragStart={(e) => {
                             setIsDraggingObject(true);
@@ -2070,7 +2118,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                         key={`${m.id}-point-${idx}`}
                         x={p.x}
                         y={p.y}
-                        radius={isSelected ? 10 : isHovered ? 8 : 6}
+                        radius={(isSelected ? 10 : isHovered ? 8 : 6) * strokeScale}
                           fill={
                             isSelected
                               ? mColor
@@ -2079,7 +2127,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                                 : "white"
                           }
                         stroke={mColor}
-                        strokeWidth={isSelected || isHovered ? 3 : 2}
+                        strokeWidth={(isSelected || isHovered ? 3 : 2) * strokeScale}
                         draggable={true}
                         onDragStart={(e) => {
                           e.cancelBubble = true;
@@ -2179,10 +2227,10 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                         key={`${m.id}-edge-${edgeIdx}`}
                         x={midpoint.x}
                         y={midpoint.y}
-                        radius={isHovered ? 7 : 5}
+                        radius={(isHovered ? 7 : 5) * strokeScale}
                         fill="white"
                         stroke={mColor}
-                        strokeWidth={2}
+                        strokeWidth={2 * strokeScale}
                         opacity={isHovered ? 1 : 0.7}
                         draggable={true}
                         onDragStart={(e) => {
@@ -2278,8 +2326,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                   <Line
                     points={currentPoints.flatMap((p) => [p.x, p.y])}
                     stroke={activeColor}
-                    strokeWidth={2}
-                    dash={[5, 5]}
+                    strokeWidth={2 * strokeScale}
+                    dash={[5 * strokeScale, 5 * strokeScale]}
                   />
                 )}
               </>
@@ -2314,7 +2362,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                         "linear",
                         currentScale
                       );
-                  const tickLen = 6;
+                  const tickLen = 6 * strokeScale;
                   const tickDX = Math.sin(angle) * tickLen;
                   const tickDY = Math.cos(angle) * tickLen;
 
@@ -2328,8 +2376,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                               previewPoint.y,
                             ]}
                             stroke={activeColor}
-                            strokeWidth={2}
-                            dash={[5, 5]}
+                            strokeWidth={2 * strokeScale}
+                            dash={[5 * strokeScale, 5 * strokeScale]}
                           />
                           {activeTool === "area" &&
                             currentPoints.length > 1 && (
@@ -2341,8 +2389,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                                   currentPoints[0].y,
                                 ]}
                                 stroke={activeColor}
-                                strokeWidth={1}
-                                dash={[2, 2]}
+                                strokeWidth={1 * strokeScale}
+                                dash={[2 * strokeScale, 2 * strokeScale]}
                               />
                             )}
                           <Line
@@ -2353,7 +2401,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                               lastPoint.y - tickDY,
                             ]}
                             stroke={activeColor}
-                            strokeWidth={2}
+                            strokeWidth={2 * strokeScale}
                           />
                           <Line
                             points={[
@@ -2363,7 +2411,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                               previewPoint.y - tickDY,
                             ]}
                             stroke={activeColor}
-                            strokeWidth={2}
+                            strokeWidth={2 * strokeScale}
                           />
                       <Text
                         x={(lastPoint.x + previewPoint.x) / 2}
@@ -2657,7 +2705,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           setCurrentPoints((prev) => (prev.length > 0 ? prev.slice(0, -1) : []))
         }
         onClearAll={() => {
-          handleClearAllMeasurements();
+          void handleClearAllMeasurements();
         }}
         snapEnabled={snapEnabled}
         onToggleSnap={handleToggleSnap}

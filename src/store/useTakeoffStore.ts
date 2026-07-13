@@ -18,12 +18,16 @@ import {
 } from '@/utils/planDocument';
 import { inferPlanMediaKind } from '@/utils/planMediaLoader';
 import { mergePlanLists } from '@/utils/planMapper';
-import { clearAllPlanPdfs } from '@/utils/planPdfCache';
+import { clearAllPlanPdfs, clearPlanPdf } from '@/utils/planPdfCache';
 import { MARKUP_COLORS } from '@/constants/takeoffDesign';
 import { createEmptyBoqElement, createEmptyBoqItem } from '@/utils/boqCalculations';
 import { loadProjectFromStorage, autoSaveProject } from '@/utils/persistence';
 import { generateClientId } from '@/utils/id';
-import { scheduleProjectSyncPush } from '@/services/projectSync.service';
+import { syncQueue } from '@/services/syncQueue';
+import {
+  calibrationUpsertBodyFromStore,
+  measurementCreateBodyFromStore,
+} from '@/utils/entitySyncMapper';
 import {
   CANVAS_TAKEOFF_ITEM_ID,
   normalizeTakeoffItems,
@@ -59,6 +63,10 @@ interface TakeoffStore {
   plans: ProjectPlan[];
   activePlanId: string | null;
   planStates: Record<string, PlanDocumentState>;
+  /** Client-side tombstones: ids of plans the user deleted. Suppressed
+   * from every server merge path so the plan doesn't get resurrected
+   * on the next pull if the server DELETE hasn't propagated yet. */
+  deletedPlanIds: string[];
 
   boqElements: BoqElementData[];
   pricing: BoqPricing;
@@ -187,6 +195,7 @@ const initialState = {
   plans: [],
   activePlanId: null,
   planStates: {},
+  deletedPlanIds: [],
   boqElements: [createEmptyBoqElement(0)],
   pricing: {
     vatRate: 0,
@@ -234,6 +243,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
           plans: savedData.plans ?? [],
           activePlanId: savedData.activePlanId ?? null,
           planStates: savedData.planStates ?? {},
+          deletedPlanIds: savedData.deletedPlanIds ?? [],
           boqElements:
             savedData.boqElements?.length > 0
               ? savedData.boqElements
@@ -284,10 +294,13 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         plans: state.plans,
         activePlanId: state.activePlanId,
         planStates,
+        deletedPlanIds: state.deletedPlanIds,
         boqElements: state.boqElements,
         pricing: state.pricing,
       });
-      scheduleProjectSyncPush(state.currentProjectId);
+      // Note: server sync no longer happens through the wholesale
+      // scheduleProjectSyncPush path. Each mutation enqueues per-entity ops
+      // via syncQueue. See docs/sync-rebuild.md.
     }
   },
 
@@ -363,6 +376,17 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     const planStates = { ...state.planStates };
     delete planStates[planId];
 
+    // Drop every measurement bound to the deleted plan and recompute item totals.
+    const takeoffItems = state.takeoffItems.map((item) => {
+      const kept = item.measurements.filter((m) => m.planId !== planId);
+      if (kept.length === item.measurements.length) return item;
+      const totalQuantity = kept.reduce((sum, m) => sum + m.quantity, 0);
+      return { ...item, measurements: kept, totalQuantity };
+    });
+
+    // Cached PDF for this plan is useless now.
+    clearPlanPdf(planId);
+
     const view = hydrateActivePlanView({
       plans: remaining,
       activePlanId: newActivePlanId,
@@ -374,7 +398,18 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       backgroundImage: state.backgroundImage,
     });
 
-    set({ plans: remaining, activePlanId: newActivePlanId, planStates, ...view });
+    const deletedPlanIds = state.deletedPlanIds.includes(planId)
+      ? state.deletedPlanIds
+      : [...state.deletedPlanIds, planId];
+
+    set({
+      plans: remaining,
+      activePlanId: newActivePlanId,
+      planStates,
+      takeoffItems,
+      deletedPlanIds,
+      ...view,
+    });
     get().triggerAutoSave();
   },
 
@@ -391,7 +426,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         ...(updates.currentPage !== undefined ? { currentPage: updates.currentPage } : {}),
         ...(updates.numPages !== undefined ? { numPages: updates.numPages } : {}),
         ...(updates.plans !== undefined
-          ? { plans: mergePlanLists(state.plans, updates.plans) }
+          ? { plans: mergePlanLists(state.plans, updates.plans, state.deletedPlanIds) }
           : {}),
         ...(updates.activePlanId !== undefined ? { activePlanId: updates.activePlanId } : {}),
         ...(updates.planStates !== undefined ? { planStates: updates.planStates } : {}),
@@ -418,6 +453,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         plans: latest.plans,
         activePlanId: latest.activePlanId,
         planStates,
+        deletedPlanIds: latest.deletedPlanIds,
         boqElements: latest.boqElements,
         pricing: latest.pricing,
       });
@@ -464,6 +500,42 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
             item.id === id ? { ...item, ...updates } : item
           ),
         }));
+        // If measurements changed, emit per-measurement update ops for anything
+        // whose points/quantity/color/hidden differs from before.
+        const projectId = get().currentProjectId;
+        if (projectId && updates.measurements) {
+          const beforeById = new Map(previousItem.measurements.map((m) => [m.id, m]));
+          for (const next of updates.measurements) {
+            const prev = beforeById.get(next.id);
+            if (!prev) continue; // new measurements ride addMeasurement's path.
+            if (
+              prev.points === next.points &&
+              prev.quantity === next.quantity &&
+              prev.color === next.color &&
+              prev.hidden === next.hidden
+            ) {
+              continue;
+            }
+            syncQueue.enqueue({
+              kind: 'measurement.update',
+              projectId,
+              clientUuid: next.id,
+              patch: {
+                points: next.points,
+                quantity: next.quantity,
+                color: next.color,
+                hidden: Boolean(next.hidden),
+                metadata: next.metadata
+                  ? {
+                      createdAt: next.metadata.createdAt,
+                      lastModified: next.metadata.lastModified,
+                      confidence: next.metadata.confidence,
+                    }
+                  : null,
+              },
+            });
+          }
+        }
       },
       undo: () => {
         set((state) => ({
@@ -623,6 +695,16 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
             return item;
           }),
         }));
+        const projectId = get().currentProjectId;
+        const activePlanId = get().activePlanId;
+        if (projectId && (measurement.planId || activePlanId)) {
+          const body = measurementCreateBodyFromStore(
+            itemId,
+            activePlanId ?? '',
+            measurement
+          );
+          if (body) syncQueue.enqueue({ kind: 'measurement.create', projectId, body });
+        }
       },
       undo: () => {
         set((state) => ({
@@ -637,6 +719,14 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
             return item;
           }),
         }));
+        const projectId = get().currentProjectId;
+        if (projectId) {
+          syncQueue.enqueue({
+            kind: 'measurement.delete',
+            projectId,
+            clientUuid: measurement.id,
+          });
+        }
       },
       description: 'Add measurement',
     });
@@ -646,7 +736,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     const state = get();
     const item = state.takeoffItems.find((i) => i.id === itemId);
     if (!item) return;
-    
+
     const measurement = item.measurements.find((m) => m.id === measurementId);
     if (!measurement) return;
 
@@ -664,6 +754,14 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
             return item;
           }),
         }));
+        const projectId = get().currentProjectId;
+        if (projectId) {
+          syncQueue.enqueue({
+            kind: 'measurement.delete',
+            projectId,
+            clientUuid: measurementId,
+          });
+        }
       },
       undo: () => {
         set((state) => ({
@@ -678,24 +776,48 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
             return item;
           }),
         }));
+        const projectId = get().currentProjectId;
+        const activePlanId = get().activePlanId;
+        if (projectId) {
+          const body = measurementCreateBodyFromStore(
+            itemId,
+            activePlanId ?? '',
+            measurement
+          );
+          if (body) syncQueue.enqueue({ kind: 'measurement.create', projectId, body });
+        }
       },
       description: 'Remove measurement',
     });
   },
 
   toggleMeasurementHidden: (itemId, measurementId) => {
+    let nextHidden = false;
     set((state) => ({
       takeoffItems: state.takeoffItems.map((item) => {
         if (item.id !== itemId) return item;
         return {
           ...item,
-          measurements: item.measurements.map((m) =>
-            m.id === measurementId ? { ...m, hidden: !m.hidden } : m
-          ),
+          measurements: item.measurements.map((m) => {
+            if (m.id === measurementId) {
+              nextHidden = !m.hidden;
+              return { ...m, hidden: nextHidden };
+            }
+            return m;
+          }),
         };
       }),
     }));
     get().triggerAutoSave();
+    const projectId = get().currentProjectId;
+    if (projectId) {
+      syncQueue.enqueue({
+        kind: 'measurement.update',
+        projectId,
+        clientUuid: measurementId,
+        patch: { hidden: nextHidden },
+      });
+    }
   },
 
   setScale: (page, scale) => {
@@ -728,12 +850,26 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   setCalibrationLine: (page, line) => {
     const state = get();
     const previousLine = state.calibrationLines[page];
-    
+
     executeCommand({
       execute: () => {
         set((state) => ({
           calibrationLines: { ...state.calibrationLines, [page]: line },
         }));
+        // Sync-side: emit calibration.upsert if we know which plan this is on
+        // and a scale has been set for this page.
+        const projectId = get().currentProjectId;
+        const activePlanId = get().activePlanId;
+        const scale = get().scales[page];
+        if (projectId && activePlanId && typeof scale === 'number') {
+          syncQueue.enqueue({
+            kind: 'calibration.upsert',
+            projectId,
+            planUuid: activePlanId,
+            page,
+            body: calibrationUpsertBodyFromStore(scale, line),
+          });
+        }
       },
       undo: () => {
         if (previousLine !== undefined) {
@@ -746,6 +882,29 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
             delete newLines[page];
             return { calibrationLines: newLines };
           });
+        }
+        const projectId = get().currentProjectId;
+        const activePlanId = get().activePlanId;
+        if (projectId && activePlanId) {
+          if (previousLine !== undefined) {
+            const scale = get().scales[page];
+            if (typeof scale === 'number') {
+              syncQueue.enqueue({
+                kind: 'calibration.upsert',
+                projectId,
+                planUuid: activePlanId,
+                page,
+                body: calibrationUpsertBodyFromStore(scale, previousLine),
+              });
+            }
+          } else {
+            syncQueue.enqueue({
+              kind: 'calibration.delete',
+              projectId,
+              planUuid: activePlanId,
+              page,
+            });
+          }
         }
       },
       description: `Set calibration line for page ${page}`,

@@ -15,7 +15,7 @@ export const fetchAndMergeProjectPlans = async (projectId: string): Promise<void
     const remotePlans = apiPlans.map(mapApiPlanToClient);
 
     const store = useTakeoffStore.getState();
-    const plans = mergePlanLists(store.plans, remotePlans);
+    const plans = mergePlanLists(store.plans, remotePlans, store.deletedPlanIds);
     const currentActive =
       store.activePlanId ? plans.find((p) => p.id === store.activePlanId) : undefined;
     const activePlanId =
@@ -57,6 +57,7 @@ export const fetchAndMergeProjectPlans = async (projectId: string): Promise<void
         plans: state.plans,
         activePlanId: state.activePlanId,
         planStates: state.planStates,
+        deletedPlanIds: state.deletedPlanIds,
         boqElements: state.boqElements,
         pricing: state.pricing,
       });

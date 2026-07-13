@@ -32,7 +32,8 @@ export const mapApiPlanToClient = (api: ApiProjectPlan): ProjectPlan => {
 
 export const mergePlanLists = (
   localPlans: ProjectPlan[],
-  remotePlans: ProjectPlan[]
+  remotePlans: ProjectPlan[],
+  deletedIds: readonly string[] = []
 ): ProjectPlan[] => {
   const normalize = (value?: string): string =>
     (value ?? '')
@@ -40,14 +41,23 @@ export const mergePlanLists = (
       .toLowerCase()
       .replace(/\.[^.]+$/, '');
 
+  const deleted = new Set(deletedIds);
+  // Remote plans that were tombstoned client-side are dropped — this prevents
+  // the "just-deleted plan reappears after sync pull" bug when the server
+  // DELETE hasn't propagated yet.
+  const effectiveRemote = remotePlans.filter(
+    (plan) => plan.id && !deleted.has(plan.id)
+  );
+
   const byId = new Map<string, ProjectPlan>();
 
   for (const plan of localPlans) {
     if (!plan.id) continue;
+    if (deleted.has(plan.id)) continue;
     byId.set(plan.id, plan);
   }
 
-  for (const remote of remotePlans) {
+  for (const remote of effectiveRemote) {
     if (!remote.id) continue;
     const existing = byId.get(remote.id);
     if (existing) {
@@ -68,7 +78,7 @@ export const mergePlanLists = (
 
   // Reconcile legacy local plans whose ids differ from server client_uuid.
   // Match by filename/name to copy remote URL + mime metadata into the local-id entry.
-  for (const remote of remotePlans) {
+  for (const remote of effectiveRemote) {
     const remoteKey = normalize(remote.filename || remote.name);
     if (!remoteKey) continue;
 

@@ -4,6 +4,9 @@ import ReckonLogo from '@/assets/images/logo.svg';
 import type { PlanDiscipline, TakeoffItem, TakeoffMode, ProjectPlan } from '@/types/takeoff';
 import { getMeasurementColor, getMeasurementType } from '@/utils/takeoffMeasurement';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
+import { planService } from '@/services/plan.service';
+import { useConfirm } from '@/contexts/ConfirmProvider';
+import { decodeMojibake } from '@/utils/textEncoding';
 
 interface PlanNavigatorProps {
   projectTitle: string;
@@ -51,6 +54,49 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
   const uploadRef = useRef<HTMLInputElement>(null);
   const setPlanDiscipline = useTakeoffStore((s) => s.setPlanDiscipline);
   const toggleMeasurementHidden = useTakeoffStore((s) => s.toggleMeasurementHidden);
+  const removePlan = useTakeoffStore((s) => s.removePlan);
+  const confirm = useConfirm();
+
+  const handleDeletePlan = async (plan: ProjectPlan) => {
+    const measurementCount = takeoffItems.reduce(
+      (sum, item) =>
+        sum + item.measurements.filter((m) => m.planId === plan.id).length,
+      0
+    );
+    const ok = await confirm({
+      title: 'Delete plan?',
+      message: (
+        <>
+          <p>
+            <span className="font-medium text-gray-900">
+              {decodeMojibake(plan.name)}
+            </span>
+            {measurementCount > 0 && (
+              <>
+                {' '}and its {measurementCount} measurement
+                {measurementCount === 1 ? '' : 's'}
+              </>
+            )}{' '}
+            will be removed.
+          </p>
+          <p className="mt-1 text-xs text-gray-500">This cannot be undone.</p>
+        </>
+      ),
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return;
+
+    const projectId = useTakeoffStore.getState().currentProjectId;
+    if (projectId) {
+      try {
+        await planService.deletePlan(projectId, plan.id);
+      } catch (error) {
+        console.warn('Server delete failed; removing locally anyway:', error);
+      }
+    }
+    removePlan(plan.id);
+  };
 
   const [activeTab, setActiveTab] = useState<SidebarTab>('plan');
   const [pendingDiscipline, setPendingDiscipline] = useState<PlanDiscipline | null>(null);
@@ -237,19 +283,39 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                     {!isCollapsed && (
                       <div className="pl-5">
                         {group.plans.map((plan) => (
-                          <button
+                          <div
                             key={plan.id}
-                            type="button"
+                            role="button"
+                            tabIndex={0}
                             onClick={() => onSelectPlan(plan.id)}
-                            className={`w-full px-2 py-1 flex items-center gap-2 text-[13px] rounded transition-colors cursor-pointer ${
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                onSelectPlan(plan.id);
+                              }
+                            }}
+                            className={`group w-full px-2 py-1 flex items-center gap-2 text-[13px] rounded transition-colors cursor-pointer ${
                               activePlanId === plan.id
                                 ? 'bg-white/10 text-white'
                                 : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
                             }`}
                           >
                             <FileText className="w-3 h-3 shrink-0 opacity-60" />
-                            <span className="truncate text-left flex-1">{plan.name}</span>
-                          </button>
+                            <span className="truncate text-left flex-1">
+                              {decodeMojibake(plan.name)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleDeletePlan(plan);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-500 hover:text-red-400 cursor-pointer"
+                              title="Delete plan"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -356,7 +422,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
           ref={uploadRef}
           type="file"
           className="hidden"
-          accept="image/*,application/pdf"
+          accept="application/pdf,image/jpeg,image/png"
           onChange={handleUploadChange}
         />
         <button

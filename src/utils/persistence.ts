@@ -24,6 +24,9 @@ export interface PersistedProjectData {
   plans: ProjectPlan[];
   activePlanId: string | null;
   planStates: Record<string, PlanDocumentState>;
+  /** Ids of plans the user deleted client-side. Used to suppress
+   * server-resurrection during merges. */
+  deletedPlanIds: string[];
   boqElements: BoqElementData[];
   pricing: BoqPricing;
   lastSaved: string;
@@ -190,6 +193,11 @@ export const loadProjectFromStorage = (projectId: string): PersistedProjectData 
       plans: migrated.plans,
       activePlanId: migrated.activePlanId || null,
       planStates: migrated.planStates,
+      deletedPlanIds: Array.isArray(
+        (parsed as Partial<PersistedProjectData>).deletedPlanIds
+      )
+        ? ((parsed as Partial<PersistedProjectData>).deletedPlanIds as string[])
+        : [],
       boqElements,
       pricing,
       lastSaved: parsed.lastSaved || new Date().toISOString(),

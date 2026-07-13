@@ -20,10 +20,19 @@ export const saveProjectMeta = (serverProjectId: string, meta: ProjectMeta): voi
   localStorage.setItem(`${META_PREFIX}${serverProjectId}`, JSON.stringify(meta));
 };
 
+/**
+ * Returns the sync client_uuid for a project. Prefers the API-provided value
+ * (which is authoritative and gets cached), falls back to whatever was
+ * previously cached from an earlier API call. Returns null when neither is
+ * available — callers must no-op in that case rather than fabricating a
+ * fallback uuid. A fabricated uuid used to cause different browsers to
+ * collide on the same "legacy-{id}" and blow away each other's server state
+ * on race conditions; we no longer manufacture uuids client-side at all.
+ */
 export const ensureClientUuid = (
   serverProjectId: string,
   apiClientUuid?: string | null
-): string => {
+): string | null => {
   if (apiClientUuid) {
     const existing = getProjectMeta(serverProjectId);
     saveProjectMeta(serverProjectId, {
@@ -38,7 +47,5 @@ export const ensureClientUuid = (
     return existing.clientUuid;
   }
 
-  const clientUuid = `legacy-${serverProjectId}`;
-  saveProjectMeta(serverProjectId, { clientUuid });
-  return clientUuid;
+  return null;
 };

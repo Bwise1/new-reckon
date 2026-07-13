@@ -29,7 +29,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     : 'Unscaled';
 
   return (
-    <div className="shrink-0 px-4 py-2.5 bg-white border-b border-gray-200 flex flex-wrap items-center gap-3 z-10">
+    <div className="shrink-0 px-4 py-2.5 bg-white border-b border-gray-200 flex flex-wrap items-center justify-between gap-3 z-10">
       <div className="flex items-stretch rounded-lg overflow-hidden border border-gray-200 shadow-sm">
         <button
           type="button"

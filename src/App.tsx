@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryProvider } from './lib/react-query';
+import { ConfirmProvider } from './contexts/ConfirmProvider';
 import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
 import Dashboard from './pages/Dashboard';
@@ -31,9 +32,11 @@ function AppRoutes() {
 function App() {
   return (
     <QueryProvider>
-      <Router>
-        <AppRoutes />
-      </Router>
+      <ConfirmProvider>
+        <Router>
+          <AppRoutes />
+        </Router>
+      </ConfirmProvider>
     </QueryProvider>
   );
 }

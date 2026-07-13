@@ -127,13 +127,20 @@ export const useCanvasMedia = ({
                 return;
             }
             const sortOrder = plans.length - 1;
+            // Pick up whatever discipline was assigned when the plan was
+            // added to the store (via the sidebar picker).
+            const currentPlan = useTakeoffStore
+                .getState()
+                .plans.find((p) => p.id === planId);
+            const discipline = currentPlan?.discipline ?? null;
             try {
                 const response = await planService.uploadPlan(
                     effectiveProjectId,
                     file,
                     pageCount,
                     planId,
-                    sortOrder
+                    sortOrder,
+                    discipline
                 );
                 const uploaded = response.data?.plan;
                 if (!uploaded?.url) {
@@ -414,9 +421,16 @@ export const useCanvasMedia = ({
                 return;
             }
 
-            if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
+            const ALLOWED_TYPES = new Set([
+                "application/pdf",
+                "image/jpeg",
+                "image/png",
+            ]);
+            if (!ALLOWED_TYPES.has(file.type)) {
                 setPlanLoadStatus("error");
-                setPlanLoadError("Only PDF and image files (JPEG, PNG) are supported.");
+                setPlanLoadError(
+                    "Only PDF, JPEG, and PNG files are supported. Convert other formats before uploading."
+                );
                 return;
             }
 
