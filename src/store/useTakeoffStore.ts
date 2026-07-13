@@ -618,6 +618,22 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
               });
             }
           }
+          // Count tool: subsequent clicks extend an existing measurement
+          // rather than creating a new one, so addMeasurement's targeting
+          // path never fires. Re-stage the pending value here when the
+          // touched measurement is the one currently staged into the box.
+          const target = get().boqTargeting;
+          if (target?.pendingMeasurementId) {
+            const change = quantityChanges.find(
+              (c) => c.measurementId === target.pendingMeasurementId
+            );
+            if (change) {
+              get().setBoqTargetingPending(
+                Math.abs(change.quantity).toFixed(2),
+                target.pendingMeasurementId
+              );
+            }
+          }
           // If any bound measurement's quantity changed, reflect it in the
           // linked BOQ history entry so mobile (which can't see the plan)
           // sees an accurate number.
