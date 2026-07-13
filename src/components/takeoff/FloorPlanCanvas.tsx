@@ -24,8 +24,6 @@ import CanvasToolbar from "@/components/takeoff/CanvasToolbar";
 import CalibrationDialog from "@/components/takeoff/CalibrationDialog";
 import CanvasOverlays from "@/components/takeoff/CanvasOverlays";
 import CanvasViewport from "@/components/takeoff/CanvasViewport";
-import MeasurementsLayer from "@/components/takeoff/layers/MeasurementsLayer";
-import DraftLayer from "@/components/takeoff/layers/DraftLayer";
 import { generateClientId } from "@/utils/id";
 import {
   getMeasurementColor,
