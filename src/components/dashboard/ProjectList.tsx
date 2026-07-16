@@ -89,105 +89,60 @@ const ProjectList = () => {
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-      <div className="p-6 border-b border-gray-200">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-brandColor">Projects</h2>
-          <button
-            onClick={handleCreateProject}
-            disabled={isCreatingProject}
-            className="px-4 py-2 bg-secondary text-white rounded-lg hover:bg-opacity-90 transition-colors font-medium text-sm disabled:opacity-60"
-          >
-            + New Project
-          </button>
-        </div>
-
+    <div>
+      <div className="mb-6">
         <div className="relative">
           <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Search projects..."
+            placeholder="Search Projects"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-secondary focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-secondary focus:border-transparent bg-white"
           />
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                Project Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                Location
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                Elements
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                Created
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {filteredProjects.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                  {searchQuery ? "No projects found matching your search" : "No projects yet. Create your first project!"}
-                </td>
-              </tr>
-            ) : (
-              filteredProjects.map((project) => (
-                <tr
-                  key={project.id}
-                  className="hover:bg-gray-50 transition-colors"
-                >
-                  <td className="px-6 py-4">
-                    <p className="text-sm font-medium text-brandColor">{project.title}</p>
-                  </td>
-                  <td className="px-6 py-4">
-                    <p className="text-sm text-gray-600">{project.location}</p>
-                  </td>
-                  <td className="px-6 py-4">
-                    <p className="text-sm text-gray-600">{project.elements || 0}</p>
-                  </td>
-                  <td className="px-6 py-4">
-                    <p className="text-sm text-gray-600">
-                      {formatProjectCreatedAt(project.createdAt)}
-                    </p>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="relative inline-block">
-                      <button
-                        onClick={(e) => {
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setMenuPosition({
-                            top: rect.bottom + 4,
-                            right: window.innerWidth - rect.right
-                          });
-                          setOpenMenuId(openMenuId === project.id ? null : project.id);
-                        }}
-                        className="p-2 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-200"
-                        title="Actions"
-                      >
-                        <FiMoreVertical className="text-gray-600 w-5 h-5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+
+      <div className="space-y-3 p-6">
+        {filteredProjects.length === 0 ? (
+          <div className="text-center text-gray-500 py-12">
+            <p>{searchQuery ? "No projects found matching your search" : "No projects yet. Create your first project!"}</p>
+          </div>
+        ) : (
+          filteredProjects.map((project) => (
+            <div
+              key={project.id}
+              className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer group"
+              onClick={() => navigate(`/project/${project.id}`)}
+            >
+              <div className="flex-1">
+                <p className="font-medium text-gray-900">{project.title}</p>
+                <p className="text-sm text-gray-500">Created by {project.location || "Unknown"}</p>
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setMenuPosition({
+                    top: rect.bottom + 4,
+                    right: window.innerWidth - rect.right
+                  });
+                  setOpenMenuId(openMenuId === project.id ? null : project.id);
+                }}
+                className="p-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Actions"
+              >
+                <FiMoreVertical className="text-gray-600 w-5 h-5" />
+              </button>
+            </div>
+          ))
+        )}
       </div>
 
-      {/* Fixed position dropdown menu */}
+      </div>
+
       {openMenuId && (
         <>
           <div
