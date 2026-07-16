@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -6,54 +7,12 @@
   --color-brandColor: #11253E;
   --color-brandGold: #E9C268;
 
-  --font-family-sans: Hellix, sans-serif;
-}
-
-@font-face {
-  font-family: "Hellix";
-  src: url("./assets/fonts/Hellix-Regular.woff") format("woff");
-  font-weight: normal;
-  font-style: normal;
-}
-@font-face {
-  font-family: "Hellix";
-  src: url("./assets/fonts/Hellix-SemiBold.woff") format("woff");
-  font-weight: 600;
-  font-style: normal;
-}
-@font-face {
-  font-family: "Hellix";
-  src: url("./assets/fonts/Hellix-Bold.woff") format("woff");
-  font-weight: bold;
-  font-style: normal;
-}
-@font-face {
-  font-family: "Hellix";
-  src: url("./assets/fonts/Hellix-Light.woff") format("woff");
-  font-weight: 300;
-  font-style: normal;
-}
-@font-face {
-  font-family: "Hellix";
-  src: url("./assets/fonts/Hellix-Thin.woff") format("woff");
-  font-style: normal;
-}
-@font-face {
-  font-family: "Hellix";
-  src: url("./assets/fonts/Hellix-ExtraBoldItalic.woff") format("woff");
-  font-weight: 800;
-  font-style: normal;
-}
-@font-face {
-  font-family: "Hellix";
-  src: url("./assets/fonts/Hellix-Medium.woff") format("woff");
-  font-weight: 500;
-  font-style: normal;
+  --font-family-sans: Inter, sans-serif;
 }
 
 @layer base {
   html {
-    font-family: "Hellix", "sans-serif";
+    font-family: "Inter", "sans-serif";
   }
 
   body {
