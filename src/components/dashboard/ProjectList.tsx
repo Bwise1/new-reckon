@@ -11,8 +11,6 @@ import { useConfirm, usePrompt } from "@/contexts/ConfirmProvider";
 const ProjectList = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
   const { data: projectsData, isLoading } = useProjects();
   const { mutate: deleteProject } = useDeleteProject();
   const { mutateAsync: createProject, isPending: isCreatingProject } = useCreateProject();
@@ -105,7 +103,7 @@ const ProjectList = () => {
 
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
 
-      <div className="space-y-3 p-6">
+      <div className="space-y-3">
         {filteredProjects.length === 0 ? (
           <div className="text-center text-gray-500 py-12">
             <p>{searchQuery ? "No projects found matching your search" : "No projects yet. Create your first project!"}</p>
@@ -121,71 +119,43 @@ const ProjectList = () => {
                 <p className="font-medium text-gray-900">{project.title}</p>
                 <p className="text-sm text-gray-500">Created by {project.location || "Unknown"}</p>
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  setMenuPosition({
-                    top: rect.bottom + 4,
-                    right: window.innerWidth - rect.right
-                  });
-                  setOpenMenuId(openMenuId === project.id ? null : project.id);
-                }}
-                className="p-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                title="Actions"
-              >
-                <FiMoreVertical className="text-gray-600 w-5 h-5" />
-              </button>
+              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/project/${project.id}`);
+                  }}
+                  className="p-2 hover:bg-gray-200 rounded transition-colors"
+                  title="View"
+                >
+                  <FiEye className="text-gray-600 w-4 h-4" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                  className="p-2 hover:bg-gray-200 rounded transition-colors"
+                  title="Edit"
+                >
+                  <FiEdit2 className="text-gray-600 w-4 h-4" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(project.id.toString());
+                  }}
+                  className="p-2 hover:bg-red-100 rounded transition-colors"
+                  title="Delete"
+                >
+                  <FiTrash2 className="text-red-600 w-4 h-4" />
+                </button>
+              </div>
             </div>
           ))
         )}
       </div>
 
       </div>
-
-      {openMenuId && (
-        <>
-          <div
-            className="fixed inset-0 z-[100]"
-            onClick={() => setOpenMenuId(null)}
-          />
-          <div
-            className="fixed w-48 bg-white rounded-lg shadow-2xl border border-gray-200 py-2 z-[101]"
-            style={{
-              top: `${menuPosition.top}px`,
-              right: `${menuPosition.right}px`
-            }}
-          >
-            <button
-              onClick={() => {
-                navigate(`/project/${openMenuId}`);
-                setOpenMenuId(null);
-              }}
-              className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-3 transition-colors"
-            >
-              <FiEye className="text-blue-600" />
-              <span className="font-medium">View Project</span>
-            </button>
-            <button
-              onClick={() => setOpenMenuId(null)}
-              className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
-            >
-              <FiEdit2 className="text-gray-500" />
-              <span>Edit</span>
-            </button>
-            <div className="border-t border-gray-100 my-1"></div>
-            <button
-              onClick={() => {
-                handleDelete(openMenuId);
-              }}
-              className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
-            >
-              <FiTrash2 />
-              <span>Delete</span>
-            </button>
-          </div>
-        </>
-      )}
     </div>
   );
 };
