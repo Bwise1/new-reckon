@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useProjects, useDeleteProject, useCreateProject } from "@/hooks/useProjects";
-import { FiSearch, FiMoreVertical, FiEdit2, FiTrash2, FiEye } from "react-icons/fi";
+import { FiSearch, FiCopy, FiEdit2, FiTrash2 } from "react-icons/fi";
 import type { Project } from "@/types/project";
-import { formatProjectCreatedAt } from "@/utils/projectMapper";
 import { generateClientId } from "@/utils/id";
 import { saveProjectMeta } from "@/utils/projectMeta";
 import { useConfirm, usePrompt } from "@/contexts/ConfirmProvider";
@@ -52,7 +51,6 @@ const ProjectList = () => {
 
   const handleDelete = async (id: string) => {
     const project = projects.find((p) => String(p.id) === id);
-    setOpenMenuId(null);
     const ok = await confirm({
       title: "Delete project?",
       message: (
@@ -88,73 +86,70 @@ const ProjectList = () => {
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-4">
         <div className="relative">
-          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
             type="text"
             placeholder="Search Projects"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-secondary focus:border-transparent bg-white"
+            className="w-full pl-10 pr-4 py-2 text-sm border-0 focus:outline-none bg-transparent"
           />
         </div>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-
-      <div className="space-y-3">
+      <div className="space-y-2">
         {filteredProjects.length === 0 ? (
           <div className="text-center text-gray-500 py-12">
-            <p>{searchQuery ? "No projects found matching your search" : "No projects yet. Create your first project!"}</p>
+            <p className="text-sm">{searchQuery ? "No projects found matching your search" : "No projects yet. Create your first project!"}</p>
           </div>
         ) : (
           filteredProjects.map((project) => (
             <div
               key={project.id}
-              className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer group"
+              className="flex items-center justify-between px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer group"
               onClick={() => navigate(`/project/${project.id}`)}
             >
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">{project.title}</p>
-                <p className="text-sm text-gray-500">Created by {project.location || "Unknown"}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-900 truncate">{project.title}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  <span className="font-semibold">Location:</span> {project.location || "Unknown"}
+                </p>
               </div>
-              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    navigate(`/project/${project.id}`);
                   }}
-                  className="p-2 hover:bg-gray-200 rounded transition-colors"
-                  title="View"
+                  className="p-1.5 hover:bg-gray-200 rounded transition-colors"
+                  title="Duplicate"
                 >
-                  <FiEye className="text-gray-600 w-4 h-4" />
+                  <FiCopy className="text-gray-500 w-4 h-4" />
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                   }}
-                  className="p-2 hover:bg-gray-200 rounded transition-colors"
+                  className="p-1.5 hover:bg-gray-200 rounded transition-colors"
                   title="Edit"
                 >
-                  <FiEdit2 className="text-gray-600 w-4 h-4" />
+                  <FiEdit2 className="text-gray-500 w-4 h-4" />
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleDelete(project.id.toString());
                   }}
-                  className="p-2 hover:bg-red-100 rounded transition-colors"
+                  className="p-1.5 hover:bg-red-100 rounded transition-colors"
                   title="Delete"
                 >
-                  <FiTrash2 className="text-red-600 w-4 h-4" />
+                  <FiTrash2 className="text-red-500 w-4 h-4" />
                 </button>
               </div>
             </div>
           ))
         )}
-      </div>
-
       </div>
     </div>
   );
