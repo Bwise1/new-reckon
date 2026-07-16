@@ -8,47 +8,47 @@ const Dashboard = () => {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col items-center w-full">
-        <div className="mb-12">
+      <div className="flex flex-col" style={{ paddingLeft: "calc(50% - 185px)" }}>
+        <div className="mb-10">
           <StatsCards />
         </div>
 
-        <div className="w-full" style={{ maxWidth: "470px" }}>
-          <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-gray-900">Welcome Emmanuel</h2>
-            <button className="px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded hover:bg-gray-800 transition-colors">
+        <div style={{ width: "370px" }}>
+          <div className="mb-5 flex items-center justify-between">
+            <h2 className="text-xl font-bold text-gray-900">Welcome Emmanuel</h2>
+            <button className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-gray-800 transition-colors">
               New Project
             </button>
           </div>
 
-          <div className="mb-6 grid grid-cols-2 border-b border-gray-200">
+          <div className="flex border-b border-gray-200 mb-4">
             <button
               onClick={() => setActiveTab("files")}
-              className={`pb-3 font-medium text-sm text-center transition-colors ${
+              className={`flex-1 pb-3 text-sm text-center transition-colors ${
                 activeTab === "files"
-                  ? "text-gray-900 border-b-2 border-gray-900 -mb-px"
-                  : "text-gray-400 hover:text-gray-700"
+                  ? "text-gray-900 font-medium border-b-2 border-gray-900 -mb-px"
+                  : "text-gray-400"
               }`}
             >
               My Files
             </button>
             <button
               onClick={() => setActiveTab("community")}
-              className={`pb-3 font-medium text-sm text-center transition-colors ${
+              className={`flex-1 pb-3 text-sm text-center transition-colors ${
                 activeTab === "community"
-                  ? "text-gray-900 border-b-2 border-gray-900 -mb-px"
-                  : "text-gray-400 hover:text-gray-700"
+                  ? "text-gray-900 font-medium border-b-2 border-gray-900 -mb-px"
+                  : "text-gray-400"
               }`}
             >
               Community
             </button>
           </div>
 
-          <div className="pb-64 min-h-screen">
+          <div className="pb-16 min-h-screen">
             {activeTab === "files" && <ProjectList />}
             {activeTab === "community" && (
-              <div className="text-center text-gray-500 py-12">
-                <p>Community projects coming soon</p>
+              <div className="text-center text-gray-400 py-12 text-sm">
+                Community projects coming soon
               </div>
             )}
           </div>

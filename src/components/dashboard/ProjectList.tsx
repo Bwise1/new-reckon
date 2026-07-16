@@ -86,65 +86,59 @@ const ProjectList = () => {
 
   return (
     <div>
-      <div className="mb-4">
-        <div className="relative">
-          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <input
-            type="text"
-            placeholder="Search Projects"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-sm border-0 focus:outline-none bg-transparent"
-          />
-        </div>
+      <div className="flex items-center gap-2 border-b border-gray-200 pb-2 mb-3">
+        <FiSearch className="text-gray-400 w-4 h-4 flex-shrink-0" />
+        <input
+          type="text"
+          placeholder="Search Projects"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="flex-1 text-sm text-gray-600 placeholder-gray-400 focus:outline-none bg-transparent"
+        />
       </div>
 
       <div className="space-y-2">
         {filteredProjects.length === 0 ? (
-          <div className="text-center text-gray-500 py-12">
+          <div className="text-center text-gray-400 py-12">
             <p className="text-sm">{searchQuery ? "No projects found matching your search" : "No projects yet. Create your first project!"}</p>
           </div>
         ) : (
           filteredProjects.map((project) => (
             <div
               key={project.id}
-              className="flex items-center justify-between px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer group"
+              className="flex items-center justify-between px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
               onClick={() => navigate(`/project/${project.id}`)}
             >
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-900 truncate">{project.title}</p>
+                <p className="text-sm font-medium text-gray-900 truncate">{project.title}</p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  <span className="font-semibold">Location:</span> {project.location || "Unknown"}
+                  <span className="font-semibold text-gray-700">Location:</span> {project.location || "Unknown"}
                 </p>
               </div>
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+              <div className="flex items-center gap-2 ml-3">
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
-                  className="p-1.5 hover:bg-gray-200 rounded transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
                   title="Duplicate"
                 >
-                  <FiCopy className="text-gray-500 w-4 h-4" />
+                  <FiCopy className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
-                  className="p-1.5 hover:bg-gray-200 rounded transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
                   title="Edit"
                 >
-                  <FiEdit2 className="text-gray-500 w-4 h-4" />
+                  <FiEdit2 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleDelete(project.id.toString());
                   }}
-                  className="p-1.5 hover:bg-red-100 rounded transition-colors"
+                  className="text-red-400 hover:text-red-600 transition-colors"
                   title="Delete"
                 >
-                  <FiTrash2 className="text-red-500 w-4 h-4" />
+                  <FiTrash2 className="w-4 h-4" />
                 </button>
               </div>
             </div>
