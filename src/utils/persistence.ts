@@ -29,6 +29,7 @@ export interface PersistedProjectData {
   deletedPlanIds: string[];
   boqElements: BoqElementData[];
   pricing: BoqPricing;
+  rotations: Record<number, number>;
   lastSaved: string;
 }
 
@@ -200,6 +201,7 @@ export const loadProjectFromStorage = (projectId: string): PersistedProjectData 
         : [],
       boqElements,
       pricing,
+      rotations: (parsed as Partial<PersistedProjectData>).rotations ?? {},
       lastSaved: parsed.lastSaved || new Date().toISOString(),
     };
   } catch (error) {

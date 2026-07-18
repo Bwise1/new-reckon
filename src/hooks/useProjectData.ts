@@ -162,7 +162,7 @@ export const useProjectData = (
             calibrationLines:
               activePlanState?.calibrationLines ?? state.calibrationLines,
             boqElements: nextBoqElements,
-          };
+          } as Partial<typeof state>;
         });
 
         console.log(`[project-data] hydrated project=${projectId}`);

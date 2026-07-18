@@ -628,7 +628,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
             planId: activePlanId,
             page: currentPage,
             color: activeColor,
-          strokeWidth: activeStrokeWidth,
           };
         } else {
           console.warn("Invalid measurement:", validation.error);

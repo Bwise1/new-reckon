@@ -221,6 +221,7 @@ export const migrateToPlanDocuments = (data: {
       currentPage: data.currentPage || 1,
       scales: legacyScales,
       calibrationLines: legacyCalibration,
+      rotations: {},
     },
   };
 

@@ -19,11 +19,6 @@ const DRAW_CURVETO       = 2;  // bezierCurveTo: 6 coords
 const DRAW_QUAD_CURVETO  = 3;  // quadraticCurveTo: 4 coords
 const DRAW_CLOSE         = 4;
 
-// Apply a 6-element CTM [a,b,c,d,e,f] to point (x,y)
-function applyMatrix(m: number[], x: number, y: number): [number, number] {
-  return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
-}
-
 function multiplyMatrix(a: number[], b: number[]): number[] {
   return [
     a[0] * b[0] + a[2] * b[1],

@@ -60,6 +60,7 @@ export const fetchAndMergeProjectPlans = async (projectId: string): Promise<void
         deletedPlanIds: state.deletedPlanIds,
         boqElements: state.boqElements,
         pricing: state.pricing,
+        rotations: state.rotations,
       });
     }
   } catch (error) {

@@ -562,6 +562,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         deletedPlanIds: latest.deletedPlanIds,
         boqElements: latest.boqElements,
         pricing: latest.pricing,
+        rotations: latest.rotations,
       });
     }
   },
