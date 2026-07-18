@@ -200,7 +200,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
       case 'linear':
       case 'polyline':
       default:
-        return { base: 'm', sup: '1' };
+        return { base: 'm', sup: '' };
     }
   };
 

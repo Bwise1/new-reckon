@@ -41,12 +41,14 @@ export const hydrateActivePlanView = (state: {
   currentPage?: number;
   scales?: Record<number, number>;
   calibrationLines?: Record<number, CalibrationLine>;
+  rotations?: Record<number, number>;
 }): {
   backgroundImage: string | null;
   numPages: number;
   currentPage: number;
   scales: Record<number, number>;
   calibrationLines: Record<number, CalibrationLine>;
+  rotations: Record<number, number>;
 } => {
   if (!state.activePlanId) {
     return {
@@ -55,6 +57,7 @@ export const hydrateActivePlanView = (state: {
       currentPage: state.currentPage ?? 1,
       scales: state.scales ?? {},
       calibrationLines: state.calibrationLines ?? {},
+      rotations: state.rotations ?? {},
     };
   }
 
@@ -67,6 +70,7 @@ export const hydrateActivePlanView = (state: {
     currentPage: doc.currentPage || state.currentPage || 1,
     scales: doc.scales,
     calibrationLines: doc.calibrationLines,
+    rotations: doc.rotations ?? {},
   };
 };
 
@@ -76,6 +80,8 @@ export interface PlanDocumentState {
   currentPage: number;
   scales: Record<number, number>;
   calibrationLines: Record<number, CalibrationLine>;
+  /** Per-page rotation in degrees (0, 90, 180, 270). Missing key = 0. */
+  rotations: Record<number, number>;
 }
 
 export const emptyPlanDocumentState = (): PlanDocumentState => ({
@@ -84,6 +90,7 @@ export const emptyPlanDocumentState = (): PlanDocumentState => ({
   currentPage: 1,
   scales: {},
   calibrationLines: {},
+  rotations: {},
 });
 
 export const measurementBelongsToPlan = (

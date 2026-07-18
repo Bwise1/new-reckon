@@ -64,6 +64,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     activeItemId,
     activeTool,
     activeColor,
+    activeStrokeWidth,
     setActiveTool,
     scales,
     calibrationMode,
@@ -142,6 +143,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     currentPage,
   });
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [isPdfSnap, setIsPdfSnap] = useState(false);
   const confirm = useConfirm();
   const snapSettings = useMemo(
     () => ({
@@ -154,19 +156,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   const [pendingCalibration, setPendingCalibration] = useState<
     { p1: Point; p2: Point } | null
   >(null);
-  const [hintVisible, setHintVisible] = useState(false);
-
-  // Fade the draw-hint in ~500ms after a tool activates so it doesn't flash
-  // on quick draws.
-  useEffect(() => {
-    if (!activeTool && !calibrationMode) {
-      setHintVisible(false);
-      return;
-    }
-    setHintVisible(false);
-    const timer = window.setTimeout(() => setHintVisible(true), 500);
-    return () => window.clearTimeout(timer);
-  }, [activeTool, calibrationMode]);
 
   // Rebuild spatial index when measurements change
   useEffect(() => {
@@ -212,7 +201,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     return () => window.removeEventListener("resize", updateSize);
   }, []);
 
-  const { handleFileUpload, changePage, hasLoadedPlan, planLoadStatus, planLoadError } =
+  const rotatePage = useTakeoffStore((s) => s.rotatePage);
+  const rotateAllPages = useTakeoffStore((s) => s.rotateAllPages);
+  const activeStrokeWidthLive = useTakeoffStore((s) => s.activeStrokeWidth);
+
+  const { handleFileUpload, changePage, rerenderCurrentPage, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfSegmentIndexRef } =
     useCanvasMedia({
     containerRef,
     backgroundImage,
@@ -234,9 +227,114 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     projectId: currentProjectId ?? undefined,
   });
 
+  // Returns a point transformer for a 90° rotation of an image W×H.
+  // Points are in image-pixel space; rotation pivots around the image centre.
+  const makePointTransformer = useCallback(
+    (delta: number, imgW: number, imgH: number) => {
+      // Normalise delta to 90 / 180 / 270
+      const norm = ((delta % 360) + 360) % 360;
+      return (p: { x: number; y: number }) => {
+        if (norm === 90)  return { x: imgH - p.y, y: p.x };
+        if (norm === 180) return { x: imgW - p.x, y: imgH - p.y };
+        if (norm === 270) return { x: p.y, y: imgW - p.x };
+        return p;
+      };
+    },
+    []
+  );
+
+  const hasMeasurementsOnPage = useCallback(
+    (page: number) =>
+      takeoffItems.some((item) =>
+        item.measurements.some(
+          (m) => (m.planId ?? activePlanId) === activePlanId && m.page === page
+        )
+      ),
+    [takeoffItems, activePlanId]
+  );
+
+  const hasMeasurementsOnAnyPage = useCallback(
+    () =>
+      takeoffItems.some((item) =>
+        item.measurements.some((m) => (m.planId ?? activePlanId) === activePlanId)
+      ),
+    [takeoffItems, activePlanId]
+  );
+
+  const handleRotatePage = useCallback(
+    async (delta: number) => {
+      const hasMarkups = hasMeasurementsOnPage(currentPage);
+      if (hasMarkups) {
+        const ok = await confirm({
+          title: "Rotate page with drawings?",
+          message: (
+            <p className="text-sm text-gray-600">
+              This page has measurements drawn on it. They will be rotated to match
+              the new orientation. This cannot be undone.
+            </p>
+          ),
+          confirmLabel: "Rotate & move drawings",
+          variant: "danger",
+        });
+        if (!ok) return;
+      }
+      // Use natural PDF dimensions so the rotation math is in the same coordinate
+      // space as stored points (pdfNaturalWidth-based, not render-quality-based).
+      const dims = pdfNaturalSize ?? (image ? { width: image.width, height: image.height } : null);
+      const transformer = dims
+        ? makePointTransformer(delta, dims.width, dims.height)
+        : undefined;
+      rotatePage(currentPage, delta, transformer);
+    },
+    [confirm, currentPage, hasMeasurementsOnPage, image, pdfNaturalSize, makePointTransformer, rotatePage]
+  );
+
+  const handleRotateAllPages = useCallback(
+    async (delta: number) => {
+      const hasMarkups = hasMeasurementsOnAnyPage();
+      if (hasMarkups) {
+        const ok = await confirm({
+          title: "Rotate all pages with drawings?",
+          message: (
+            <p className="text-sm text-gray-600">
+              Some pages have measurements drawn on them. All drawings will be
+              rotated to match the new orientation. This cannot be undone.
+            </p>
+          ),
+          confirmLabel: "Rotate all & move drawings",
+          variant: "danger",
+        });
+        if (!ok) return;
+      }
+      // For batch rotation we need the image dimensions per page.
+      // We only have the current page's image loaded; for other pages we pass
+      // no transformer (they'll rotate correctly on next load since pdfjs
+      // re-renders them rotated, and they have no loaded measurements in memory
+      // that need transforming — the store transform handles the point coords).
+      const dims = pdfNaturalSize ?? (image ? { width: image.width, height: image.height } : null);
+      if (dims) {
+        const transformsByPage: Record<number, (p: { x: number; y: number }) => { x: number; y: number }> = {};
+        for (let p = 1; p <= numPages; p++) {
+          // All pages share natural PDF dimensions for typical construction sets.
+          // For mixed-orientation PDFs this is best-effort on non-current pages.
+          transformsByPage[p] = makePointTransformer(delta, dims.width, dims.height);
+        }
+        rotateAllPages(delta, transformsByPage);
+      } else {
+        rotateAllPages(delta);
+      }
+    },
+    [confirm, hasMeasurementsOnAnyPage, image, pdfNaturalSize, makePointTransformer, numPages, rotateAllPages]
+  );
+
   useEffect(() => {
     registerUploadHandler(handleFileUpload);
   }, [registerUploadHandler, handleFileUpload]);
+
+  // Rerender current page whenever its rotation changes
+  useEffect(() => {
+    if (hasLoadedPlan) rerenderCurrentPage();
+  }, [currentRotation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const {
     getSnappedPoint,
@@ -255,6 +353,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     stageScale,
     imageScale,
     spatialIndexRef,
+    pdfSegmentIndexRef,
     snapSettings,
   });
 
@@ -430,7 +529,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       isShiftPressed && (activeTool === 'linear' || activeTool === 'area' || calibrationMode);
     if (!isDrawingWithShift) {
       const snapped = getSnappedPoint(point);
-      if (snapped) point = snapped;
+      if (snapped) point = snapped.point;
     }
 
     if (calibrationMode) {
@@ -481,6 +580,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           points: nextPoints,
           quantity: nextPoints.length,
           color: activeColor,
+          strokeWidth: activeStrokeWidth,
           metadata: {
             createdAt: existingMeasurement.metadata?.createdAt ?? now,
             lastModified: now,
@@ -512,6 +612,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           page: currentPage,
           type: activeTool,
           color: activeColor,
+          strokeWidth: activeStrokeWidth,
           metadata: {
             createdAt: now,
             lastModified: now,
@@ -527,6 +628,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
             planId: activePlanId,
             page: currentPage,
             color: activeColor,
+          strokeWidth: activeStrokeWidth,
           };
         } else {
           console.warn("Invalid measurement:", validation.error);
@@ -557,6 +659,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           page: currentPage,
           type: "linear",
           color: activeColor,
+          strokeWidth: activeStrokeWidth,
           metadata: {
             createdAt: now,
             lastModified: now,
@@ -602,6 +705,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           page: currentPage,
           type: activeTool,
           color: activeColor,
+          strokeWidth: activeStrokeWidth,
           metadata: {
             createdAt: now,
             lastModified: now,
@@ -631,6 +735,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       activePlanId,
       activeTool,
       activeColor,
+      activeStrokeWidth,
       setActiveTool,
       ensureCanvasItemId,
       currentPoints,
@@ -723,7 +828,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
 
           // Update snapped point
           const snapped = getSnappedPoint(point);
-          setSnappedPoint(snapped);
+          setSnappedPoint(snapped?.point ?? null);
+          setIsPdfSnap(snapped?.isPdfSnap ?? false);
         } catch (error) {
           console.error("Error in handleMouseMove:", error);
         }
@@ -785,6 +891,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     activePlanId,
     activeTool,
     activeColor,
+    activeStrokeWidth,
     ensureCanvasItemId,
     currentPoints,
     calculateAreaFromPoints,
@@ -1324,7 +1431,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
 
       const newScale =
         e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
-    const clampedScale = Math.max(0.05, Math.min(20, newScale));
+    const clampedScale = Math.max(0.2, Math.min(20, newScale));
 
     // Zoom to cursor position
     const mousePointTo = {
@@ -1351,7 +1458,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     let cursor = "default";
     if (isPanningMode) cursor = "move";
     else if (isSelectMode) cursor = "pointer";
-    else if (calibrationMode || activeTool) cursor = "none";
+    else if (calibrationMode || activeTool) cursor = "crosshair";
 
     container.style.cursor = cursor;
   }, [isPanningMode, isSelectMode, calibrationMode, activeTool, stageRef]);
@@ -1394,9 +1501,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         currentScale={currentScale}
         activeTool={activeToolProp ?? activeTool}
         activeColor={activeColorProp ?? activeColor}
+        activeStrokeWidth={activeStrokeWidthLive}
         onSelectTool={onSelectTool}
         onFinishTool={onFinishTool}
         onColorChange={onColorChange}
+        onStrokeWidthChange={(w) => useTakeoffStore.setState({ activeStrokeWidth: w })}
         onToggleCalibration={() => {
           const newMode = !calibrationMode;
           setCalibrationMode(newMode);
@@ -1409,6 +1518,10 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
             setCurrentPoints([]);
           }
         }}
+        onRotateCW={() => handleRotatePage(90)}
+        onRotateCCW={() => handleRotatePage(-90)}
+        onRotateAllCW={() => handleRotateAllPages(90)}
+        onRotateAllCCW={() => handleRotateAllPages(-90)}
       />
 
       <CanvasViewport
@@ -1444,6 +1557,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                 .map((m) => {
                   const mType = getMeasurementType(m, item);
                   const mColor = getMeasurementColor(m, item);
+                  const mStroke = m.strokeWidth ?? 2;
                   if (mType === "linear" && m.points.length === 2) {
                     let displayPoints = m.points;
                     const dragging = activeDragPoint;
@@ -1547,7 +1661,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           <Line
                             points={[p1.x, p1.y, p2.x, p2.y]}
                             stroke={mColor}
-                            strokeWidth={7 * strokeScale}
+                            strokeWidth={mStroke * 3.5 * strokeScale}
                             opacity={0.22}
                             listening={false}
                           />
@@ -1568,13 +1682,13 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                             <Line
                               points={[p1.x, p1.y, gapStart.x, gapStart.y]}
                               stroke={mColor}
-                              strokeWidth={(isSelected || isHovered ? 3 : 2) * strokeScale}
+                              strokeWidth={(isSelected || isHovered ? mStroke * 1.5 : mStroke) * strokeScale}
                               opacity={isHovered ? 0.7 : 1}
                             />
                             <Line
                               points={[gapEnd.x, gapEnd.y, p2.x, p2.y]}
                               stroke={mColor}
-                              strokeWidth={(isSelected || isHovered ? 3 : 2) * strokeScale}
+                              strokeWidth={(isSelected || isHovered ? mStroke * 1.5 : mStroke) * strokeScale}
                               opacity={isHovered ? 0.7 : 1}
                             />
                           </>
@@ -1582,7 +1696,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           <Line
                             points={[p1.x, p1.y, p2.x, p2.y]}
                             stroke={mColor}
-                            strokeWidth={(isSelected || isHovered ? 3 : 2) * strokeScale}
+                            strokeWidth={(isSelected || isHovered ? mStroke * 1.5 : mStroke) * strokeScale}
                             opacity={isHovered ? 0.7 : 1}
                           />
                         )}
@@ -1598,7 +1712,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                                 p1.y - tickDY,
                               ]}
                               stroke={mColor}
-                              strokeWidth={(isSelected || isHovered ? 3.5 : 2.5) * strokeScale}
+                              strokeWidth={(isSelected || isHovered ? mStroke * 1.75 : mStroke * 1.25) * strokeScale}
                               lineCap="round"
                             />
                             <Line
@@ -1609,7 +1723,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                                 p2.y - tickDY,
                               ]}
                               stroke={mColor}
-                              strokeWidth={(isSelected || isHovered ? 3.5 : 2.5) * strokeScale}
+                              strokeWidth={(isSelected || isHovered ? mStroke * 1.75 : mStroke * 1.25) * strokeScale}
                               lineCap="round"
                             />
                           </>
@@ -1864,7 +1978,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                         <Line
                           points={displayPoints.flatMap((p) => [p.x, p.y])}
                           stroke={mColor}
-                          strokeWidth={2 * strokeScale}
+                          strokeWidth={mStroke * strokeScale}
                           lineJoin="round"
                           lineCap="round"
                         />
@@ -1981,7 +2095,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                         <Line
                           points={displayPoints.flatMap((p) => [p.x, p.y])}
                           stroke={mColor}
-                          strokeWidth={(isSelected || isHovered ? 4 : 2) * strokeScale}
+                          strokeWidth={(isSelected || isHovered ? mStroke * 2 : mStroke) * strokeScale}
                           fill={mColor + "44"}
                           opacity={isHovered ? 0.8 : 1}
                           closed
@@ -1991,7 +2105,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           <Line
                             points={displayPoints.flatMap((p) => [p.x, p.y])}
                             stroke={mColor}
-                            strokeWidth={8 * strokeScale}
+                            strokeWidth={mStroke * 4 * strokeScale}
                             opacity={0.3}
                             closed
                             listening={false}
@@ -2446,7 +2560,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                     previewPoint = getAngleSnappedPoint(mousePos, lastPoint);
                   } else {
                     const snapped = getSnappedPoint(mousePos);
-                    if (snapped) previewPoint = snapped;
+                    if (snapped) previewPoint = snapped.point;
                   }
 
                   const dx = previewPoint.x - lastPoint.x;
@@ -2537,7 +2651,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                   previewPoint = getAngleSnappedPoint(mousePos, lastPoint);
                 } else {
                   const snapped = getSnappedPoint(mousePos);
-                  if (snapped) previewPoint = snapped;
+                  if (snapped) previewPoint = snapped.point;
                 }
                 const runningPoints = [...currentPoints, previewPoint];
                 if (runningPoints.length < 3) return null;
@@ -2648,15 +2762,15 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                   x={snappedPoint.x}
                   y={snappedPoint.y}
                   radius={7 * labelScale}
-                  stroke="#FF6B00"
+                  stroke={isPdfSnap ? "#2196F3" : "#FF6B00"}
                   strokeWidth={2 * labelScale}
-                  fill="rgba(255, 107, 0, 0.12)"
+                  fill={isPdfSnap ? "rgba(33, 150, 243, 0.12)" : "rgba(255, 107, 0, 0.12)"}
                 />
                 <Circle
                   x={snappedPoint.x}
                   y={snappedPoint.y}
                   radius={2 * labelScale}
-                  fill="#FF6B00"
+                  fill={isPdfSnap ? "#2196F3" : "#FF6B00"}
                 />
               </>
             )}
@@ -2680,8 +2794,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
               } else {
                 const p = getSnappedPoint(mousePos);
                 if (p) {
-                  cx = p.x;
-                  cy = p.y;
+                  cx = p.point.x;
+                  cy = p.point.y;
                 }
               }
               const arm = 8 * labelScale;
@@ -2748,31 +2862,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         );
       })()}
 
-      {hintVisible && mousePos && activeTool && !isPanningMode && (() => {
-        let text: string | null = null;
-        if (activeTool === 'linear') {
-          text = currentPoints.length === 0
-            ? 'Click start point'
-            : 'Click end point';
-        } else if (activeTool === 'area') {
-          if (currentPoints.length === 0) text = 'Click to start';
-          else if (currentPoints.length < 3) text = 'Click to add point';
-          else text = 'Click first point or Enter to close';
-        } else if (activeTool === 'count') {
-          text = 'Click to place a count marker';
-        }
-        if (!text) return null;
-        const left = mousePos.x * stageScale + stagePos.x + 14;
-        const top = mousePos.y * stageScale + stagePos.y + 14;
-        return (
-          <div
-            className="pointer-events-none absolute z-10 rounded-full bg-black/80 px-2.5 py-1 text-[11px] font-medium text-white shadow"
-            style={{ left, top }}
-          >
-            {text}
-          </div>
-        );
-      })()}
 
       {activePlanId && !hasLoadedPlan && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gray-200/80 z-5">

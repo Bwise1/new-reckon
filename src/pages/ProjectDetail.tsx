@@ -35,6 +35,9 @@ const ProjectDetail = () => {
     setActiveColor,
     selectPlan,
     removeMeasurement,
+    focusedBoqCard,
+    boqTargeting,
+    startBoqTargeting,
   } = useTakeoffStore();
 
   // Note: we intentionally do NOT reset() on unmount. Under React StrictMode the mount/
@@ -44,9 +47,17 @@ const ProjectDetail = () => {
 
   const handleSelectTool = useCallback(
     (type: TakeoffMode) => {
-      setActiveTool(activeTool === type ? null : type);
+      if (activeTool === type) {
+        setActiveTool(null);
+        return;
+      }
+      setActiveTool(type);
+      // Auto-target the focused BOQ card if no targeting is active yet
+      if (focusedBoqCard && !boqTargeting) {
+        startBoqTargeting(focusedBoqCard.elementId, focusedBoqCard.itemId, focusedBoqCard.unit);
+      }
     },
-    [activeTool, setActiveTool]
+    [activeTool, setActiveTool, focusedBoqCard, boqTargeting, startBoqTargeting]
   );
 
   const handleFinishTool = useCallback(() => {

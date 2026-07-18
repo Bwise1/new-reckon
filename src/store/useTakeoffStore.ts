@@ -51,6 +51,7 @@ interface TakeoffStore {
   activeItemId: string | null;
   activeTool: TakeoffMode | null;
   activeColor: string;
+  activeStrokeWidth: number;
 
   // Calibration
   scales: Record<number, number>;
@@ -61,6 +62,8 @@ interface TakeoffStore {
   currentPage: number;
   numPages: number;
   backgroundImage: string | null;
+  /** Per-page rotation for the active plan (degrees: 0, 90, 180, 270). */
+  rotations: Record<number, number>;
   plans: ProjectPlan[];
   activePlanId: string | null;
   planStates: Record<string, PlanDocumentState>;
@@ -71,6 +74,10 @@ interface TakeoffStore {
 
   boqElements: BoqElementData[];
   pricing: BoqPricing;
+
+  /** The BOQ card that currently has focus in the sidebar. Used to auto-start
+   * targeting when the user picks a tool without clicking the measure icon. */
+  focusedBoqCard: { elementId: string; itemId: string; unit: string } | null;
 
   /** BOQ line the user is currently measuring for. When set, new
    * measurements stage their value in `pendingValue` so the user sees
@@ -154,6 +161,8 @@ interface TakeoffStore {
   setActiveItemId: (id: string | null) => void;
   setActiveTool: (tool: TakeoffMode | null) => void;
   setActiveColor: (color: string) => void;
+  setActiveStrokeWidth: (width: number) => void;
+  setFocusedBoqCard: (card: { elementId: string; itemId: string; unit: string } | null) => void;
   ensureCanvasItemId: () => string;
 
   addMeasurement: (itemId: string, measurement: Measurement) => void;
@@ -187,6 +196,19 @@ interface TakeoffStore {
   setScale: (page: number, scale: number) => void;
   setCalibrationLine: (page: number, line: CalibrationLine) => void;
   setCalibrationMode: (mode: boolean) => void;
+  /** Rotate a page by delta degrees (90 or -90).
+   *  transformPoints: optional fn to remap existing measurement points to the new orientation. */
+  rotatePage: (
+    page: number,
+    delta: number,
+    transformPoints?: (p: { x: number; y: number }) => { x: number; y: number }
+  ) => void;
+  /** Apply the same rotation delta to all pages in the active plan.
+   *  transformPoints: optional fn keyed by page number. */
+  rotateAllPages: (
+    delta: number,
+    transformPointsByPage?: Record<number, (p: { x: number; y: number }) => { x: number; y: number }>
+  ) => void;
 
   setCurrentPage: (page: number) => void;
   setNumPages: (pages: number) => void;
@@ -224,6 +246,7 @@ const snapshotActivePlanState = (state: {
   currentPage: number;
   scales: Record<number, number>;
   calibrationLines: Record<number, CalibrationLine>;
+  rotations: Record<number, number>;
 }): Record<string, PlanDocumentState> => {
   if (!state.activePlanId) return state.planStates;
   const plan = state.plans.find((p) => p.id === state.activePlanId);
@@ -237,6 +260,7 @@ const snapshotActivePlanState = (state: {
       currentPage: state.currentPage,
       scales: state.scales,
       calibrationLines: state.calibrationLines,
+      rotations: state.rotations,
     },
   };
 };
@@ -247,17 +271,20 @@ const initialState = {
   activeItemId: null,
   activeTool: null,
   activeColor: MARKUP_COLORS[0],
+  activeStrokeWidth: 2,
   scales: {},
   calibrationLines: {},
   calibrationMode: false,
   currentPage: 1,
   numPages: 0,
   backgroundImage: null,
+  rotations: {},
   plans: [],
   activePlanId: null,
   planStates: {},
   deletedPlanIds: [],
   boqElements: [createEmptyBoqElement(0)],
+  focusedBoqCard: null,
   boqTargeting: null,
   pricing: {
     vatRate: 0,
@@ -373,6 +400,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         deletedPlanIds: state.deletedPlanIds,
         boqElements: state.boqElements,
         pricing: state.pricing,
+        rotations: state.rotations,
       });
       // Note: server sync no longer happens through the wholesale
       // scheduleProjectSyncPush path. Each mutation enqueues per-entity ops
@@ -398,6 +426,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       currentPage: next.currentPage || 1,
       scales: next.scales,
       calibrationLines: next.calibrationLines,
+      rotations: next.rotations ?? {},
     });
     get().triggerAutoSave();
   },
@@ -427,6 +456,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       currentPage: 1,
       scales: {},
       calibrationLines: {},
+      rotations: {},
     });
     get().triggerAutoSave();
     return id;
@@ -782,14 +812,11 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
 
   setActiveColor: (color) => set({ activeColor: color }),
 
-  startBoqTargeting: (elementId, itemId, unit, mode = 'add') => {
-    // Choose a matching tool by the item's unit so the user can start
-    // measuring immediately without picking a tool.
-    let tool: TakeoffMode | null = null;
-    if (unit === 'm') tool = 'linear';
-    else if (unit === 'm2' || unit === 'm3') tool = 'area';
-    else if (unit === 'nrs' || unit === 'item') tool = 'count';
+  setActiveStrokeWidth: (width) => set({ activeStrokeWidth: width }),
 
+  setFocusedBoqCard: (card) => set({ focusedBoqCard: card }),
+
+  startBoqTargeting: (elementId, itemId, unit, mode = 'add') => {
     set({
       boqTargeting: {
         elementId,
@@ -799,12 +826,11 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         pendingValue: null,
         pendingMeasurementId: null,
       },
-      ...(tool ? { activeTool: tool } : {}),
     });
   },
 
   exitBoqTargeting: () => {
-    set({ boqTargeting: null, activeTool: null });
+    set({ boqTargeting: null });
   },
 
   setBoqTargetingMode: (mode) => {
@@ -1021,14 +1047,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         // drawing continuously never loses a value.
         const target = get().boqTargeting;
         if (target) {
-          const mType = measurement.type;
-          const unit = target.unit;
-          const unitMatches =
-            (unit === 'm' && (mType === 'linear' || mType === 'polyline')) ||
-            (unit === 'm2' && mType === 'area') ||
-            (unit === 'm3' && mType === 'area') ||
-            ((unit === 'nrs' || unit === 'item') && mType === 'count');
-          if (unitMatches) {
+          {
             if (target.pendingValue && target.pendingMeasurementId) {
               get().bindMeasurementToItem(
                 target.pendingMeasurementId,
@@ -1269,6 +1288,59 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       },
       description: `Set calibration line for page ${page}`,
     });
+  },
+
+  rotatePage: (page, delta, transformPoints) => {
+    set((state) => {
+      const current = state.rotations[page] ?? 0;
+      const next = ((current + delta) % 360 + 360) % 360;
+      const newRotations = { ...state.rotations, [page]: next };
+
+      if (!transformPoints) return { rotations: newRotations };
+
+      // Remap all measurement points on this page to the rotated coordinate space
+      const activePlanId = state.activePlanId;
+      const takeoffItems = state.takeoffItems.map((item) => ({
+        ...item,
+        measurements: item.measurements.map((m) => {
+          if (m.planId !== activePlanId || m.page !== page) return m;
+          return { ...m, points: m.points.map(transformPoints) };
+        }),
+      }));
+
+      return { rotations: newRotations, takeoffItems };
+    });
+    get().triggerAutoSave();
+  },
+
+  rotateAllPages: (delta, transformPointsByPage) => {
+    const state = get();
+    const numPages = state.numPages || 1;
+    const newRotations: Record<number, number> = {};
+    for (let p = 1; p <= numPages; p++) {
+      const current = state.rotations[p] ?? 0;
+      newRotations[p] = ((current + delta) % 360 + 360) % 360;
+    }
+
+    if (!transformPointsByPage) {
+      set({ rotations: newRotations });
+      get().triggerAutoSave();
+      return;
+    }
+
+    const activePlanId = state.activePlanId;
+    const takeoffItems = state.takeoffItems.map((item) => ({
+      ...item,
+      measurements: item.measurements.map((m) => {
+        if (m.planId !== activePlanId) return m;
+        const fn = transformPointsByPage[m.page];
+        if (!fn) return m;
+        return { ...m, points: m.points.map(fn) };
+      }),
+    }));
+
+    set({ rotations: newRotations, takeoffItems });
+    get().triggerAutoSave();
   },
 
   setCalibrationMode: (mode) => set({ calibrationMode: mode }),

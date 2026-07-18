@@ -13,6 +13,7 @@ import {
   findLineIntersection,
   findPerpendicularPoint,
 } from "@/utils/spatialIndex";
+import type { SegmentIndex } from "@/utils/pdfLineExtractor";
 
 interface UseCanvasInteractionsParams {
   takeoffItems: TakeoffItem[];
@@ -24,6 +25,7 @@ interface UseCanvasInteractionsParams {
   stageScale: number;
   imageScale: number;
   spatialIndexRef: RefObject<SpatialIndex>;
+  pdfSegmentIndexRef?: RefObject<SegmentIndex | null>;
   snapSettings: {
     vertex: boolean;
     perpendicular: boolean;
@@ -47,13 +49,14 @@ export const useCanvasInteractions = ({
   stageScale,
   imageScale,
   spatialIndexRef,
+  pdfSegmentIndexRef,
   snapSettings,
 }: UseCanvasInteractionsParams) => {
   const getSnappedPoint = useCallback(
     (
       point: Point,
       exclude?: { itemId: string; measurementId: string; pointIndex: number }
-    ): Point | null => {
+    ): { point: Point; isPdfSnap: boolean } | null => {
       const index = spatialIndexRef.current;
       // Convert screen-space thresholds to image-pixel space so snap feels the
       // same on any monitor / zoom level. Stored points and the incoming `point`
@@ -65,6 +68,7 @@ export const useCanvasInteractions = ({
 
       let bestPoint: Point | null = null;
       let minDist = snapThreshold;
+      let bestIsPdf = false;
 
       // 1. Snap to vertices using spatial index
       if (snapSettings.vertex) {
@@ -72,6 +76,7 @@ export const useCanvasInteractions = ({
         if (vertexSnap && vertexSnap.distance < minDist) {
           minDist = vertexSnap.distance;
           bestPoint = vertexSnap.point;
+          bestIsPdf = false;
         }
       }
 
@@ -82,6 +87,7 @@ export const useCanvasInteractions = ({
           if (dist < minDist) {
             minDist = dist;
             bestPoint = p;
+            bestIsPdf = false;
           }
         });
       }
@@ -104,6 +110,7 @@ export const useCanvasInteractions = ({
                   if (dist < perpThreshold && dist < minDist) {
                     minDist = dist;
                     bestPoint = perpPoint;
+                    bestIsPdf = false;
                   }
                 }
               }
@@ -132,6 +139,7 @@ export const useCanvasInteractions = ({
                   if (dist < intersectThreshold && dist < minDist) {
                     minDist = dist;
                     bestPoint = intersection;
+                    bestIsPdf = false;
                   }
                 }
               }
@@ -139,10 +147,33 @@ export const useCanvasInteractions = ({
         });
       }
 
-      return bestPoint;
+      // 5. Snap to PDF vector lines — lower priority than user-drawn vertex snaps
+      // but wins over no snap.
+      // PDF segments are stored in PDF user-space (scale=1). Mouse `point` is in
+      // image-pixel space = PDF user-space × imageScale. Divide before querying,
+      // then multiply the result back to image-pixel space.
+      if (snapSettings.vertex && pdfSegmentIndexRef?.current) {
+        const safeImageScale = imageScale > 0 ? imageScale : 1;
+        const pdfThreshold = snapThreshold / safeImageScale;
+        const pdfX = point.x / safeImageScale;
+        const pdfY = point.y / safeImageScale;
+        const pdfSnap = pdfSegmentIndexRef.current.query(pdfX, pdfY, pdfThreshold);
+if (pdfSnap) {
+          const snapInImageSpace = { x: pdfSnap.x * safeImageScale, y: pdfSnap.y * safeImageScale };
+          const dist = calculateDistance(point, snapInImageSpace);
+          if (dist < minDist) {
+            minDist = dist;
+            bestPoint = snapInImageSpace;
+            bestIsPdf = true;
+          }
+        }
+      }
+
+      return bestPoint ? { point: bestPoint, isPdfSnap: bestIsPdf } : null;
     },
     [
       spatialIndexRef,
+      pdfSegmentIndexRef,
       stageScale,
       imageScale,
       currentPoints,

@@ -1,45 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useProjects, useDeleteProject, useCreateProject } from "@/hooks/useProjects";
+import { useProjects, useDeleteProject } from "@/hooks/useProjects";
 import { FiSearch, FiCopy, FiEdit2, FiTrash2 } from "react-icons/fi";
-import type { Project } from "@/types/project";
-import { generateClientId } from "@/utils/id";
-import { saveProjectMeta } from "@/utils/projectMeta";
-import { useConfirm, usePrompt } from "@/contexts/ConfirmProvider";
+import { useConfirm } from "@/contexts/ConfirmProvider";
 
 const ProjectList = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const { data: projectsData, isLoading } = useProjects();
   const { mutate: deleteProject } = useDeleteProject();
-  const { mutateAsync: createProject, isPending: isCreatingProject } = useCreateProject();
   const confirm = useConfirm();
-  const prompt = usePrompt();
-
-  const handleCreateProject = async () => {
-    const title = await prompt({
-      title: "New project",
-      label: "Project name",
-      placeholder: "e.g. 3-Bedroom Flat",
-      defaultValue: "New BOQ Project",
-      confirmLabel: "Create",
-    });
-    if (!title) return;
-
-    const clientUuid = generateClientId();
-    const created = await createProject({
-      title,
-      project_type: "bill_of_qty",
-      location: "Lagos, Nigeria",
-      client_uuid: clientUuid,
-    } as Partial<Project>);
-
-    const newProjectId = created.data?.project?.id;
-    if (newProjectId) {
-      saveProjectMeta(String(newProjectId), { clientUuid });
-      navigate(`/project/${newProjectId}`);
-    }
-  };
 
 
   const projects = projectsData?.data?.projects || [];

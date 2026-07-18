@@ -117,7 +117,7 @@ const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
         <button
           type="button"
           onClick={() => {
-            const newScale = Math.max(0.05, stageScale / 1.12);
+            const newScale = Math.max(0.2, stageScale / 1.12);
             setStageScale(newScale);
           }}
           className="p-1.5 hover:bg-gray-100 rounded-md cursor-pointer"

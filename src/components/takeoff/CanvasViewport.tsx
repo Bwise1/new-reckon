@@ -55,6 +55,7 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
         scaleY={stageScale}
         x={stagePos.x}
         y={stagePos.y}
+        pixelRatio={window.devicePixelRatio || 1}
         draggable={isPanningMode && !isDraggingObject}
         onClick={onStageClick}
         onDblClick={onStageDblClick}
@@ -96,4 +97,3 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
 };
 
 export default CanvasViewport;
-

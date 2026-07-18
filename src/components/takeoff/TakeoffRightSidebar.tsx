@@ -40,6 +40,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
     setBoqTargetingMode,
     setBoqTargetingPending,
     setMeasurementBoqBinding,
+    setFocusedBoqCard,
   } = useTakeoffStore();
 
   const [expandedElements, setExpandedElements] = React.useState<Record<string, boolean>>({});
@@ -63,6 +64,14 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
 
     if (resolvedElementId !== activeElementId) setActiveElementId(resolvedElementId);
     if (resolvedCardId !== activeCardId) setActiveCardId(resolvedCardId);
+
+    // Keep the store in sync so the canvas can auto-target on tool select
+    const card = element.items.find((i) => i.id === resolvedCardId);
+    if (resolvedCardId && card) {
+      setFocusedBoqCard({ elementId: resolvedElementId, itemId: resolvedCardId, unit: card.unit });
+    } else {
+      setFocusedBoqCard(null);
+    }
 
     setExpandedElements((prev) => {
       const next = { ...prev };
@@ -234,6 +243,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                       onFocus={() => {
                         setActiveElementId(element.id);
                         setActiveCardId(card.id);
+                        setFocusedBoqCard({ elementId: element.id, itemId: card.id, unit: card.unit });
                       }}
                       onToggleMeasure={() => {
                         setActiveElementId(element.id);

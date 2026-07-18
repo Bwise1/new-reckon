@@ -7,6 +7,7 @@ import { isProjectSyncDisabled } from "@/services/projectSync.service";
 import { useTakeoffStore } from "@/store/useTakeoffStore";
 import { getPlanPdf, setPlanPdf } from "@/utils/planPdfCache";
 import { inferPlanMediaKind, loadPlanFromRemoteUrl } from "@/utils/planMediaLoader";
+import { extractPdfSegments, SegmentIndex } from "@/utils/pdfLineExtractor";
 
 interface UseCanvasMediaParams {
     containerRef: React.RefObject<HTMLDivElement | null>;
@@ -52,6 +53,7 @@ export const useCanvasMedia = ({
     const plans = useTakeoffStore((s) => s.plans);
     const addPlanFromUpload = useTakeoffStore((s) => s.addPlanFromUpload);
     const triggerAutoSave = useTakeoffStore((s) => s.triggerAutoSave);
+    const rotations = useTakeoffStore((s) => s.rotations);
 
     const [planLoadStatus, setPlanLoadStatus] = useState<
         "idle" | "loading" | "ready" | "error"
@@ -65,17 +67,28 @@ export const useCanvasMedia = ({
 
     // Track which plan+page has already been fitted so we only reset zoom on first load
     const fittedRef = useRef<Set<string>>(new Set());
+    // Natural PDF dimensions (scale=1) for the currently displayed page — used so that
+    // imageScale is always containerWidth/pdfNaturalWidth, independent of render quality.
+    const naturalSizeRef = useRef<{ width: number; height: number } | null>(null);
+    // Spatial index of PDF vector segments for the currently displayed page.
+    // Populated after renderPdfPage; null for raster image plans.
+    const pdfSegmentIndexRef = useRef<SegmentIndex | null>(null);
 
     const fitImageToStage = useCallback(
-        (img: HTMLImageElement, fitKey?: string) => {
+        (img: HTMLImageElement, fitKey?: string, naturalSize?: { width: number; height: number }) => {
             if (!containerRef.current) return;
             const containerWidth = containerRef.current.offsetWidth;
             if (containerWidth <= 0) return;
-            const scaleFactor = containerWidth / img.width;
+            // Use PDF natural dimensions when available so that imageScale is stable
+            // regardless of the render quality scale factor. For raster images, img.width
+            // is the correct natural size already (no high-res overscaling).
+            const refWidth = naturalSize?.width ?? img.width;
+            const refHeight = naturalSize?.height ?? img.height;
+            const scaleFactor = containerWidth / refWidth;
             setImageScale(scaleFactor);
             setStageSize({
                 width: containerWidth,
-                height: img.height * scaleFactor,
+                height: refHeight * scaleFactor,
             });
             // Only reset zoom/pan on the very first time this plan+page is displayed
             if (fitKey && !fittedRef.current.has(fitKey)) {
@@ -88,27 +101,60 @@ export const useCanvasMedia = ({
     );
 
     const renderPdfPage = useCallback(
-        async (pdf: pdfjsLib.PDFDocumentProxy, pageNum: number, planId?: string) => {
+        async (pdf: pdfjsLib.PDFDocumentProxy, pageNum: number, planId?: string, rotation = 0) => {
             const page = await pdf.getPage(pageNum);
-            const viewport = page.getViewport({ scale: 2 });
+
+            // Determine how many pixels wide the container is right now so we
+            // render at exactly the right resolution — no upscaling, no downscaling.
+            const containerWidth = containerRef.current?.offsetWidth ?? 1200;
+            const dpr = window.devicePixelRatio || 1;
+
+            // Base viewport at scale=1 gives stable natural dimensions that we use for
+            // imageScale. This decouples point-coordinate space from render quality.
+            const baseViewport = page.getViewport({ scale: 1, rotation });
+            const naturalSize = { width: baseViewport.width, height: baseViewport.height };
+            naturalSizeRef.current = naturalSize;
+
+            // Scale so the page fills the container at full physical-pixel density.
+            // Cap at 4× to avoid canvas memory limits on large PDFs.
+            const scale = Math.min(4, Math.max(2, (containerWidth / baseViewport.width) * dpr));
+            const viewport = page.getViewport({ scale, rotation });
+
             const canvas = document.createElement("canvas");
-            const ctx = canvas.getContext("2d");
+            const ctx = canvas.getContext("2d", { alpha: false });
             if (!ctx) return;
 
             canvas.width = viewport.width;
             canvas.height = viewport.height;
+
+            // White background since alpha: false strips transparency
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = "high";
+
             await page.render({ canvasContext: ctx, viewport, canvas }).promise;
 
+            // Build PDF line segment index for snapping (async, non-blocking for render)
+            void extractPdfSegments(page).then((segments) => {
+                const index = new SegmentIndex(50);
+                for (const seg of segments) index.add(seg);
+                pdfSegmentIndexRef.current = index;
+
+            });
+
             const img = new window.Image();
-            img.src = canvas.toDataURL();
+            // JPEG is far faster to encode than PNG for large canvases
+            img.src = canvas.toDataURL("image/jpeg", 0.92);
             await new Promise<void>((resolve, reject) => {
                 img.onload = () => resolve();
                 img.onerror = () => reject(new Error("Failed to render PDF page to image"));
             });
             setImage(img);
-            fitImageToStage(img, planId ? `${planId}:${pageNum}` : undefined);
+            fitImageToStage(img, planId ? `${planId}:${pageNum}:${rotation}` : undefined, naturalSize);
         },
-        [fitImageToStage, setImage]
+        [containerRef, fitImageToStage, setImage]
     );
 
     const uploadPlanToCloud = useCallback(
@@ -194,11 +240,12 @@ export const useCanvasMedia = ({
                 setStoreNumPages(pages);
                 const page = Math.min(currentPage, pages) || 1;
                 setCurrentPage(page);
-                await renderPdfPage(loaded.pdf, page, planId);
+                await renderPdfPage(loaded.pdf, page, planId, rotations[page] ?? 0);
                 return;
             }
 
             if (loaded.kind === "image" && loaded.imageSrc) {
+                pdfSegmentIndexRef.current = null;
                 setPdfDoc(null);
                 setBackgroundImage(loaded.imageSrc.startsWith("blob:") ? url : loaded.imageSrc);
                 setNumPages(1);
@@ -371,7 +418,7 @@ export const useCanvasMedia = ({
 
         setPdfDoc(cachedPdf);
         setPlanLoadStatus("loading");
-        void renderPdfPage(cachedPdf, currentPage, activePlanId)
+        void renderPdfPage(cachedPdf, currentPage, activePlanId, rotations[currentPage] ?? 0)
             .then(() => {
                 setPlanLoadStatus("ready");
                 setPlanLoadError(null);
@@ -398,11 +445,14 @@ export const useCanvasMedia = ({
             if (!containerRef.current) return;
             const containerWidth = containerRef.current.offsetWidth;
             if (containerWidth <= 0) return;
-            const scaleFactor = containerWidth / image.width;
+            const natural = naturalSizeRef.current;
+            const refWidth = natural?.width ?? image.width;
+            const refHeight = natural?.height ?? image.height;
+            const scaleFactor = containerWidth / refWidth;
             setImageScale(scaleFactor);
             setStageSize({
                 width: containerWidth,
-                height: image.height * scaleFactor,
+                height: refHeight * scaleFactor,
             });
         });
         observer.observe(containerRef.current);
@@ -454,7 +504,7 @@ export const useCanvasMedia = ({
                 setNumPages(pdf.numPages);
                 setStoreNumPages(pdf.numPages);
                 setCurrentPage(1);
-                await renderPdfPage(pdf, 1, planId);
+                await renderPdfPage(pdf, 1, planId, rotations[1] ?? 0);
                 setPlanLoadStatus("ready");
                 void uploadPlanToCloud(planId, file, pdf.numPages);
             } else if (file.type.startsWith("image/")) {
@@ -498,19 +548,34 @@ export const useCanvasMedia = ({
             const newPage = Math.max(1, Math.min(numPages, currentPage + delta));
             if (newPage !== currentPage) {
                 setCurrentPage(newPage);
-                void renderPdfPage(pdfDoc, newPage, activePlanId ?? undefined);
+                void renderPdfPage(pdfDoc, newPage, activePlanId ?? undefined, rotations[newPage] ?? 0);
             }
         },
-        [pdfDoc, numPages, currentPage, activePlanId, renderPdfPage, setCurrentPage]
+        [pdfDoc, numPages, currentPage, activePlanId, renderPdfPage, setCurrentPage, rotations]
     );
 
+    const rerenderCurrentPage = useCallback(() => {
+        const rotation = rotations[currentPage] ?? 0;
+        if (pdfDoc) {
+            void renderPdfPage(pdfDoc, currentPage, activePlanId ?? undefined, rotation);
+        }
+    }, [pdfDoc, currentPage, activePlanId, renderPdfPage, rotations]);
+
     const hasLoadedPlan = Boolean(image);
+    const currentRotation = rotations[currentPage] ?? 0;
 
     return {
         handleFileUpload,
         changePage,
+        rerenderCurrentPage,
         hasLoadedPlan,
         planLoadStatus,
         planLoadError,
+        currentRotation,
+        // Natural PDF page dimensions at scale=1 — use these (not image.width/height) when
+        // computing rotation point transforms so the math is independent of render quality.
+        pdfNaturalSize: naturalSizeRef.current,
+        // Spatial index of PDF vector line segments for the current page — used for snap-to-line.
+        pdfSegmentIndexRef,
     };
 };

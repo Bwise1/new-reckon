@@ -22,6 +22,8 @@ export interface Measurement {
   type?: TakeoffMode;
   /** Stroke/fill color for this markup. */
   color?: string;
+  /** Line weight in canvas units (default 2). */
+  strokeWidth?: number;
   /** When true, the markup is hidden from the canvas render. */
   hidden?: boolean;
   /** Bound BOQ Element id, if this measurement feeds a specific line item. */
