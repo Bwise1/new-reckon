@@ -5,6 +5,7 @@ import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
 import Dashboard from './pages/Dashboard';
 import ProjectDetail from './pages/ProjectDetail';
+import Settings from './pages/Settings';
 import { GuestRoute, ProtectedRoute, RootRedirect } from './components/auth/RouteGuards';
 import './App.css';
 
@@ -21,6 +22,7 @@ function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/project/:id" element={<ProjectDetail />} />
+        <Route path="/settings" element={<Settings />} />
       </Route>
 
       <Route path="/verify-email" element={<div className="p-8">Verify Email - Coming Soon</div>} />

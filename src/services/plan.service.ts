@@ -9,11 +9,21 @@ export interface ProjectPlan {
   url: string;
   public_id: string;
   mime_type: string | null;
+  file_size_bytes: number;
   page_count: number;
   sort_order: number;
   discipline?: string | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface StorageSummary {
+  used_bytes: number;
+  quota_bytes: number;
+  available_bytes: number | null;
+  used_formatted: string;
+  quota_formatted: string;
+  percent_used: number;
 }
 
 export const planService = {
@@ -49,6 +59,9 @@ export const planService = {
       `/projects/${projectId}/plans/${planClientUuid}`,
       { discipline }
     ),
+
+  getStorageSummary: () =>
+    apiClient.get<{ data: StorageSummary }>('/projects/storage'),
 
   deletePlan: async (projectId: string, planClientUuid: string) => {
     try {

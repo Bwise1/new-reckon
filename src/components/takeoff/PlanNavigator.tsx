@@ -7,6 +7,7 @@ import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { planService } from '@/services/plan.service';
 import { useConfirm } from '@/contexts/ConfirmProvider';
 import { decodeMojibake } from '@/utils/textEncoding';
+import { useStorage } from '@/hooks/useStorage';
 
 interface PlanNavigatorProps {
   projectTitle: string;
@@ -112,6 +113,8 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
   const [pendingDiscipline, setPendingDiscipline] = useState<PlanDiscipline | null>(null);
   const [showUploadPicker, setShowUploadPicker] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const { data: storageData } = useStorage();
+  const storage = storageData?.data;
 
   const grouped = useMemo(() => {
     const groups = new Map<string, { label: string; plans: ProjectPlan[] }>();
@@ -232,18 +235,17 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
 
   return (
     <aside className="w-[260px] min-w-[260px] max-w-[260px] shrink-0 h-full flex flex-col bg-[#0a0a0a] text-gray-200 border-r border-black/60">
-      <div className="shrink-0 px-4 pt-4 pb-3">
-        <p className="text-[11px] text-gray-500 tracking-wide">Reckon Web App</p>
+      <div className="shrink-0 px-5 pt-5 pb-4 flex items-center">
+        <img src={ReckonLogo} alt="Reckon" className="h-9 w-9" />
       </div>
 
-      <div className="shrink-0 px-4 pb-4 flex flex-col items-start gap-3">
-        <img src={ReckonLogo} alt="Reckon" className="h-7 w-7 opacity-90" />
+      <div className="shrink-0 px-5 pb-4 border-b border-white/10">
         <h2 className="text-[15px] font-semibold text-white leading-snug line-clamp-2">
           {projectTitle}
         </h2>
       </div>
 
-      <div className="shrink-0 px-4 pb-3">
+      <div className="shrink-0 px-5 py-4 border-b border-white/10">
         <div className="inline-flex items-center gap-1 bg-[#1a1a1a] rounded-md p-1">
           <button
             type="button"
@@ -458,22 +460,41 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
         )}
       </div>
 
-      <div className="shrink-0 p-3 border-t border-white/5 flex items-center justify-between gap-3">
-        <span className="text-xs text-gray-400">Add more project file</span>
-        <input
-          ref={uploadRef}
-          type="file"
-          className="hidden"
-          accept="application/pdf,image/jpeg,image/png"
-          onChange={handleUploadChange}
-        />
-        <button
-          type="button"
-          onClick={handleUploadClick}
-          className="px-3 py-1.5 rounded-md bg-white text-black text-xs font-semibold hover:bg-gray-200 transition-colors cursor-pointer"
-        >
-          Upload
-        </button>
+      <div className="shrink-0 border-t border-white/5">
+        {/* Storage indicator */}
+        {storage && (
+          <div className="px-3 pt-2.5 pb-1">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[10px] text-gray-500">{storage.used_formatted} / {storage.quota_formatted}</span>
+              <span className={`text-[10px] font-medium ${storage.percent_used >= 90 ? 'text-red-400' : 'text-gray-500'}`}>
+                {storage.percent_used}%
+              </span>
+            </div>
+            <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${storage.percent_used >= 90 ? 'bg-red-400' : storage.percent_used >= 70 ? 'bg-amber-400' : 'bg-brandGold'}`}
+                style={{ width: `${Math.min(storage.percent_used, 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
+        <div className="p-3 flex items-center justify-between gap-3">
+          <span className="text-xs text-gray-400">Add more project file</span>
+          <input
+            ref={uploadRef}
+            type="file"
+            className="hidden"
+            accept="application/pdf,image/jpeg,image/png"
+            onChange={handleUploadChange}
+          />
+          <button
+            type="button"
+            onClick={handleUploadClick}
+            className="px-3 py-1.5 rounded-md bg-white text-black text-xs font-semibold hover:bg-gray-200 transition-colors cursor-pointer"
+          >
+            Upload
+          </button>
+        </div>
       </div>
 
       {showUploadPicker && (

@@ -41,12 +41,12 @@ const Dashboard = () => {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col" style={{ paddingLeft: "calc(50% - 185px)" }}>
+      <div className="flex flex-col" style={{ paddingLeft: "calc(50% - 235px)" }}>
         <div className="mb-10">
           <StatsCards projectCount={projectCount} />
         </div>
 
-        <div style={{ width: "370px" }}>
+        <div style={{ width: "470px" }}>
           <div className="mb-5 flex items-center justify-between">
             <h2 className="text-xl font-bold text-gray-900">Welcome {firstName}</h2>
             <button
