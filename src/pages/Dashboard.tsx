@@ -24,18 +24,22 @@ const Dashboard = () => {
 
   const handleCreate = async ({ title, location }: { title: string; location: string; file?: File }) => {
     const clientUuid = generateClientId();
-    const created = await createProject({
-      title,
-      project_type: "bill_of_qty",
-      location: location || "Lagos, Nigeria",
-      client_uuid: clientUuid,
-    } as Partial<Project>);
+    try {
+      const created = await createProject({
+        title,
+        project_type: "bill_of_qty",
+        location: location || "Lagos, Nigeria",
+        client_uuid: clientUuid,
+      } as Partial<Project>);
 
-    const newProjectId = created.data?.project?.id;
-    if (newProjectId) {
-      saveProjectMeta(String(newProjectId), { clientUuid });
       setShowNewProject(false);
-      navigate(`/project/${newProjectId}`);
+      const newProjectId = created.data?.project?.id;
+      if (newProjectId) {
+        saveProjectMeta(String(newProjectId), { clientUuid });
+        navigate(`/project/${newProjectId}`);
+      }
+    } catch {
+      // mutation failed — leave modal open so user can retry
     }
   };
 

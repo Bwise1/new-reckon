@@ -4,30 +4,22 @@ import type { TakeoffMode } from '@/types/takeoff';
 import { MARKUP_COLORS, MEASUREMENT_TOOLS } from '@/constants/takeoffDesign';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 
-const STROKE_WIDTHS = [1, 2, 3, 4, 5];
-
 interface CanvasToolbarProps {
   calibrationMode: boolean;
   currentScale: number | null;
   activeTool: TakeoffMode | null;
   activeColor: string;
-  activeStrokeWidth: number;
+  activeRealWidth: number;
   onToggleCalibration: () => void;
   onSelectTool: (type: TakeoffMode) => void;
   onFinishTool: () => void;
   onColorChange: (color: string) => void;
-  onStrokeWidthChange: (width: number) => void;
+  onRealWidthChange: (width: number) => void;
   onRotateCW: () => void;
   onRotateCCW: () => void;
   onRotateAllCW: () => void;
   onRotateAllCCW: () => void;
 }
-
-const LinePreview: React.FC<{ width: number; color?: string }> = ({ width, color = '#374151' }) => (
-  <svg width="24" height="10" viewBox="0 0 24 10">
-    <line x1="2" y1="5" x2="22" y2="5" stroke={color} strokeWidth={Math.min(width, 6)} strokeLinecap="round" />
-  </svg>
-);
 
 function usePortalDropdown() {
   const [open, setOpen] = useState(false);
@@ -65,7 +57,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onSelectTool,
   onFinishTool,
   onColorChange,
-  onStrokeWidthChange,
+  onRealWidthChange,
   onRotateCW,
   onRotateCCW,
   onRotateAllCW,
@@ -74,10 +66,27 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   const scaleDisplay = currentScale ? `1m = ${currentScale.toFixed(1)}px` : 'Unscaled';
 
   const liveColor = useTakeoffStore((s) => s.activeColor);
-  const liveStrokeWidth = useTakeoffStore((s) => s.activeStrokeWidth);
+  const liveRealWidth = useTakeoffStore((s) => s.activeRealWidth);
+
+  // Local input state so the field stays editable mid-type
+  const [widthInput, setWidthInput] = useState(String(liveRealWidth));
+
+  // Keep local input in sync if store changes externally
+  useEffect(() => {
+    setWidthInput(String(liveRealWidth));
+  }, [liveRealWidth]);
+
+  const commitWidth = (raw: string) => {
+    const parsed = parseFloat(raw);
+    if (isFinite(parsed) && parsed > 0) {
+      onRealWidthChange(parsed);
+    } else {
+      // Revert to last valid value
+      setWidthInput(String(liveRealWidth));
+    }
+  };
 
   const color = usePortalDropdown();
-  const weight = usePortalDropdown();
 
   return (
     <div className="shrink-0 px-3 bg-white border-b border-gray-200 flex items-center gap-2 z-10 h-14">
@@ -180,50 +189,33 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         document.body
       )}
 
-      {/* Weight dropdown */}
-      <div className="shrink-0" ref={weight.triggerRef}>
-        <button
-          type="button"
-          onClick={weight.toggle}
-          title="Line weight"
-          className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 shadow-sm hover:bg-gray-50 transition cursor-pointer h-10"
-        >
-          <span className="text-xs font-medium text-gray-500">Weight</span>
-          <LinePreview width={liveStrokeWidth} />
-          <svg className="w-3 h-3 text-gray-400" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M2 4l4 4 4-4" />
-          </svg>
-        </button>
+      {/* Width input */}
+      <div
+        className="flex items-stretch rounded-lg border border-gray-200 bg-white shadow-sm shrink-0 h-10 overflow-hidden"
+        title={currentScale ? 'Line width in metres — scaled to plan calibration' : 'Calibrate first to use real-world width'}
+      >
+        <span className="px-2.5 flex items-center text-xs font-medium text-gray-500 border-r border-gray-200 bg-gray-50">
+          Width
+        </span>
+        <input
+          type="number"
+          min="0.001"
+          step="0.01"
+          value={widthInput}
+          disabled={!currentScale}
+          onChange={(e) => setWidthInput(e.target.value)}
+          onBlur={(e) => commitWidth(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.currentTarget.blur();
+            }
+          }}
+          className="w-16 px-2 text-sm tabular-nums outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
+        />
+        <span className="px-2 flex items-center text-xs text-gray-500 border-l border-gray-200 bg-gray-50">
+          m
+        </span>
       </div>
-
-      {weight.open && createPortal(
-        <div
-          ref={weight.menuRef}
-          style={{ position: 'fixed', top: weight.pos.top, left: weight.pos.left, zIndex: 99999 }}
-          className="bg-white border border-gray-200 rounded-xl shadow-xl py-1 min-w-[120px]"
-        >
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-3 pt-1.5 pb-1">Line Weight</p>
-          {STROKE_WIDTHS.map((w) => (
-            <button
-              key={w}
-              type="button"
-              onMouseDown={(e) => { e.preventDefault(); onStrokeWidthChange(w); weight.setOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-1.5 hover:bg-gray-50 transition cursor-pointer ${
-                liveStrokeWidth === w ? 'bg-gray-100' : ''
-              }`}
-            >
-              <LinePreview width={w} color={liveStrokeWidth === w ? '#111827' : '#9ca3af'} />
-              <span className={`text-xs tabular-nums ${liveStrokeWidth === w ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>{w}px</span>
-              {liveStrokeWidth === w && (
-                <svg className="w-3 h-3 text-gray-800 ml-auto" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M2 6l3 3 5-5" />
-                </svg>
-              )}
-            </button>
-          ))}
-        </div>,
-        document.body
-      )}
 
       {/* Rotate */}
       <div className="flex items-center gap-0.5 rounded-lg border border-gray-200 bg-white px-2 shadow-sm shrink-0 h-10">

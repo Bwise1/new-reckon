@@ -3,9 +3,11 @@ import { ChevronDown } from "lucide-react";
 import { FiUser } from "react-icons/fi";
 import EstimationCard from "./EstimationCard";
 import BoqExportModal from "./BoqExportModal";
+import SyncStatusBadge from "@/components/ui/SyncStatusBadge";
 import { useTakeoffStore } from "@/store/useTakeoffStore";
 import { useAuthStore } from "@/stores/auth.store";
 import { useBoqExport } from "@/hooks/useBoqExport";
+import { useSyncStatus } from "@/hooks/useSyncStatus";
 import type { EstimationCardData } from "@/types/takeoff";
 import { itemLabelFromIndex } from "@/utils/boqCalculations";
 
@@ -25,6 +27,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
     pricing,
     handleExportConfirm,
   } = useBoqExport();
+  const { isOnline } = useSyncStatus();
 
   const {
     boqElements,
@@ -138,21 +141,15 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
           <FiUser className="text-secondary text-xl" />
         </div>
 
-        <div className="flex-1 min-w-0" />
+        <div className="flex-1 min-w-0 flex justify-center">
+          <SyncStatusBadge />
+        </div>
 
         <button
           type="button"
           onClick={() => setExportModalMode("preview")}
-          disabled={busyAction}
-          className="text-sm font-semibold text-gray-800 hover:text-secondary disabled:opacity-50 shrink-0 cursor-pointer disabled:cursor-not-allowed"
-        >
-          Preview
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setExportModalMode("export")}
-          disabled={busyAction}
+          disabled={busyAction || !isOnline}
+          title={!isOnline ? "Export requires an internet connection" : undefined}
           className="shrink-0 px-5 py-2 rounded-lg bg-secondary text-white text-sm font-bold hover:bg-[#002847] disabled:opacity-50 shadow-sm cursor-pointer disabled:cursor-not-allowed"
         >
           Export
@@ -283,7 +280,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
       <BoqExportModal
         key={`${exportModalMode}-${pricing.vatRate}-${pricing.contingency}`}
         open={exportModalMode !== null}
-        mode={exportModalMode ?? "preview"}
+        mode="export"
         initialVat={pricing.vatRate}
         initialContingency={pricing.contingency}
         busy={busyAction}

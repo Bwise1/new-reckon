@@ -65,6 +65,7 @@ export interface ApiMeasurement {
     createdAt?: string;
     lastModified?: string;
     confidence?: number;
+    strokeWidth?: number;
   } | null;
   created_at?: string;
   updated_at?: string;

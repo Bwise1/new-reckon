@@ -6,6 +6,7 @@ import DescriptionField from "./DescriptionField";
 import HeaderField from "./HeaderField";
 import type { EstimationCardData, UnitType, HistoryItem } from "@/types/takeoff";
 import { generateClientId } from "@/utils/id";
+import { isValidSequence } from "@/utils/formulaUtils";
 import {
   computeQtyFromHistory,
   formatQtyDisplay,
@@ -71,7 +72,11 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
   const [takeoff, setTakeoff] = useState("");
   const [rate, setRate] = useState(() => formatRateDisplay(data?.rate ?? 0));
   const [isEditingRate, setIsEditingRate] = useState(false);
-  const [history, setHistory] = useState<HistoryItem[]>(data?.history || []);
+  // Derived directly from the store-backed prop (not cloned into local state)
+  // so entries written by other flows (e.g. bindMeasurementToItem when a
+  // second measurement is staged before the first is committed) are never
+  // clobbered by a stale local snapshot on the next commit.
+  const history = data?.history || [];
 
   const qty = useMemo(() => formatQtyDisplay(computeQtyFromHistory(history)), [history]);
 
@@ -80,7 +85,6 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
   };
 
   const pushHistory = (nextHistory: HistoryItem[]) => {
-    setHistory(nextHistory);
     syncToParent({
       history: nextHistory,
       qty: formatQtyDisplay(computeQtyFromHistory(nextHistory)),
@@ -96,11 +100,16 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
 
   React.useEffect(() => {
     if (pendingMeasuredValue !== null && isTargeting && pendingMeasurementId) {
-      setTakeoff(pendingMeasuredValue);
-      stagedRef.current = {
-        value: pendingMeasuredValue,
-        measurementId: pendingMeasurementId,
-      };
+      // A formula may already be in progress (e.g. "171.25+") waiting on
+      // this next measurement. Append rather than replace so drawing a
+      // second measurement doesn't wipe out what's already been staged.
+      setTakeoff((current) => {
+        const next = isValidSequence(current, pendingMeasuredValue)
+          ? current + pendingMeasuredValue
+          : pendingMeasuredValue;
+        stagedRef.current = { value: next, measurementId: pendingMeasurementId };
+        return next;
+      });
     }
     // Intentionally not depending on takeoff — user may edit it further.
     // eslint-disable-next-line react-hooks/exhaustive-deps

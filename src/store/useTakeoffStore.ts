@@ -51,7 +51,7 @@ interface TakeoffStore {
   activeItemId: string | null;
   activeTool: TakeoffMode | null;
   activeColor: string;
-  activeStrokeWidth: number;
+  activeRealWidth: number;
 
   // Calibration
   scales: Record<number, number>;
@@ -161,7 +161,7 @@ interface TakeoffStore {
   setActiveItemId: (id: string | null) => void;
   setActiveTool: (tool: TakeoffMode | null) => void;
   setActiveColor: (color: string) => void;
-  setActiveStrokeWidth: (width: number) => void;
+  setActiveRealWidth: (width: number) => void;
   setFocusedBoqCard: (card: { elementId: string; itemId: string; unit: string } | null) => void;
   ensureCanvasItemId: () => string;
 
@@ -271,7 +271,7 @@ const initialState = {
   activeItemId: null,
   activeTool: null,
   activeColor: MARKUP_COLORS[0],
-  activeStrokeWidth: 2,
+  activeRealWidth: 0.225,
   scales: {},
   calibrationLines: {},
   calibrationMode: false,
@@ -813,7 +813,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
 
   setActiveColor: (color) => set({ activeColor: color }),
 
-  setActiveStrokeWidth: (width) => set({ activeStrokeWidth: width }),
+  setActiveRealWidth: (width) => set({ activeRealWidth: width }),
 
   setFocusedBoqCard: (card) => set({ focusedBoqCard: card }),
 

@@ -6,6 +6,18 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'https://api.reckonio.com/v1';
 export const REQUEST_SOURCE = 'web-app';
 let isHandlingAuthFailure = false;
 
+/** Error rejected by the response interceptor. Carries the HTTP status
+ * (when the server responded) so callers like syncQueue can distinguish
+ * a permanent 4xx from a transient network/5xx failure. */
+export class ApiError extends Error {
+  status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 const handleUnauthorized = (message?: string): void => {
   if (isHandlingAuthFailure) return;
   const token = localStorage.getItem('token');
@@ -82,16 +94,17 @@ class APIClient {
               : undefined;
           handleUnauthorized(rawMessage);
         }
+        const status = error.response?.status;
         if (data instanceof Blob) {
           try {
             const text = await data.text();
             const parsed = JSON.parse(text) as { message?: string };
-            if (error.response?.status === 401) {
+            if (status === 401) {
               handleUnauthorized(parsed.message);
             }
-            return Promise.reject(new Error(parsed.message || 'Something went wrong'));
+            return Promise.reject(new ApiError(parsed.message || 'Something went wrong', status));
           } catch {
-            return Promise.reject(new Error(error.message || 'Something went wrong'));
+            return Promise.reject(new ApiError(error.message || 'Something went wrong', status));
           }
         }
         const message =
@@ -99,7 +112,7 @@ class APIClient {
           (typeof data === 'string' ? data : undefined) ||
           error.message ||
           'Something went wrong';
-        return Promise.reject(new Error(message));
+        return Promise.reject(new ApiError(message, status));
       }
     );
   }

@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { FiUpload, FiX } from "react-icons/fi";
+import { useState } from "react";
+import { FiX } from "react-icons/fi";
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -11,26 +11,17 @@ interface NewProjectModalProps {
 const NewProjectModal = ({ isOpen, isPending, onClose, onCreate }: NewProjectModalProps) => {
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   if (!isOpen) return null;
 
   const handleSubmit = () => {
     if (!title.trim()) return;
-    onCreate({ title: title.trim(), location: location.trim(), file: file ?? undefined });
+    onCreate({ title: title.trim(), location: location.trim() });
   };
 
   const handleClose = () => {
     setTitle("");
     setLocation("");
-    setFile(null);
     onClose();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = e.target.files?.[0];
-    if (picked) setFile(picked);
   };
 
   return (
@@ -66,23 +57,6 @@ const NewProjectModal = ({ isOpen, isPending, onClose, onCreate }: NewProjectMod
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 placeholder-gray-400"
           />
 
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg flex items-center justify-between text-gray-400 hover:border-gray-300 transition-colors"
-          >
-            <span className={file ? "text-gray-700 truncate pr-2" : ""}>
-              {file ? file.name : "Upload Project Files"}
-            </span>
-            <FiUpload className="w-4 h-4 flex-shrink-0" />
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,image/jpeg,image/png"
-            className="hidden"
-            onChange={handleFileChange}
-          />
         </div>
 
         <div className="flex gap-3 px-5 pb-5">

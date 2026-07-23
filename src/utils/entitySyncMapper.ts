@@ -101,6 +101,7 @@ export const takeoffItemsFromApiMeasurements = (
       type,
       color: m.color,
       hidden: m.hidden,
+      strokeWidth: m.metadata?.strokeWidth,
       boqElementId: m.boq_element_id ?? undefined,
       boqItemId: m.boq_item_id ?? undefined,
       metadata:
@@ -163,13 +164,12 @@ export const measurementCreateBodyFromStore = (
     points: measurement.points,
     quantity: measurement.quantity,
     hidden: Boolean(measurement.hidden),
-    metadata: measurement.metadata
-      ? {
-          createdAt: measurement.metadata.createdAt,
-          lastModified: measurement.metadata.lastModified,
-          confidence: measurement.metadata.confidence,
-        }
-      : null,
+    metadata: {
+      createdAt: measurement.metadata?.createdAt,
+      lastModified: measurement.metadata?.lastModified,
+      confidence: measurement.metadata?.confidence,
+      strokeWidth: measurement.strokeWidth,
+    },
   };
 };
 

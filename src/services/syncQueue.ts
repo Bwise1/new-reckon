@@ -9,6 +9,7 @@ import {
   type MeasurementCreateBody,
   type MeasurementPatchBody,
 } from '@/services/entitySync.service';
+import { ApiError } from '@/lib/api-client';
 
 /**
  * Small persisted queue of pending sync operations. See docs/sync-rebuild.md.
@@ -101,6 +102,13 @@ type DrainerState = {
   scheduled: number | null;
 };
 const drainers: Record<string, DrainerState> = {};
+
+// Notified whenever any project's queue length changes, so UI (e.g. a
+// pending-sync-count badge) can react without polling.
+const listeners = new Set<() => void>();
+const notifyListeners = (): void => {
+  listeners.forEach((cb) => cb());
+};
 
 const readPersisted = (projectId: string): SyncOp[] => {
   try {
@@ -293,9 +301,11 @@ const runOp = async (op: SyncOp): Promise<void> => {
 
 const isClientError = (error: unknown): boolean => {
   const status =
-    typeof error === 'object' && error !== null && 'response' in error
-      ? (error as { response?: { status?: number } }).response?.status
-      : undefined;
+    error instanceof ApiError
+      ? error.status
+      : typeof error === 'object' && error !== null && 'response' in error
+        ? (error as { response?: { status?: number } }).response?.status
+        : undefined;
   return typeof status === 'number' && status >= 400 && status < 500;
 };
 
@@ -331,6 +341,7 @@ const drainInternal = async (projectId: string): Promise<void> => {
           console.warn('[syncQueue] dropping op after 4xx', op, error);
           queue.shift();
           writePersisted(projectId);
+          notifyListeners();
           continue;
         }
         // Transient (5xx/network). Keep the op at the head and back off.
@@ -345,6 +356,7 @@ const drainInternal = async (projectId: string): Promise<void> => {
       }
       queue.shift();
       writePersisted(projectId);
+      notifyListeners();
       state.backoffMs = 500; // reset after a success
       queue = ensureQueue(projectId);
     }
@@ -358,6 +370,7 @@ export const syncQueue = {
     const queue = ensureQueue(op.projectId);
     queues[op.projectId] = dedupOnEnqueue(queue, op);
     writePersisted(op.projectId);
+    notifyListeners();
     scheduleDrain(op.projectId, 0);
   },
 
@@ -378,5 +391,11 @@ export const syncQueue = {
   resume: (projectId: string): void => {
     const q = ensureQueue(projectId);
     if (q.length > 0) scheduleDrain(projectId, 0);
+  },
+
+  /** Subscribe to queue-length changes across all projects (for UI status). */
+  subscribe: (cb: () => void): (() => void) => {
+    listeners.add(cb);
+    return () => listeners.delete(cb);
   },
 };

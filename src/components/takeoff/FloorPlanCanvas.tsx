@@ -64,7 +64,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     activeItemId,
     activeTool,
     activeColor,
-    activeStrokeWidth,
+    activeRealWidth,
     setActiveTool,
     scales,
     calibrationMode,
@@ -203,7 +203,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
 
   const rotatePage = useTakeoffStore((s) => s.rotatePage);
   const rotateAllPages = useTakeoffStore((s) => s.rotateAllPages);
-  const activeStrokeWidthLive = useTakeoffStore((s) => s.activeStrokeWidth);
+  const activeRealWidthLive = useTakeoffStore((s) => s.activeRealWidth);
 
   const { handleFileUpload, changePage, rerenderCurrentPage, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfSegmentIndexRef } =
     useCanvasMedia({
@@ -580,7 +580,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           points: nextPoints,
           quantity: nextPoints.length,
           color: activeColor,
-          strokeWidth: activeStrokeWidth,
+          strokeWidth: 2,
           metadata: {
             createdAt: existingMeasurement.metadata?.createdAt ?? now,
             lastModified: now,
@@ -612,7 +612,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           page: currentPage,
           type: activeTool,
           color: activeColor,
-          strokeWidth: activeStrokeWidth,
+          strokeWidth: 2,
           metadata: {
             createdAt: now,
             lastModified: now,
@@ -658,7 +658,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           page: currentPage,
           type: "linear",
           color: activeColor,
-          strokeWidth: activeStrokeWidth,
+          strokeWidth: currentScale != null ? Math.max(activeRealWidth * currentScale, 2) : 2,
           metadata: {
             createdAt: now,
             lastModified: now,
@@ -704,7 +704,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           page: currentPage,
           type: activeTool,
           color: activeColor,
-          strokeWidth: activeStrokeWidth,
+          strokeWidth: 2,
           metadata: {
             createdAt: now,
             lastModified: now,
@@ -734,7 +734,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       activePlanId,
       activeTool,
       activeColor,
-      activeStrokeWidth,
+      activeRealWidth,
       setActiveTool,
       ensureCanvasItemId,
       currentPoints,
@@ -755,6 +755,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       stageSize,
       image,
       imageScale,
+
     ]
   );
 
@@ -890,7 +891,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     activePlanId,
     activeTool,
     activeColor,
-    activeStrokeWidth,
     ensureCanvasItemId,
     currentPoints,
     calculateAreaFromPoints,
@@ -1500,11 +1500,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         currentScale={currentScale}
         activeTool={activeToolProp ?? activeTool}
         activeColor={activeColorProp ?? activeColor}
-        activeStrokeWidth={activeStrokeWidthLive}
+        activeRealWidth={activeRealWidthLive}
         onSelectTool={onSelectTool}
         onFinishTool={onFinishTool}
         onColorChange={onColorChange}
-        onStrokeWidthChange={(w) => useTakeoffStore.setState({ activeStrokeWidth: w })}
+        onRealWidthChange={(w) => useTakeoffStore.setState({ activeRealWidth: w })}
         onToggleCalibration={() => {
           const newMode = !calibrationMode;
           setCalibrationMode(newMode);
@@ -1573,9 +1573,9 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                     const dx = p2.x - p1.x;
                     const dy = p2.y - p1.y;
                     const angle = Math.atan2(dy, dx);
-                    // Screen-constant cap length (perpendicular tick at each endpoint).
-                    // Match the label height so the caps read as dimension-line ends.
-                    const tickLen = LABEL_FONT_SIZE * 0.6 * strokeScale;
+                    // Tick reaches the outer edges of the band: half the stroke width.
+                    // Minimum of font-based size so thin lines still get a visible cap.
+                    const tickLen = Math.max(LABEL_FONT_SIZE * 0.6 * strokeScale, mStroke * strokeScale * 0.5);
                     const tickDX = Math.sin(angle) * tickLen;
                     const tickDY = Math.cos(angle) * tickLen;
                     // Length of the segment and midpoint used to open a gap
