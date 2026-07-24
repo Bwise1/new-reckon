@@ -183,6 +183,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
             value={takeoff}
             onChange={setTakeoff}
             onCommit={handleCommitTakeoff}
+            onFocus={onFocus}
             onToggleMeasure={onToggleMeasure}
             onModeChange={onMeasureModeChange}
             isMeasuring={isTargeting}

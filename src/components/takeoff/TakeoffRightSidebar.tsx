@@ -54,25 +54,22 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
     if (boqElements.length === 0) {
       setActiveElementId(null);
       setActiveCardId(null);
+      setFocusedBoqCard(null);
       return;
     }
 
-    const elementStillExists = activeElementId && boqElements.some((e) => e.id === activeElementId);
-    const resolvedElementId = elementStillExists ? activeElementId! : boqElements[0].id;
-    const element = boqElements.find((e) => e.id === resolvedElementId)!;
-
-    const cardStillExists =
-      activeCardId && element.items.some((item) => item.id === activeCardId);
-    const resolvedCardId = cardStillExists ? activeCardId! : element.items[0]?.id ?? null;
-
-    if (resolvedElementId !== activeElementId) setActiveElementId(resolvedElementId);
-    if (resolvedCardId !== activeCardId) setActiveCardId(resolvedCardId);
-
-    // Keep the store in sync so the canvas can auto-target on tool select
-    const card = element.items.find((i) => i.id === resolvedCardId);
-    if (resolvedCardId && card) {
-      setFocusedBoqCard({ elementId: resolvedElementId, itemId: resolvedCardId, unit: card.unit });
-    } else {
+    // Only clear a selection that pointed at something now deleted — never
+    // auto-select a default card. Nothing should read as "active" until the
+    // user actually clicks a card.
+    const element = activeElementId
+      ? boqElements.find((e) => e.id === activeElementId)
+      : undefined;
+    if (activeElementId && !element) {
+      setActiveElementId(null);
+      setActiveCardId(null);
+      setFocusedBoqCard(null);
+    } else if (element && activeCardId && !element.items.some((item) => item.id === activeCardId)) {
+      setActiveCardId(null);
       setFocusedBoqCard(null);
     }
 

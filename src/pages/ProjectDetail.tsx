@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom';
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import PlanNavigator from '@/components/takeoff/PlanNavigator';
 import FloorPlanCanvas from '@/components/takeoff/FloorPlanCanvas';
 import TakeoffRightSidebar from '@/components/takeoff/TakeoffRightSidebar';
@@ -59,6 +59,22 @@ const ProjectDetail = () => {
     },
     [activeTool, setActiveTool, focusedBoqCard, boqTargeting, startBoqTargeting]
   );
+
+  // Keep measurement targeting following whichever BOQ card the user has
+  // focused, so switching cards mid-session retargets new measurements
+  // instead of leaving them permanently bound to the first card ever
+  // targeted. Skipped while a measured value is staged but not yet
+  // committed on the current target, so switching focus doesn't silently
+  // discard it.
+  useEffect(() => {
+    if (!focusedBoqCard) return;
+    const alreadyTargeted =
+      boqTargeting?.elementId === focusedBoqCard.elementId &&
+      boqTargeting?.itemId === focusedBoqCard.itemId;
+    if (alreadyTargeted) return;
+    if (boqTargeting?.pendingValue) return;
+    startBoqTargeting(focusedBoqCard.elementId, focusedBoqCard.itemId, focusedBoqCard.unit);
+  }, [focusedBoqCard, boqTargeting, startBoqTargeting]);
 
   const handleFinishTool = useCallback(() => {
     setActiveTool(null);
