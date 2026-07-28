@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom';
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import PlanNavigator from '@/components/takeoff/PlanNavigator';
 import FloorPlanCanvas from '@/components/takeoff/FloorPlanCanvas';
 import TakeoffRightSidebar from '@/components/takeoff/TakeoffRightSidebar';
@@ -10,14 +10,42 @@ import type { TakeoffMode } from '@/types/takeoff';
 
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const { data: projectResponse } = useProject(id ?? '');
+  const { data: projectResponse, isLoading: isProjectLoading } = useProject(id ?? '');
   const project = projectResponse?.data?.project;
 
-  useProjectData(id, {
+  const { isReady: isProjectDataReady } = useProjectData(id, {
     clientUuid: project?.client_uuid,
     title: project?.title,
     location: project?.location,
   });
+
+  // FloorPlanCanvas must stay mounted for its plan-loading hook to run at
+  // all, so we can't gate on this by conditionally rendering the canvas —
+  // instead an overlay covers the interface until the *initial* plan
+  // finishes loading (or there's nothing to load / it failed, both
+  // terminal). planLoadStatus also flips back to 'loading' on ordinary
+  // page changes within an already-open project — that's the in-canvas
+  // "Loading plan…" overlay's job, not this one, so once we've reached a
+  // terminal state the first time we stop gating on it entirely.
+  const [planLoadStatus, setPlanLoadStatus] = useState<
+    'idle' | 'loading' | 'ready' | 'error'
+  >('idle');
+  const hasReachedInitialPlanStateRef = useRef(false);
+  if (planLoadStatus === 'ready' || planLoadStatus === 'error') {
+    hasReachedInitialPlanStateRef.current = true;
+  }
+
+  // Safety net: if the plan never reaches a terminal load state (a stuck
+  // 'loading' — e.g. reopening a project on a page whose render hangs),
+  // don't let this gate block the interface forever. Reveal it after a
+  // few seconds regardless; the in-canvas "Loading plan…"/error overlay
+  // still covers the canvas itself if the plan genuinely never loads.
+  const [planLoadTimedOut, setPlanLoadTimedOut] = useState(false);
+  useEffect(() => {
+    if (hasReachedInitialPlanStateRef.current || planLoadTimedOut) return;
+    const timer = window.setTimeout(() => setPlanLoadTimedOut(true), 6000);
+    return () => window.clearTimeout(timer);
+  }, [planLoadStatus, planLoadTimedOut]);
 
   const uploadHandlerRef = useRef<((e: React.ChangeEvent<HTMLInputElement>) => void) | null>(
     null
@@ -61,20 +89,32 @@ const ProjectDetail = () => {
   );
 
   // Keep measurement targeting following whichever BOQ card the user has
-  // focused, so switching cards mid-session retargets new measurements
-  // instead of leaving them permanently bound to the first card ever
-  // targeted. Skipped while a measured value is staged but not yet
-  // committed on the current target, so switching focus doesn't silently
-  // discard it.
+  // focused, but ONLY while a drawing tool is already active — clicking
+  // into a card's Takeoff field on its own must not start measuring mode;
+  // that only begins when a measuring tool (Linear/Area/Count) is picked
+  // (see handleSelectTool above). This effect just makes switching cards
+  // mid-measurement retarget to the newly focused card instead of staying
+  // bound to whichever card was targeted first.
+  //
+  // Only reacts to focusedBoqCard actually CHANGING (a real click on a
+  // different card) — not to boqTargeting changing on its own. Otherwise
+  // Exit/Escape (which clear boqTargeting but leave focusedBoqCard as-is)
+  // would get immediately undone by this effect re-targeting the same
+  // still-focused card right back.
+  const lastFocusedBoqCardRef = useRef<typeof focusedBoqCard>(null);
   useEffect(() => {
+    const prev = lastFocusedBoqCardRef.current;
+    lastFocusedBoqCardRef.current = focusedBoqCard;
     if (!focusedBoqCard) return;
-    const alreadyTargeted =
-      boqTargeting?.elementId === focusedBoqCard.elementId &&
-      boqTargeting?.itemId === focusedBoqCard.itemId;
-    if (alreadyTargeted) return;
+    if (!activeTool) return;
+    const focusChanged =
+      prev?.elementId !== focusedBoqCard.elementId ||
+      prev?.itemId !== focusedBoqCard.itemId;
+    if (!focusChanged) return;
     if (boqTargeting?.pendingValue) return;
     startBoqTargeting(focusedBoqCard.elementId, focusedBoqCard.itemId, focusedBoqCard.unit);
-  }, [focusedBoqCard, boqTargeting, startBoqTargeting]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedBoqCard]);
 
   const handleFinishTool = useCallback(() => {
     setActiveTool(null);
@@ -103,8 +143,38 @@ const ProjectDetail = () => {
     ? `${project.title}${project.title.toLowerCase().includes('project') ? '' : ' Project'}`
     : 'Project';
 
+  // 'idle' only counts as "ready" when there's no plan to load in the
+  // first place — otherwise it's just the gap before the loading effect's
+  // first update, and treating it as ready would flash the interface
+  // briefly before the overlay reappears for 'loading'. Once the initial
+  // plan has settled once, later page changes never re-trigger this gate.
+  const isPlanReady =
+    hasReachedInitialPlanStateRef.current ||
+    planLoadStatus === 'ready' ||
+    planLoadStatus === 'error' ||
+    (planLoadStatus === 'idle' && !activePlanId) ||
+    planLoadTimedOut;
+
+  if (isProjectLoading || !isProjectDataReady) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#f0f2f5]">
+        <div className="rounded-lg bg-white px-5 py-4 shadow-lg border border-gray-200 text-center">
+          <p className="text-sm font-medium text-gray-700">Loading project…</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-screen bg-[#f0f2f5] overflow-hidden">
+    <div className="relative flex h-screen bg-[#f0f2f5] overflow-hidden">
+      {!isPlanReady && (
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-[#f0f2f5]">
+          <div className="rounded-lg bg-white px-5 py-4 shadow-lg border border-gray-200 text-center">
+            <p className="text-sm font-medium text-gray-700">Loading project…</p>
+          </div>
+        </div>
+      )}
+
       <PlanNavigator
         projectTitle={projectTitle}
         plans={plans}
@@ -129,6 +199,7 @@ const ProjectDetail = () => {
           registerUploadHandler={(handler) => {
             uploadHandlerRef.current = handler;
           }}
+          onPlanLoadStatusChange={setPlanLoadStatus}
         />
       </div>
 

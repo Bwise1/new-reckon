@@ -47,6 +47,7 @@ interface FloorPlanCanvasProps {
   onFinishTool: () => void;
   onColorChange: (color: string) => void;
   registerUploadHandler: (handler: (e: React.ChangeEvent<HTMLInputElement>) => void) => void;
+  onPlanLoadStatusChange?: (status: "idle" | "loading" | "ready" | "error") => void;
 }
 
 const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
@@ -56,6 +57,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   onFinishTool,
   onColorChange,
   registerUploadHandler,
+  onPlanLoadStatusChange,
 }) => {
   const {
     currentProjectId,
@@ -144,6 +146,13 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   });
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [isPdfSnap, setIsPdfSnap] = useState(false);
+  const [uncalibratedWarning, setUncalibratedWarning] = useState(false);
+
+  useEffect(() => {
+    if (!uncalibratedWarning) return;
+    const timer = window.setTimeout(() => setUncalibratedWarning(false), 2500);
+    return () => window.clearTimeout(timer);
+  }, [uncalibratedWarning]);
   const confirm = useConfirm();
   const snapSettings = useMemo(
     () => ({
@@ -226,6 +235,10 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     setNumPages,
     projectId: currentProjectId ?? undefined,
   });
+
+  useEffect(() => {
+    onPlanLoadStatusChange?.(planLoadStatus);
+  }, [planLoadStatus, onPlanLoadStatusChange]);
 
   // Returns a point transformer for a 90° rotation of an image W×H.
   // Points are in image-pixel space; rotation pivots around the image centre.
@@ -556,9 +569,17 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
 
     if (!activeTool || !activePlanId) return;
 
+    // This page hasn't been calibrated — quantities would be meaningless,
+    // so block drawing entirely rather than recording an uncalibrated
+    // measurement the user would have to redo later.
+    if (currentScale == null) {
+      setUncalibratedWarning(true);
+      return;
+    }
+
     const canvasItemId = ensureCanvasItemId();
     const now = new Date().toISOString();
-    
+
     if (activeTool === "count") {
       const canvasItem = takeoffItems.find((item) => item.id === canvasItemId);
       const session = activeCountMeasurementRef.current;
@@ -1311,6 +1332,18 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Bare-letter/editing shortcuts (f/m/v, Delete, Backspace, arrows)
+      // must not hijack keystrokes meant for a focused text field — e.g.
+      // typing "f" in a Description would otherwise zoom the canvas and
+      // swallow the letter. Escape and Ctrl/Cmd combos stay active even
+      // while typing since they don't conflict with normal text entry.
+      const target = e.target as HTMLElement | null;
+      const isTypingInField =
+        !!target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+
       if (e.key === "Escape") {
         // Layered Esc when targeting: first press clears the staged
         // measured value (discarding it); second press exits targeting.
@@ -1329,6 +1362,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         setCalibrationPoint1(null);
         setPendingCalibration(null);
       }
+      if (isTypingInField) return;
       if (e.key === "Enter" && currentPoints.length > 0) {
         e.preventDefault();
         handleDblClick();
@@ -1573,11 +1607,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                     const dx = p2.x - p1.x;
                     const dy = p2.y - p1.y;
                     const angle = Math.atan2(dy, dx);
-                    // Tick reaches the outer edges of the band: half the stroke width.
-                    // Minimum of font-based size so thin lines still get a visible cap.
-                    const tickLen = Math.max(LABEL_FONT_SIZE * 0.6 * strokeScale, mStroke * strokeScale * 0.5);
-                    const tickDX = Math.sin(angle) * tickLen;
-                    const tickDY = Math.cos(angle) * tickLen;
                     // Length of the segment and midpoint used to open a gap
                     // around the dimension label — |---- 300.13m ----|
                     const lineLen = Math.sqrt(dx * dx + dy * dy);
@@ -1682,13 +1711,13 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                               points={[p1.x, p1.y, gapStart.x, gapStart.y]}
                               stroke={mColor}
                               strokeWidth={(isSelected || isHovered ? mStroke * 1.5 : mStroke) * strokeScale}
-                              opacity={isHovered ? 0.7 : 1}
+                              opacity={isSelected || isHovered ? 0.8 : 0.6}
                             />
                             <Line
                               points={[gapEnd.x, gapEnd.y, p2.x, p2.y]}
                               stroke={mColor}
                               strokeWidth={(isSelected || isHovered ? mStroke * 1.5 : mStroke) * strokeScale}
-                              opacity={isHovered ? 0.7 : 1}
+                              opacity={isSelected || isHovered ? 0.8 : 0.6}
                             />
                           </>
                         ) : (
@@ -1696,36 +1725,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                             points={[p1.x, p1.y, p2.x, p2.y]}
                             stroke={mColor}
                             strokeWidth={(isSelected || isHovered ? mStroke * 1.5 : mStroke) * strokeScale}
-                            opacity={isHovered ? 0.7 : 1}
+                            opacity={isSelected || isHovered ? 0.8 : 0.6}
                           />
-                        )}
-                        {/* Perpendicular end-caps — suppressed while dragging an endpoint,
-                            since the edit handle already renders its own tick. */}
-                        {!(dragging?.itemId === item.id && dragging?.measurementId === m.id) && (
-                          <>
-                            <Line
-                              points={[
-                                p1.x - tickDX,
-                                p1.y + tickDY,
-                                p1.x + tickDX,
-                                p1.y - tickDY,
-                              ]}
-                              stroke={mColor}
-                              strokeWidth={(isSelected || isHovered ? mStroke * 1.75 : mStroke * 1.25) * strokeScale}
-                              lineCap="round"
-                            />
-                            <Line
-                              points={[
-                                p2.x - tickDX,
-                                p2.y + tickDY,
-                                p2.x + tickDX,
-                                p2.y - tickDY,
-                              ]}
-                              stroke={mColor}
-                              strokeWidth={(isSelected || isHovered ? mStroke * 1.75 : mStroke * 1.25) * strokeScale}
-                              lineCap="round"
-                            />
-                          </>
                         )}
                         {/* Dimension label — sits in the gap so it reads
                             like a printed dimension: |---- 500.07m ----| */}
@@ -2826,6 +2827,12 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
             })()}
         </>}
       />
+
+      {uncalibratedWarning && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-red-600 text-white px-3 py-1.5 shadow-lg text-xs font-semibold">
+          <span>Calibrate this page before taking measurements</span>
+        </div>
+      )}
 
       {boqTargeting && (() => {
         // Resolve human-readable "Element X · Item Y" for the pill.

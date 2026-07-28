@@ -14,6 +14,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("files");
   const [showNewProject, setShowNewProject] = useState(false);
+  const [newProjectModalKey, setNewProjectModalKey] = useState(0);
   const { data: projectsData } = useProjects();
   const { data: profileData } = useProfile();
   const { mutateAsync: createProject, isPending: isCreatingProject } = useCreateProject();
@@ -33,6 +34,7 @@ const Dashboard = () => {
       } as Partial<Project>);
 
       setShowNewProject(false);
+      setNewProjectModalKey((k) => k + 1);
       const newProjectId = created.data?.project?.id;
       if (newProjectId) {
         saveProjectMeta(String(newProjectId), { clientUuid });
@@ -41,6 +43,11 @@ const Dashboard = () => {
     } catch {
       // mutation failed — leave modal open so user can retry
     }
+  };
+
+  const handleCloseNewProject = () => {
+    setShowNewProject(false);
+    setNewProjectModalKey((k) => k + 1);
   };
 
   return (
@@ -96,9 +103,10 @@ const Dashboard = () => {
       </div>
 
       <NewProjectModal
+        key={newProjectModalKey}
         isOpen={showNewProject}
         isPending={isCreatingProject}
-        onClose={() => setShowNewProject(false)}
+        onClose={handleCloseNewProject}
         onCreate={handleCreate}
       />
     </DashboardLayout>

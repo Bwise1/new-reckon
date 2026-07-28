@@ -20,6 +20,7 @@ interface BoqProjectPayload {
     header: string;
     items: Array<{
       id: string;
+      header: string;
       description: string;
       measurements: Array<{
         unit: string;
@@ -84,6 +85,7 @@ export const buildBoqPayload = ({
       const units = UNIT_PAYLOAD[item.unit] ?? UNIT_PAYLOAD.m3;
       return {
         id: itemLabelFromIndex(itemIndex),
+        header: item.header,
         description: item.description,
         measurements: [
           {

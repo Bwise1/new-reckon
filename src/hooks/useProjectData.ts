@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fetchAndMergeProjectPlans } from '@/services/planSync.service';
 import {
   boqSync,
@@ -36,10 +36,14 @@ export const useProjectData = (
 ) => {
   const loadedRef = useRef<string | null>(null);
   const isLoggedIn = Boolean(localStorage.getItem('token'));
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    if (!projectId) return;
-    if (!isLoggedIn) return;
+    if (!projectId || !isLoggedIn) {
+      setIsReady(true);
+      return;
+    }
+    setIsReady(false);
 
     // Local baseline: always load persisted store first so the canvas has
     // something to render before the network responses arrive.
@@ -51,17 +55,16 @@ export const useProjectData = (
     const apiClientUuid = projectInfo?.clientUuid ?? null;
 
     void (async () => {
-      // Skip until the API confirms this project has a real client_uuid.
-      // The effect re-runs when React Query resolves the project.
-      const clientUuid = ensureClientUuid(projectId, apiClientUuid);
-      if (!clientUuid) {
-        console.log(
-          `[project-data] waiting for API client_uuid project=${projectId}`
-        );
-        return;
-      }
-
       try {
+        // Skip until the API confirms this project has a real client_uuid.
+        // The effect re-runs when React Query resolves the project.
+        const clientUuid = ensureClientUuid(projectId, apiClientUuid);
+        if (!clientUuid) {
+          console.log(
+            `[project-data] waiting for API client_uuid project=${projectId}`
+          );
+          return;
+        }
         const [boqResponse, plansPromise, calibrationsResponse, measurementsResponse] =
           await Promise.all([
             boqSync.list(projectId).catch((error) => {
@@ -166,16 +169,20 @@ export const useProjectData = (
         });
 
         console.log(`[project-data] hydrated project=${projectId}`);
+
+        // Resume draining any ops queued from previous sessions.
+        syncQueue.resume(projectId);
       } catch (error) {
         console.warn('[project-data] hydration failed', error);
+      } finally {
+        setIsReady(true);
       }
-
-      // Resume draining any ops queued from previous sessions.
-      syncQueue.resume(projectId);
     })();
 
     return () => {
       if (projectId) void syncQueue.flush(projectId);
     };
   }, [projectId, projectInfo?.clientUuid, isLoggedIn]);
+
+  return { isReady };
 };

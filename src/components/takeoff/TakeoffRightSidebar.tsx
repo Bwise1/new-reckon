@@ -159,7 +159,17 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
         </p>
       )}
 
-      <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden custom-scrollbar">
+      <div
+        className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden custom-scrollbar"
+        onClick={(e) => {
+          // Clicking empty space (not a card, not a control inside one)
+          // exits measuring mode so the floating toolbar closes. Clicks on
+          // cards/canvas are handled separately and retarget instead.
+          if (e.target === e.currentTarget && boqTargeting) {
+            exitBoqTargeting();
+          }
+        }}
+      >
         {boqElements.map((element) => {
           const isExpanded = expandedElements[element.id] ?? true;
 
