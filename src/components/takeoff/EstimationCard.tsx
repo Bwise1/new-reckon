@@ -43,6 +43,12 @@ interface EstimationCardProps {
    * Attached as sourceMeasurementId on the resulting history chip so
    * plan-side edits/deletes propagate. */
   pendingMeasurementId?: string | null;
+  /** Id of the current measuring session (boqTargeting.sessionId) when
+   * this card is the target. Stamped onto the resulting history chip as
+   * groupId so everything measured in one session displays as one summed
+   * chip. Undefined when committing a manually-typed value (no active
+   * session) — those stay individually displayed. */
+  activeSessionId?: string | null;
   /** Clears the staged measured value (called after commit or Esc). */
   onClearPendingMeasured?: () => void;
   className?: string;
@@ -63,6 +69,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
   isTargeting = false,
   pendingMeasuredValue = null,
   pendingMeasurementId = null,
+  activeSessionId = null,
   onClearPendingMeasured,
   className = "",
 }) => {
@@ -100,12 +107,21 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
 
   React.useEffect(() => {
     if (pendingMeasuredValue !== null && isTargeting && pendingMeasurementId) {
-      // A formula may already be in progress (e.g. "171.25+") waiting on
-      // this next measurement. Append rather than replace so drawing a
-      // second measurement doesn't wipe out what's already been staged.
+      // If a DIFFERENT measurement was pending before this one, the store
+      // already auto-committed it as its own history chip (see
+      // addMeasurement/bindMeasurementToItem) — the input's leftover text
+      // reflects that stale value, not an in-progress formula, so it must
+      // reset rather than have the new value appended onto it. Only when
+      // the same measurement is still pending (the user is actively
+      // building a formula, e.g. "171.25+") do we append.
+      const previousMeasurementId = stagedRef.current?.measurementId ?? null;
+      const wasAutoCommitted =
+        previousMeasurementId !== null &&
+        previousMeasurementId !== pendingMeasurementId;
       setTakeoff((current) => {
-        const next = isValidSequence(current, pendingMeasuredValue)
-          ? current + pendingMeasuredValue
+        const base = wasAutoCommitted ? "" : current;
+        const next = isValidSequence(base, pendingMeasuredValue)
+          ? base + pendingMeasuredValue
           : pendingMeasuredValue;
         stagedRef.current = { value: next, measurementId: pendingMeasurementId };
         return next;
@@ -125,6 +141,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
       value: expression,
       isDeduct: mode === "deduct",
       ...(sourceMeasurementId ? { sourceMeasurementId } : {}),
+      ...(activeSessionId ? { groupId: activeSessionId } : {}),
     };
     pushHistory([...history, entry]);
     stagedRef.current = null;
@@ -134,6 +151,50 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
   const removeHistoryItem = (itemId: string) => {
     pushHistory(history.filter((item) => item.id !== itemId));
   };
+
+  // Remove every entry from one measuring session at once — a merged chip
+  // has no single "value" to attribute to one line, so its "X" clears the
+  // whole group.
+  const removeHistoryGroup = (groupId: string) => {
+    pushHistory(history.filter((item) => item.groupId !== groupId));
+  };
+
+  // Entries sharing a groupId (one continuous measuring session) collapse
+  // into a single displayed chip showing their summed value; everything
+  // else (manual entries, single-line sessions) renders exactly as today.
+  type DisplayRow =
+    | { kind: "single"; item: HistoryItem }
+    | { kind: "group"; groupId: string; items: HistoryItem[]; isDeduct: boolean };
+
+  const displayRows = useMemo<DisplayRow[]>(() => {
+    const rows: DisplayRow[] = [];
+    const groupIndex = new Map<string, number>();
+    history.forEach((item) => {
+      if (!item.groupId) {
+        rows.push({ kind: "single", item });
+        return;
+      }
+      const existingIndex = groupIndex.get(item.groupId);
+      if (existingIndex === undefined) {
+        groupIndex.set(item.groupId, rows.length);
+        rows.push({
+          kind: "group",
+          groupId: item.groupId,
+          items: [item],
+          isDeduct: !!item.isDeduct,
+        });
+        return;
+      }
+      const existing = rows[existingIndex];
+      if (existing.kind === "group") existing.items.push(item);
+    });
+    // A "group" of exactly one entry has nothing to merge — show it plainly.
+    return rows.flatMap((row) =>
+      row.kind === "group" && row.items.length === 1
+        ? [{ kind: "single" as const, item: row.items[0] }]
+        : [row]
+    );
+  }, [history]);
 
   const updateUnit = (newUnit: UnitType) => {
     setUnit(newUnit);
@@ -192,37 +253,57 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
           />
         </div>
 
-        {history.length > 0 && (
+        {displayRows.length > 0 && (
           <div>
             <p className="text-[13px] font-bold text-[#1F1F1F] mb-1.5">History:</p>
             <div className="flex flex-wrap gap-1 items-center text-[11px]">
-              {history.map((item, idx) => (
-                <React.Fragment key={item.id}>
-                  {idx > 0 && (
-                    <span className="text-[#1F1F1F] font-semibold px-0.5">
-                      {item.isDeduct ? "−" : "+"}
-                    </span>
-                  )}
-                  <div
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] ${
-                      item.isDeduct
-                        ? "bg-red-50/80 border-red-100 text-red-500"
-                        : idx === 0
-                          ? "bg-gray-50 border-gray-200 text-gray-600"
-                          : "bg-amber-50/80 border-amber-100 text-amber-700"
-                    }`}
-                  >
-                    <span>{item.value}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeHistoryItem(item.id)}
-                      className="opacity-60 hover:opacity-100 cursor-pointer"
+              {displayRows.map((row, idx) => {
+                const isDeduct =
+                  row.kind === "single" ? !!row.item.isDeduct : row.isDeduct;
+                const displayValue =
+                  row.kind === "single"
+                    ? row.item.value
+                    : formatQtyDisplay(
+                        Math.abs(computeQtyFromHistory(row.items))
+                      );
+                const key = row.kind === "single" ? row.item.id : row.groupId;
+                const onRemove =
+                  row.kind === "single"
+                    ? () => removeHistoryItem(row.item.id)
+                    : () => removeHistoryGroup(row.groupId);
+                return (
+                  <React.Fragment key={key}>
+                    {idx > 0 && (
+                      <span className="text-[#1F1F1F] font-semibold px-0.5">
+                        {isDeduct ? "−" : "+"}
+                      </span>
+                    )}
+                    <div
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] ${
+                        isDeduct
+                          ? "bg-red-50/80 border-red-100 text-red-500"
+                          : idx === 0
+                            ? "bg-gray-50 border-gray-200 text-gray-600"
+                            : "bg-amber-50/80 border-amber-100 text-amber-700"
+                      }`}
+                      title={
+                        row.kind === "group"
+                          ? `${row.items.length} measurements combined`
+                          : undefined
+                      }
                     >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                </React.Fragment>
-              ))}
+                      <span>{displayValue}</span>
+                      <button
+                        type="button"
+                        onClick={onRemove}
+                        className="opacity-60 hover:opacity-100 cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </React.Fragment>
+                );
+              })}
             </div>
           </div>
         )}

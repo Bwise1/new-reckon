@@ -230,6 +230,12 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                           ? boqTargeting.pendingMeasurementId
                           : null
                       }
+                      activeSessionId={
+                        boqTargeting?.elementId === element.id &&
+                        boqTargeting?.itemId === card.id
+                          ? boqTargeting.sessionId
+                          : null
+                      }
                       onClearPendingMeasured={() => {
                         // Called after the card commits a chip. Persist the
                         // binding on the underlying measurement and clear

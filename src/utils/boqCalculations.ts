@@ -76,12 +76,17 @@ export const createEmptyBoqElement = (index: number): BoqElementData => {
   };
 };
 
+// Construction/survey convention: I and O are skipped when lettering items
+// so they can't be mistaken for 1 and 0. 24 usable letters per "digit".
+const LABEL_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+
 export const itemLabelFromIndex = (index: number): string => {
+  const base = LABEL_ALPHABET.length;
   let label = '';
   let n = index;
   do {
-    label = String.fromCharCode(65 + (n % 26)) + label;
-    n = Math.floor(n / 26) - 1;
+    label = LABEL_ALPHABET[n % base] + label;
+    n = Math.floor(n / base) - 1;
   } while (n >= 0);
   return label;
 };

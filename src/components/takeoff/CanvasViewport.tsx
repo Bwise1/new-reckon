@@ -20,6 +20,9 @@ interface CanvasViewportProps {
   onStageDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
   measurementsChildren: React.ReactNode;
   draftChildren: React.ReactNode;
+  /** Plain HTML overlay (e.g. the hover tooltip), rendered as a sibling of
+   * the Stage so it can be positioned with CSS in raw stage/screen pixels. */
+  overlayChildren?: React.ReactNode;
 }
 
 const CanvasViewport: React.FC<CanvasViewportProps> = ({
@@ -40,6 +43,7 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
   onStageDragEnd,
   measurementsChildren,
   draftChildren,
+  overlayChildren,
 }) => {
   return (
     <div
@@ -92,6 +96,7 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
           </Group>
         </Layer>
       </Stage>
+      {overlayChildren}
     </div>
   );
 };

@@ -96,6 +96,10 @@ interface TakeoffStore {
      * When the user commits, this is passed as `sourceMeasurementId` on
      * the history chip so delete/edit propagation stays wired. */
     pendingMeasurementId: string | null;
+    /** Minted fresh each time targeting starts; stamped onto every history
+     * entry committed during this session so they can be displayed as one
+     * summed chip instead of one per measured line. */
+    sessionId: string;
   } | null;
 
   /** Change just the add/deduct mode of the current targeting without
@@ -826,6 +830,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         mode,
         pendingValue: null,
         pendingMeasurementId: null,
+        sessionId: generateClientId(),
       },
     });
   },
@@ -891,6 +896,11 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   bindMeasurementToItem: (measurementId, elementId, itemId, mode = 'add') => {
     const projectId = get().currentProjectId;
     const previousBoqElements = get().boqElements;
+    const targeting = get().boqTargeting;
+    const sessionId =
+      targeting?.elementId === elementId && targeting?.itemId === itemId
+        ? targeting.sessionId
+        : undefined;
 
     set((state) => {
       let matchedMeasurement: Measurement | null = null;
@@ -926,6 +936,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
               value: Math.abs(matchedMeasurement!.quantity).toFixed(2),
               isDeduct: mode === 'deduct',
               sourceMeasurementId: measurementId,
+              ...(sessionId ? { groupId: sessionId } : {}),
             });
             return { ...item, history: withoutStale };
           }),

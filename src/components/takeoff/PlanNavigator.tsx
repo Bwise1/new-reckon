@@ -8,6 +8,7 @@ import { planService } from '@/services/plan.service';
 import { useConfirm } from '@/contexts/ConfirmProvider';
 import { decodeMojibake } from '@/utils/textEncoding';
 import { useStorage } from '@/hooks/useStorage';
+import { itemLabelFromIndex } from '@/utils/boqCalculations';
 
 interface PlanNavigatorProps {
   projectTitle: string;
@@ -556,7 +557,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
               elementIndex: elIdx,
               elementId: element.id,
               elementTitle: element.title,
-              itemLetter: String.fromCharCode(65 + (itIdx % 26)),
+              itemLetter: itemLabelFromIndex(itIdx),
               itemId: item.id,
               itemUnit: item.unit,
               itemHeader: item.header || item.description || 'Item',

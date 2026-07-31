@@ -77,6 +77,10 @@ export interface HistoryItem {
   /** When present, this entry mirrors a plan measurement. Manual edits to
    * the value strip this reference (unlink-on-edit). */
   sourceMeasurementId?: string;
+  /** Entries sharing a groupId came from one continuous measuring session
+   * (started when the user began measuring, ended by Exit/Escape) and are
+   * displayed as a single summed chip instead of one per line. */
+  groupId?: string;
 }
 
 export interface EstimationCardData {
