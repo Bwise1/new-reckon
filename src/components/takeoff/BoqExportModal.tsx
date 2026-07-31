@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 
+export type ExportFormat = "pdf" | "excel";
+
 interface BoqExportModalProps {
   open: boolean;
   mode: "preview" | "export";
@@ -7,7 +9,7 @@ interface BoqExportModalProps {
   initialContingency: number;
   busy?: boolean;
   onClose: () => void;
-  onConfirm: (vat: number, contingency: number) => void;
+  onConfirm: (vat: number, contingency: number, format: ExportFormat) => void;
 }
 
 const BoqExportModal: React.FC<BoqExportModalProps> = ({
@@ -21,6 +23,7 @@ const BoqExportModal: React.FC<BoqExportModalProps> = ({
 }) => {
   const [vat, setVat] = useState(String(initialVat));
   const [contingency, setContingency] = useState(String(initialContingency));
+  const [format, setFormat] = useState<ExportFormat>("pdf");
 
   if (!open) return null;
 
@@ -31,6 +34,33 @@ const BoqExportModal: React.FC<BoqExportModalProps> = ({
           {mode === "preview" ? "Preview BOQ" : "Export BOQ"}
         </h3>
         <div className="space-y-3">
+          <div>
+            <p className="text-sm font-semibold text-gray-700 mb-1.5">Format</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setFormat("pdf")}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg border transition ${
+                  format === "pdf"
+                    ? "bg-[#003566] text-white border-[#003566]"
+                    : "border-gray-300 text-gray-600 hover:border-gray-400"
+                }`}
+              >
+                PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormat("excel")}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg border transition ${
+                  format === "excel"
+                    ? "bg-[#003566] text-white border-[#003566]"
+                    : "border-gray-300 text-gray-600 hover:border-gray-400"
+                }`}
+              >
+                Excel (.xlsx)
+              </button>
+            </div>
+          </div>
           <label className="block text-sm font-semibold text-gray-700">
             Add Contingency
             <input
@@ -67,7 +97,7 @@ const BoqExportModal: React.FC<BoqExportModalProps> = ({
             type="button"
             disabled={busy}
             onClick={() =>
-              onConfirm(Number.parseFloat(vat) || 0, Number.parseFloat(contingency) || 0)
+              onConfirm(Number.parseFloat(vat) || 0, Number.parseFloat(contingency) || 0, format)
             }
             className="px-4 py-2 text-sm rounded-lg bg-[#003566] text-white font-semibold disabled:opacity-50"
           >

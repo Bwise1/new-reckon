@@ -31,6 +31,7 @@ import {
 } from "@/utils/takeoffMeasurement";
 import { measurementBelongsToPlan } from "@/utils/planDocument";
 import { useConfirm } from "@/contexts/ConfirmProvider";
+import { itemLabelFromIndex } from "@/utils/boqCalculations";
 
 const MIN_DISTANCE = 0.001; // Minimum valid distance in pixels
 const MIN_LINEAR_EDIT_DISTANCE = 2; // Prevent collapsing line while editing
@@ -147,6 +148,10 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [isPdfSnap, setIsPdfSnap] = useState(false);
   const [uncalibratedWarning, setUncalibratedWarning] = useState(false);
+  // Raw stage-relative CSS pixel position, kept separate from the
+  // image-pixel `mousePos` used for drawing — this is what positions the
+  // hover tooltip without needing to re-derive screen coords from it.
+  const [screenPointerPos, setScreenPointerPos] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!uncalibratedWarning) return;
@@ -820,6 +825,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
 
           const pointerPosition = stage.getPointerPosition();
           if (!pointerPosition) return;
+
+          setScreenPointerPos(pointerPosition);
 
           const safeImageScale = imageScale > 0 ? imageScale : 1;
           let point = {
@@ -1508,24 +1515,29 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   // visual weight while still letting strokes grow with zoom.
   const strokeScale = 1 / (imageScale > 0 ? imageScale : 1);
 
-  // Lookup: measurement client_uuid → "1·C" style label from its BOQ binding.
-  // Computed once per render so the render loop doesn't rescan boqElements.
-  const boqBindingLabel = useMemo(() => {
-    const byMeasurementId = new Map<string, string>();
-    boqElements.forEach((element, elIndex) => {
-      element.items.forEach((item, itIndex) => {
-        item.history.forEach((entry) => {
-          if (!entry.sourceMeasurementId) return;
-          const letter = String.fromCharCode(65 + (itIndex % 26));
-          byMeasurementId.set(
-            entry.sourceMeasurementId,
-            `${elIndex + 1}·${letter}`
-          );
-        });
-      });
-    });
-    return byMeasurementId;
-  }, [boqElements]);
+  // PlanSwift-style hover tooltip: instead of an inline dimension label
+  // baked into the line, show the value in a small floating box that
+  // follows the cursor while hovering any measurement.
+  const hoverTooltipText = useMemo(() => {
+    if (!hoveredMeasurement) return null;
+    const item = takeoffItems.find((i) => i.id === hoveredMeasurement.itemId);
+    const measurement = item?.measurements.find(
+      (m) => m.id === hoveredMeasurement.measurementId
+    );
+    if (!item || !measurement) return null;
+    const mType = getMeasurementType(measurement, item);
+    if (mType === "linear" && measurement.points.length === 2) {
+      return formatDistance(
+        calculateQuantity(measurement.points, "linear", currentScale)
+      );
+    }
+    if (mType === "area" && measurement.points.length >= 3) {
+      return formatArea(
+        calculateQuantity(measurement.points, "area", currentScale)
+      );
+    }
+    return null;
+  }, [hoveredMeasurement, takeoffItems, currentScale]);
 
   return (
     <div className="flex-1 flex flex-col relative overflow-hidden min-h-0">
@@ -1534,11 +1546,32 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         currentScale={currentScale}
         activeTool={activeToolProp ?? activeTool}
         activeColor={activeColorProp ?? activeColor}
-        activeRealWidth={activeRealWidthLive}
+        activeRealWidth={
+          selectedMeasurementShape && currentScale && currentScale > 0
+            ? (selectedMeasurementShape.strokeWidth ?? 2) / currentScale
+            : activeRealWidthLive
+        }
+        selectedMeasurementId={selectedMeasurement?.measurementId ?? null}
         onSelectTool={onSelectTool}
         onFinishTool={onFinishTool}
         onColorChange={onColorChange}
-        onRealWidthChange={(w) => useTakeoffStore.setState({ activeRealWidth: w })}
+        onRealWidthChange={(w) => {
+          if (selectedMeasurement && currentScale && currentScale > 0) {
+            const item = takeoffItems.find((i) => i.id === selectedMeasurement.itemId);
+            const m = item?.measurements.find((m) => m.id === selectedMeasurement.measurementId);
+            if (item && m) {
+              const newStrokeWidth = Math.max(w * currentScale, 2);
+              const updatedMeasurements = item.measurements.map((measurement) =>
+                measurement.id === m.id
+                  ? { ...measurement, strokeWidth: newStrokeWidth }
+                  : measurement
+              );
+              updateTakeoffItem(item.id, { measurements: updatedMeasurements });
+            }
+          } else {
+            useTakeoffStore.setState({ activeRealWidth: w });
+          }
+        }}
         onToggleCalibration={() => {
           const newMode = !calibrationMode;
           setCalibrationMode(newMode);
@@ -1607,27 +1640,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                     const dx = p2.x - p1.x;
                     const dy = p2.y - p1.y;
                     const angle = Math.atan2(dy, dx);
-                    // Length of the segment and midpoint used to open a gap
-                    // around the dimension label — |---- 300.13m ----|
-                    const lineLen = Math.sqrt(dx * dx + dy * dy);
-                    const ux = lineLen > 0 ? dx / lineLen : 0;
-                    const uy = lineLen > 0 ? dy / lineLen : 0;
-                    const midX = (p1.x + p2.x) / 2;
-                    const midY = (p1.y + p2.y) / 2;
-                    const labelText = formatDistance(
-                      calculateQuantity(displayPoints, "linear", currentScale)
-                    );
-                    // Estimate label half-width in image-pixels. Konva Text width
-                    // isn't known until render, so we use a generous character-count
-                    // estimate (0.6× font size per char + padding) to guarantee the
-                    // gap clears the text on any font/DPR.
-                    const labelHalfWidth =
-                      (labelText.length * LABEL_FONT_SIZE * 0.6 * 0.5 + 8) * labelScale;
-                    const gapHalfMax = lineLen / 2 - 2 * strokeScale;
-                    const gapHalf = Math.min(labelHalfWidth, Math.max(0, gapHalfMax));
-                    const showGap = gapHalf > 0 && lineLen > 2 * gapHalf + 4 * strokeScale;
-                    const gapStart = { x: midX - ux * gapHalf, y: midY - uy * gapHalf };
-                    const gapEnd = { x: midX + ux * gapHalf, y: midY + uy * gapHalf };
                     const isSelected =
                       selectedMeasurement?.itemId === item.id &&
                       selectedMeasurement?.measurementId === m.id;
@@ -1661,7 +1673,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           group.position({ x: 0, y: 0 });
                         }}
                         onClick={(e) => {
-                          if (!isSelectMode) return;
+                          if (activeTool || calibrationMode || isPanningMode) return;
                           e.cancelBubble = true;
                           setSelectedMeasurement({
                             itemId: item.id,
@@ -1669,18 +1681,20 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           });
                         }}
                         onMouseEnter={(e) => {
-                          if (!isSelectMode) return;
-                          const container = e.target.getStage()?.container();
-                          if (container) container.style.cursor = "move";
+                          if (isSelectMode) {
+                            const container = e.target.getStage()?.container();
+                            if (container) container.style.cursor = "move";
+                          }
                           setHoveredMeasurement({
                             itemId: item.id,
                             measurementId: m.id,
                           });
                         }}
                         onMouseLeave={(e) => {
-                          if (!isSelectMode) return;
-                          const container = e.target.getStage()?.container();
-                          if (container) container.style.cursor = "pointer";
+                          if (isSelectMode) {
+                            const container = e.target.getStage()?.container();
+                            if (container) container.style.cursor = "pointer";
+                          }
                           setHoveredMeasurement(null);
                         }}
                       >
@@ -1704,22 +1718,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                             opacity={0.7}
                             listening={false}
                           />
-                        ) : showGap ? (
-                          <>
-                            {/* Split into two segments so the label sits in a gap */}
-                            <Line
-                              points={[p1.x, p1.y, gapStart.x, gapStart.y]}
-                              stroke={mColor}
-                              strokeWidth={(isSelected || isHovered ? mStroke * 1.5 : mStroke) * strokeScale}
-                              opacity={isSelected || isHovered ? 0.8 : 0.6}
-                            />
-                            <Line
-                              points={[gapEnd.x, gapEnd.y, p2.x, p2.y]}
-                              stroke={mColor}
-                              strokeWidth={(isSelected || isHovered ? mStroke * 1.5 : mStroke) * strokeScale}
-                              opacity={isSelected || isHovered ? 0.8 : 0.6}
-                            />
-                          </>
                         ) : (
                           <Line
                             points={[p1.x, p1.y, p2.x, p2.y]}
@@ -1728,35 +1726,9 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                             opacity={isSelected || isHovered ? 0.8 : 0.6}
                           />
                         )}
-                        {/* Dimension label — sits in the gap so it reads
-                            like a printed dimension: |---- 500.07m ----| */}
-                        <Text
-                          x={midX}
-                          y={midY}
-                          text={labelText}
-                          fontSize={LABEL_FONT_SIZE * labelScale}
-                          fill={mColor}
-                          rotation={angle * (180 / Math.PI)}
-                          offsetX={labelText.length * LABEL_FONT_SIZE * 0.3 * labelScale}
-                          offsetY={LABEL_FONT_SIZE * 0.5 * labelScale}
-                          listening={false}
-                        />
-
-                        {/* BOQ binding badge — small chip showing which
-                            Element·Item this measurement feeds. Always
-                            visible on bound measurements. */}
-                        {boqBindingLabel.get(m.id) && (
-                          <Text
-                            x={midX + LABEL_FONT_SIZE * 1.2 * labelScale}
-                            y={midY + LABEL_FONT_SIZE * 0.9 * labelScale}
-                            text={boqBindingLabel.get(m.id)!}
-                            fontSize={LABEL_FONT_SIZE * 0.75 * labelScale}
-                            fill="#f97316"
-                            fontStyle="bold"
-                            rotation={angle * (180 / Math.PI)}
-                            listening={false}
-                          />
-                        )}
+                        {/* No inline dimension label — distance shows in a
+                            floating tooltip on hover instead (see the
+                            cursor-following box rendered outside Konva). */}
 
                         {/* Edge hit area for dragging entire segment */}
                         {isSelected && (
@@ -2003,19 +1975,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           offsetY={4 * labelScale}
                           listening={false}
                         />
-                        {boqBindingLabel.get(m.id) && (
-                          <Text
-                            x={midX}
-                            y={midY + LABEL_FONT_SIZE * 1.1 * labelScale}
-                            text={boqBindingLabel.get(m.id)!}
-                            fontSize={LABEL_FONT_SIZE * 0.75 * labelScale}
-                            fill="#f97316"
-                            fontStyle="bold"
-                            align="center"
-                            verticalAlign="middle"
-                            listening={false}
-                          />
-                        )}
                       </Group>
                     );
                   } else if (mType === "area") {
@@ -2069,7 +2028,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           group.position({ x: 0, y: 0 });
                         }}
                         onClick={(e) => {
-                          if (!isSelectMode) return;
+                          if (activeTool || calibrationMode || isPanningMode) return;
                           e.cancelBubble = true;
                           setSelectedMeasurement({
                             itemId: item.id,
@@ -2077,18 +2036,20 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           });
                         }}
                         onMouseEnter={(e) => {
-                          if (!isSelectMode) return;
-                          const container = e.target.getStage()?.container();
-                          if (container) container.style.cursor = "move";
+                          if (isSelectMode) {
+                            const container = e.target.getStage()?.container();
+                            if (container) container.style.cursor = "move";
+                          }
                           setHoveredMeasurement({
                             itemId: item.id,
                             measurementId: m.id,
                           });
                         }}
                         onMouseLeave={(e) => {
-                          if (!isSelectMode) return;
-                          const container = e.target.getStage()?.container();
-                          if (container) container.style.cursor = "pointer";
+                          if (isSelectMode) {
+                            const container = e.target.getStage()?.container();
+                            if (container) container.style.cursor = "pointer";
+                          }
                           setHoveredMeasurement(null);
                         }}
                       >
@@ -2123,20 +2084,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           offsetY={0}
                           listening={false}
                         />
-                        {boqBindingLabel.get(m.id) && (
-                          <Text
-                            x={center.x}
-                            y={center.y + LABEL_FONT_SIZE * 1.1 * labelScale}
-                            text={boqBindingLabel.get(m.id)!}
-                            fontSize={LABEL_FONT_SIZE * 0.75 * labelScale}
-                            fill="#f97316"
-                            fontStyle="bold"
-                            align="center"
-                            verticalAlign="middle"
-                            listening={false}
-                          />
-                        )}
-
                         {/* Edge hit areas for dragging segments */}
                         {isSelected &&
                           m.points.map((p, i) => {
@@ -2203,22 +2150,9 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                     const isSelected =
                       selectedMeasurement?.itemId === item.id &&
                       selectedMeasurement?.measurementId === m.id;
-                    const bindingLabel = boqBindingLabel.get(m.id);
-                    const firstPoint = m.points[0];
 
                     return (
                       <React.Fragment key={m.id}>
-                        {bindingLabel && firstPoint && (
-                          <Text
-                            x={firstPoint.x + 10 * strokeScale}
-                            y={firstPoint.y - 8 * strokeScale}
-                            text={bindingLabel}
-                            fontSize={LABEL_FONT_SIZE * 0.75 * labelScale}
-                            fill="#f97316"
-                            fontStyle="bold"
-                            listening={false}
-                          />
-                        )}
                         {m.points.map((p, idx) => {
                       const isHovered =
                         hoveredMeasurement?.itemId === item.id &&
@@ -2271,7 +2205,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                             handlePointDrag(item.id, m.id, idx, e.target.position());
                           }}
                           onClick={(e) => {
-                            if (!isSelectMode) return;
+                            if (activeTool || calibrationMode || isPanningMode) return;
                             e.cancelBubble = true;
                             setSelectedMeasurement({
                               itemId: item.id,
@@ -2279,18 +2213,20 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                             });
                           }}
                           onMouseEnter={(e) => {
-                            if (!isSelectMode) return;
-                            const container = e.target.getStage()?.container();
-                            if (container) container.style.cursor = "move";
+                            if (isSelectMode) {
+                              const container = e.target.getStage()?.container();
+                              if (container) container.style.cursor = "move";
+                            }
                             setHoveredMeasurement({
                               itemId: item.id,
                               measurementId: m.id,
                             });
                           }}
                           onMouseLeave={(e) => {
-                            if (!isSelectMode) return;
-                            const container = e.target.getStage()?.container();
-                            if (container) container.style.cursor = "pointer";
+                            if (isSelectMode) {
+                              const container = e.target.getStage()?.container();
+                              if (container) container.style.cursor = "pointer";
+                            }
                             setHoveredMeasurement(null);
                           }}
                         />
@@ -2826,6 +2762,19 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
               );
             })()}
         </>}
+        overlayChildren={
+          hoveredMeasurement && hoverTooltipText && screenPointerPos ? (
+            <div
+              className="absolute z-30 pointer-events-none rounded-md bg-gray-900/90 px-2 py-1 text-xs font-semibold text-white shadow-lg"
+              style={{
+                left: screenPointerPos.x + 14,
+                top: screenPointerPos.y + 14,
+              }}
+            >
+              {hoverTooltipText}
+            </div>
+          ) : null
+        }
       />
 
       {uncalibratedWarning && (
@@ -2842,10 +2791,10 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           ? element.items.findIndex((it) => it.id === boqTargeting.itemId)
           : -1;
         const elementLabel = elementIndex >= 0 ? `Element ${elementIndex + 1}` : 'Element';
-        // Match the sidebar's A/B/C letter naming for items.
+        // Match the sidebar's item lettering (I/O skipped, see boqCalculations).
         const itemLetter =
           itemIndex >= 0
-            ? String.fromCharCode(65 + (itemIndex % 26))
+            ? itemLabelFromIndex(itemIndex)
             : '?';
         const unitLabel =
           boqTargeting.unit === 'm2'

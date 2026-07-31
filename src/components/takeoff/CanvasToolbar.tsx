@@ -10,6 +10,7 @@ interface CanvasToolbarProps {
   activeTool: TakeoffMode | null;
   activeColor: string;
   activeRealWidth: number;
+  selectedMeasurementId?: string | null;
   onToggleCalibration: () => void;
   onSelectTool: (type: TakeoffMode) => void;
   onFinishTool: () => void;
@@ -53,6 +54,8 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   calibrationMode,
   currentScale,
   activeTool,
+  activeRealWidth,
+  selectedMeasurementId,
   onToggleCalibration,
   onSelectTool,
   onFinishTool,
@@ -66,23 +69,21 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   const scaleDisplay = currentScale ? `1m = ${currentScale.toFixed(1)}px` : 'Unscaled';
 
   const liveColor = useTakeoffStore((s) => s.activeColor);
-  const liveRealWidth = useTakeoffStore((s) => s.activeRealWidth);
 
   // Local input state so the field stays editable mid-type
-  const [widthInput, setWidthInput] = useState(String(liveRealWidth));
+  const [widthInput, setWidthInput] = useState(Number(activeRealWidth).toFixed(3));
 
-  // Keep local input in sync if store changes externally
+  // Sync input when selected measurement changes (activeRealWidth changes) or deselects
   useEffect(() => {
-    setWidthInput(String(liveRealWidth));
-  }, [liveRealWidth]);
+    setWidthInput(Number(activeRealWidth).toFixed(3));
+  }, [activeRealWidth, selectedMeasurementId]);
 
   const commitWidth = (raw: string) => {
     const parsed = parseFloat(raw);
     if (isFinite(parsed) && parsed > 0) {
       onRealWidthChange(parsed);
     } else {
-      // Revert to last valid value
-      setWidthInput(String(liveRealWidth));
+      setWidthInput(Number(activeRealWidth).toFixed(3));
     }
   };
 
@@ -191,11 +192,23 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
 
       {/* Width input */}
       <div
-        className="flex items-stretch rounded-lg border border-gray-200 bg-white shadow-sm shrink-0 h-10 overflow-hidden"
-        title={currentScale ? 'Line width in metres — scaled to plan calibration' : 'Calibrate first to use real-world width'}
+        className={`flex items-stretch rounded-lg border shadow-sm shrink-0 h-10 overflow-hidden transition-colors ${
+          selectedMeasurementId && currentScale
+            ? 'border-secondary/50 bg-secondary/5'
+            : 'border-gray-200 bg-white'
+        }`}
+        title={
+          selectedMeasurementId && currentScale
+            ? 'Edit selected measurement line width'
+            : currentScale
+            ? 'Line width in metres — scaled to plan calibration'
+            : 'Calibrate first to use real-world width'
+        }
       >
-        <span className="px-2.5 flex items-center text-xs font-medium text-gray-500 border-r border-gray-200 bg-gray-50">
-          Width
+        <span className={`px-2.5 flex items-center text-xs font-medium border-r border-gray-200 whitespace-nowrap ${
+          selectedMeasurementId && currentScale ? 'text-secondary bg-secondary/10' : 'text-gray-500 bg-gray-50'
+        }`}>
+          {selectedMeasurementId && currentScale ? 'Edit Width' : 'Width'}
         </span>
         <input
           type="number"
@@ -210,7 +223,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               e.currentTarget.blur();
             }
           }}
-          className="w-16 px-2 text-sm tabular-nums outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
+          className="w-16 px-2 text-sm tabular-nums outline-none bg-transparent disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
         />
         <span className="px-2 flex items-center text-xs text-gray-500 border-l border-gray-200 bg-gray-50">
           m

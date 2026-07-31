@@ -4,6 +4,7 @@ import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useProject } from '@/hooks/useProjects';
 import { openAuthenticatedDownload } from '@/lib/api-client';
 import { buildBoqPayload, boqService } from '@/services/boq.service';
+import type { ExportFormat } from '@/components/takeoff/BoqExportModal';
 
 export function useBoqExport() {
   const { id: projectId } = useParams<{ id: string }>();
@@ -30,13 +31,15 @@ export function useBoqExport() {
     await openAuthenticatedDownload(downloadUrl);
   };
 
-  const runPreview = async (vat: number, contingency: number) => {
+  const runPreview = async (vat: number, contingency: number, format: ExportFormat) => {
     setPricing({ vatRate: vat, contingency });
     try {
       setBusyAction(true);
       setStatusMessage('');
       const payload = buildExportPayload(vat, contingency);
-      const response = await boqService.previewPdf(payload);
+      const response = format === 'excel'
+        ? await boqService.previewExcel(payload)
+        : await boqService.previewPdf(payload);
       await openDownload(response.data.downloadUrl);
       setStatusMessage('Preview ready.');
     } catch (error) {
@@ -47,7 +50,7 @@ export function useBoqExport() {
     }
   };
 
-  const runExport = async (vat: number, contingency: number) => {
+  const runExport = async (vat: number, contingency: number, format: ExportFormat) => {
     if (!projectId) {
       setStatusMessage('Project ID is missing.');
       setExportModalMode(null);
@@ -70,7 +73,9 @@ export function useBoqExport() {
       if (init.data.reference) {
         await boqService.verifyPayment(init.data.reference);
       }
-      const exported = await boqService.exportPdf(payload, init.data.exportId);
+      const exported = format === 'excel'
+        ? await boqService.exportExcel(payload, init.data.exportId)
+        : await boqService.exportPdf(payload, init.data.exportId);
       await openDownload(exported.data.downloadUrl);
       setStatusMessage('Export completed.');
     } catch (error) {
@@ -81,11 +86,11 @@ export function useBoqExport() {
     }
   };
 
-  const handleExportConfirm = (vat: number, contingency: number) => {
+  const handleExportConfirm = (vat: number, contingency: number, format: ExportFormat) => {
     if (exportModalMode === 'preview') {
-      void runPreview(vat, contingency);
+      void runPreview(vat, contingency, format);
     } else if (exportModalMode === 'export') {
-      void runExport(vat, contingency);
+      void runExport(vat, contingency, format);
     }
   };
 
