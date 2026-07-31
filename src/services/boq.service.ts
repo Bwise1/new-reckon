@@ -42,10 +42,6 @@ const UNIT_PAYLOAD: Record<UnitType, { unit: string; metric: string }> = {
   item: { unit: 'item', metric: 'Item' },
 };
 
-const elementHeader = (element: BoqElementData): string => {
-  const fromItem = element.items.map((i) => i.header.trim()).find(Boolean);
-  return fromItem || element.title;
-};
 
 const itemQty = (item: BoqElementData['items'][number]): number => {
   if (item.history.length > 0) {
@@ -80,7 +76,7 @@ export const buildBoqPayload = ({
   },
   elements: elements.map((element, elementIndex) => ({
     id: elementIndex + 1,
-    header: elementHeader(element),
+    header: element.title,
     items: element.items.map((item, itemIndex) => {
       const units = UNIT_PAYLOAD[item.unit] ?? UNIT_PAYLOAD.m3;
       return {
