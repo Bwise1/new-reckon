@@ -76,7 +76,7 @@ export const buildBoqPayload = ({
   },
   elements: elements.map((element, elementIndex) => ({
     id: elementIndex + 1,
-    header: element.title,
+    header: element.title.toUpperCase(),
     items: element.items.map((item, itemIndex) => {
       const units = UNIT_PAYLOAD[item.unit] ?? UNIT_PAYLOAD.m3;
       return {
