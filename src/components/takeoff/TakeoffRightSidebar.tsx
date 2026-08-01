@@ -38,11 +38,13 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
     deleteElementItem,
     duplicateElementItem,
     boqTargeting,
+    pendingCommit,
     startBoqTargeting,
     exitBoqTargeting,
     setBoqTargetingMode,
     setBoqTargetingPending,
-    setMeasurementBoqBinding,
+    clearPendingCommit,
+    bindMeasurementToItem,
     setFocusedBoqCard,
   } = useTakeoffStore();
 
@@ -206,7 +208,20 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
 
               {isExpanded && (
                 <div className="px-3 pb-3 space-y-3">
-                  {element.items.map((card, index) => (
+                  {element.items.map((card, index) => {
+                    const isTargetingThis =
+                      boqTargeting?.elementId === element.id &&
+                      boqTargeting?.itemId === card.id;
+                    const pendingCommitForThis =
+                      pendingCommit?.elementId === element.id &&
+                      pendingCommit?.itemId === card.id
+                        ? pendingCommit
+                        : null;
+                    // Live-updating value while measuring; stashed value after Exit.
+                    const displayPendingValue = isTargetingThis
+                      ? boqTargeting?.pendingValue ?? null
+                      : pendingCommitForThis?.value ?? null;
+                    return (
                     <EstimationCard
                       key={card.id}
                       data={card}
@@ -214,41 +229,28 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                       isActive={
                         activeElementId === element.id && activeCardId === card.id
                       }
-                      isTargeting={
-                        boqTargeting?.elementId === element.id &&
-                        boqTargeting?.itemId === card.id
-                      }
-                      pendingMeasuredValue={
-                        boqTargeting?.elementId === element.id &&
-                        boqTargeting?.itemId === card.id
-                          ? boqTargeting.pendingValue
-                          : null
-                      }
-                      pendingMeasurementId={
-                        boqTargeting?.elementId === element.id &&
-                        boqTargeting?.itemId === card.id
-                          ? boqTargeting.pendingMeasurementId
-                          : null
-                      }
-                      activeSessionId={
-                        boqTargeting?.elementId === element.id &&
-                        boqTargeting?.itemId === card.id
-                          ? boqTargeting.sessionId
-                          : null
-                      }
+                      isTargeting={isTargetingThis}
+                      pendingMeasuredValue={displayPendingValue}
+                      pendingCommitBundle={pendingCommitForThis}
+                      onSessionCommit={(mode) => {
+                        if (!pendingCommitForThis) return;
+                        bindMeasurementToItem(
+                          pendingCommitForThis.measurementIds,
+                          pendingCommitForThis.elementId,
+                          pendingCommitForThis.itemId,
+                          mode,
+                          pendingCommitForThis.value,
+                          pendingCommitForThis.sessionId,
+                        );
+                        clearPendingCommit();
+                      }}
                       onClearPendingMeasured={() => {
-                        // Called after the card commits a chip. Persist the
-                        // binding on the underlying measurement and clear
-                        // the staging slot.
-                        const pendingId = boqTargeting?.pendingMeasurementId;
-                        if (pendingId) {
-                          setMeasurementBoqBinding(
-                            pendingId,
-                            element.id,
-                            card.id
-                          );
-                        }
-                        setBoqTargetingPending(null, null);
+                        // Clear both the live-measuring pending value (if any)
+                        // and the stashed post-Exit pendingCommit (if any).
+                        // Manual commits should discard the drawn-session
+                        // total since the user typed their own value.
+                        setBoqTargetingPending(null, []);
+                        if (pendingCommitForThis) clearPendingCommit();
                       }}
                       onFocus={() => {
                         setActiveElementId(element.id);
@@ -282,7 +284,8 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                       onAddElement={handleAddElement}
                       onAddItem={() => handleAddItem(element.id)}
                     />
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

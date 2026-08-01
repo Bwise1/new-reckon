@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import FormulaToolbar from "@/components/ui/FormulaToolbar";
 import {
   isValidSequence,
@@ -25,7 +25,11 @@ interface FormulaInputProps {
   className?: string;
 }
 
-const FormulaInput: React.FC<FormulaInputProps> = ({
+export interface FormulaInputHandle {
+  focus: () => void;
+}
+
+const FormulaInput = forwardRef<FormulaInputHandle, FormulaInputProps>(({
   value,
   onChange,
   onCommit,
@@ -35,11 +39,21 @@ const FormulaInput: React.FC<FormulaInputProps> = ({
   isMeasuring = false,
   placeholder = "Enter formula...",
   className = "",
-}) => {
+}, ref) => {
   const [isFocused, setIsFocused] = useState(false);
   const [mode, setMode] = useState<"add" | "deduct">("add");
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      inputRef.current?.focus();
+      // Place caret at the end rather than selecting all — the user is
+      // more likely to append (e.g. edit the total) than replace.
+      const len = inputRef.current?.value.length ?? 0;
+      inputRef.current?.setSelectionRange(len, len);
+    },
+  }));
 
   const { isValid, error } = validateFormula(value);
 
@@ -183,6 +197,8 @@ const FormulaInput: React.FC<FormulaInputProps> = ({
       </div>
     </div>
   );
-};
+});
+
+FormulaInput.displayName = "FormulaInput";
 
 export default FormulaInput;

@@ -91,7 +91,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     boqTargeting,
     boqElements,
     exitBoqTargeting,
-    setBoqTargetingPending,
+    cancelBoqTargeting,
   } = useTakeoffStore();
   const {
     stageRef,
@@ -1352,16 +1352,12 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           target.isContentEditable);
 
       if (e.key === "Escape") {
-        // Layered Esc when targeting: first press clears the staged
-        // measured value (discarding it); second press exits targeting.
-        // Only after that does Esc fall through to cancel active draw/
-        // calibration.
+        // When measuring: Escape discards the running total (measurements
+        // drawn on the plan stay but aren't bound to the BOQ line) and
+        // ends the session. This mirrors PlanSwift's Escape-to-cancel.
+        // The Exit button uses exitBoqTargeting which commits instead.
         if (boqTargeting) {
-          if (boqTargeting.pendingValue !== null) {
-            setBoqTargetingPending(null, null);
-            return;
-          }
-          exitBoqTargeting();
+          cancelBoqTargeting();
           return;
         }
         setCurrentPoints([]);
@@ -1455,7 +1451,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     zoomToSelection,
     boqTargeting,
     exitBoqTargeting,
-    setBoqTargetingPending,
+    cancelBoqTargeting,
   ]);
 
   // Handle zoom

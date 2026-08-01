@@ -1,12 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef } from "react";
 import { Copy, Trash2, X } from "lucide-react";
 import UnitSelector from "./UnitSelector";
-import FormulaInput from "./FormulaInput";
+import FormulaInput, { type FormulaInputHandle } from "./FormulaInput";
 import DescriptionField from "./DescriptionField";
 import HeaderField from "./HeaderField";
 import type { EstimationCardData, UnitType, HistoryItem } from "@/types/takeoff";
 import { generateClientId } from "@/utils/id";
-import { isValidSequence } from "@/utils/formulaUtils";
 import {
   computeQtyFromHistory,
   formatQtyDisplay,
@@ -36,19 +35,24 @@ interface EstimationCardProps {
   /** True when the store's boqTargeting matches this card. Renders a
    * highlighted ring to make the "you're measuring for THIS" affordance clear. */
   isTargeting?: boolean;
-  /** Staged value from the most recent measurement, waiting for the user
-   * to Add/Deduct/edit or discard. Only used when isTargeting. */
+  /** Running total of all measurements drawn in this session.
+   * Updates live during measuring; keeps the value in the takeoff box
+   * after Exit until the user commits via Add/Deduct. */
   pendingMeasuredValue?: string | null;
-  /** Client uuid of the measurement that produced pendingMeasuredValue.
-   * Attached as sourceMeasurementId on the resulting history chip so
-   * plan-side edits/deletes propagate. */
-  pendingMeasurementId?: string | null;
-  /** Id of the current measuring session (boqTargeting.sessionId) when
-   * this card is the target. Stamped onto the resulting history chip as
-   * groupId so everything measured in one session displays as one summed
-   * chip. Undefined when committing a manually-typed value (no active
-   * session) — those stay individually displayed. */
-  activeSessionId?: string | null;
+  /** The stashed measuring-session snapshot targeting THIS card
+   * (after Exit but before Add/Deduct commit). null when none pending. */
+  pendingCommitBundle?: {
+    elementId: string;
+    itemId: string;
+    value: string;
+    total: number;
+    measurementIds: string[];
+    sessionId: string;
+  } | null;
+  /** Commit the pending measuring session as one history chip with all
+   * measurements bound. Called instead of the local pushHistory path
+   * when the takeoff input still holds the pending value. */
+  onSessionCommit?: (mode: "add" | "deduct") => void;
   /** Clears the staged measured value (called after commit or Esc). */
   onClearPendingMeasured?: () => void;
   className?: string;
@@ -68,8 +72,8 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
   onMeasureModeChange,
   isTargeting = false,
   pendingMeasuredValue = null,
-  pendingMeasurementId = null,
-  activeSessionId = null,
+  pendingCommitBundle = null,
+  onSessionCommit,
   onClearPendingMeasured,
   className = "",
 }) => {
@@ -79,6 +83,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
   const [takeoff, setTakeoff] = useState("");
   const [rate, setRate] = useState(() => formatRateDisplay(data?.rate ?? 0));
   const [isEditingRate, setIsEditingRate] = useState(false);
+  const formulaInputRef = useRef<FormulaInputHandle>(null);
   // Derived directly from the store-backed prop (not cloned into local state)
   // so entries written by other flows (e.g. bindMeasurementToItem when a
   // second measurement is staged before the first is committed) are never
@@ -98,53 +103,56 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
     });
   };
 
-  // If the user edits the staged value (e.g. types `* 3` after a
-  // measured 12.5), the link to the plan measurement breaks: subsequent
-  // edits on the plan would overwrite the user's formula. To detect
-  // this, keep the pristine staged value in a ref and only tag the
-  // resulting chip when the committed expression exactly matches it.
-  const stagedRef = React.useRef<{ value: string; measurementId: string } | null>(null);
-
+  // Sync the takeoff input to whatever the store currently holds as the
+  // pending value — either the live-updating running total while measuring
+  // (boqTargeting.pendingValue) or the stashed value after Exit
+  // (pendingCommit.value). Both flow into this component as pendingMeasuredValue.
   React.useEffect(() => {
-    if (pendingMeasuredValue !== null && isTargeting && pendingMeasurementId) {
-      // If a DIFFERENT measurement was pending before this one, the store
-      // already auto-committed it as its own history chip (see
-      // addMeasurement/bindMeasurementToItem) — the input's leftover text
-      // reflects that stale value, not an in-progress formula, so it must
-      // reset rather than have the new value appended onto it. Only when
-      // the same measurement is still pending (the user is actively
-      // building a formula, e.g. "171.25+") do we append.
-      const previousMeasurementId = stagedRef.current?.measurementId ?? null;
-      const wasAutoCommitted =
-        previousMeasurementId !== null &&
-        previousMeasurementId !== pendingMeasurementId;
-      setTakeoff((current) => {
-        const base = wasAutoCommitted ? "" : current;
-        const next = isValidSequence(base, pendingMeasuredValue)
-          ? base + pendingMeasuredValue
-          : pendingMeasuredValue;
-        stagedRef.current = { value: next, measurementId: pendingMeasurementId };
-        return next;
-      });
+    if (pendingMeasuredValue !== null) {
+      setTakeoff(pendingMeasuredValue);
     }
-    // Intentionally not depending on takeoff — user may edit it further.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingMeasuredValue, pendingMeasurementId, isTargeting]);
+  }, [pendingMeasuredValue]);
+
+  // Clear the input once the pending value has gone away (after commit or
+  // after a full discard). Not tied to isTargeting — the value must survive
+  // Exit so the user can commit it later via Add/Deduct.
+  React.useEffect(() => {
+    if (pendingMeasuredValue === null) {
+      setTakeoff("");
+    }
+  }, [pendingMeasuredValue]);
+
+  // When the drawing session ends (isTargeting: true → false) with a
+  // pending commit still on this card, move keyboard focus into the
+  // takeoff input so the user can immediately hit Enter/Add/Deduct or
+  // edit the value without a click.
+  const wasTargetingRef = useRef(false);
+  React.useEffect(() => {
+    if (wasTargetingRef.current && !isTargeting && pendingCommitBundle) {
+      formulaInputRef.current?.focus();
+    }
+    wasTargetingRef.current = isTargeting;
+  }, [isTargeting, pendingCommitBundle]);
 
   const handleCommitTakeoff = (expression: string, mode: "add" | "deduct") => {
-    const sourceMeasurementId =
-      stagedRef.current && stagedRef.current.value === expression
-        ? stagedRef.current.measurementId
-        : null;
+    // If a measuring session is pending commit AND the user hasn't edited
+    // the value, commit the whole session as one chip (binds all drawn
+    // measurements to this BOQ line).
+    if (
+      pendingCommitBundle &&
+      expression === pendingCommitBundle.value &&
+      onSessionCommit
+    ) {
+      onSessionCommit(mode);
+      return;
+    }
+    // Manual commit — the user typed a value or edited the session total.
     const entry: HistoryItem = {
       id: generateClientId(),
       value: expression,
       isDeduct: mode === "deduct",
-      ...(sourceMeasurementId ? { sourceMeasurementId } : {}),
-      ...(activeSessionId ? { groupId: activeSessionId } : {}),
     };
     pushHistory([...history, entry]);
-    stagedRef.current = null;
     onClearPendingMeasured?.();
   };
 
@@ -160,8 +168,9 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
   };
 
   // Entries sharing a groupId (one continuous measuring session) collapse
-  // into a single displayed chip showing their summed value; everything
-  // else (manual entries, single-line sessions) renders exactly as today.
+  // into a single displayed chip showing their summed value. Entries with
+  // sourceMeasurementId but no groupId (legacy data from old code) are also
+  // collapsed into one chip showing their sum.
   type DisplayRow =
     | { kind: "single"; item: HistoryItem }
     | { kind: "group"; groupId: string; items: HistoryItem[]; isDeduct: boolean };
@@ -169,24 +178,36 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
   const displayRows = useMemo<DisplayRow[]>(() => {
     const rows: DisplayRow[] = [];
     const groupIndex = new Map<string, number>();
+    // Key used to bucket legacy bound entries that have no groupId.
+    const LEGACY_BOUND_KEY = "__legacy_bound__";
+
     history.forEach((item) => {
-      if (!item.groupId) {
-        rows.push({ kind: "single", item });
+      // New-style: explicit groupId.
+      if (item.groupId) {
+        const existingIndex = groupIndex.get(item.groupId);
+        if (existingIndex === undefined) {
+          groupIndex.set(item.groupId, rows.length);
+          rows.push({ kind: "group", groupId: item.groupId, items: [item], isDeduct: !!item.isDeduct });
+        } else {
+          const existing = rows[existingIndex];
+          if (existing.kind === "group") existing.items.push(item);
+        }
         return;
       }
-      const existingIndex = groupIndex.get(item.groupId);
-      if (existingIndex === undefined) {
-        groupIndex.set(item.groupId, rows.length);
-        rows.push({
-          kind: "group",
-          groupId: item.groupId,
-          items: [item],
-          isDeduct: !!item.isDeduct,
-        });
+      // Legacy: bound to a measurement but no groupId — collapse with others like it.
+      if (item.sourceMeasurementId) {
+        const existingIndex = groupIndex.get(LEGACY_BOUND_KEY);
+        if (existingIndex === undefined) {
+          groupIndex.set(LEGACY_BOUND_KEY, rows.length);
+          rows.push({ kind: "group", groupId: LEGACY_BOUND_KEY, items: [item], isDeduct: !!item.isDeduct });
+        } else {
+          const existing = rows[existingIndex];
+          if (existing.kind === "group") existing.items.push(item);
+        }
         return;
       }
-      const existing = rows[existingIndex];
-      if (existing.kind === "group") existing.items.push(item);
+      // Manual entry — always its own chip.
+      rows.push({ kind: "single", item });
     });
     // A "group" of exactly one entry has nothing to merge — show it plainly.
     return rows.flatMap((row) =>
@@ -241,6 +262,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
 
         <div className="relative z-10">
           <FormulaInput
+            ref={formulaInputRef}
             value={takeoff}
             onChange={setTakeoff}
             onCommit={handleCommitTakeoff}

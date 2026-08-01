@@ -88,17 +88,29 @@ interface TakeoffStore {
     itemId: string;
     unit: string;
     mode: 'add' | 'deduct';
-    /** Numeric string of the most recently measured value, waiting for
-     * the user to commit (Add/Deduct/Enter) or discard (Esc). null when
-     * nothing is pending. */
+    /** Running sum of all measurements drawn in this session, as a
+     * display string. Shown live in the takeoff input box. null when
+     * nothing has been measured yet. */
     pendingValue: string | null;
-    /** Client uuid of the plan measurement that produced pendingValue.
-     * When the user commits, this is passed as `sourceMeasurementId` on
-     * the history chip so delete/edit propagation stays wired. */
-    pendingMeasurementId: string | null;
-    /** Minted fresh each time targeting starts; stamped onto every history
-     * entry committed during this session so they can be displayed as one
-     * summed chip instead of one per measured line. */
+    /** All measurement client uuids drawn in this session. All get bound
+     * when the session is committed on Exit. */
+    pendingMeasurementIds: string[];
+    /** Running numeric total (raw) so we can add each new measurement. */
+    pendingTotal: number;
+    /** Minted fresh each time targeting starts. */
+    sessionId: string;
+  } | null;
+
+  /** Snapshot of a just-ended measuring session, awaiting the user's
+   * Add/Deduct commit. Survives Exit so the user can switch tools first
+   * and commit later. Consumed (cleared) when EstimationCard commits, or
+   * discarded when the user starts a new session on the same card. */
+  pendingCommit: {
+    elementId: string;
+    itemId: string;
+    value: string;
+    total: number;
+    measurementIds: string[];
     sessionId: string;
   } | null;
 
@@ -107,7 +119,7 @@ interface TakeoffStore {
    * Deduct in the toolbar while Measure is active. */
   setBoqTargetingMode: (mode: 'add' | 'deduct') => void;
   /** Populate the staging slot after a measurement commits. */
-  setBoqTargetingPending: (value: string | null, measurementId: string | null) => void;
+  setBoqTargetingPending: (value: string | null, measurementIds: string[]) => void;
   /** Just write boqElementId/boqItemId onto a measurement and sync it.
    * Unlike bindMeasurementToItem, does NOT add a history entry — used
    * when the history entry was committed elsewhere (e.g. by the
@@ -183,15 +195,22 @@ interface TakeoffStore {
     mode?: 'add' | 'deduct'
   ) => void;
   exitBoqTargeting: () => void;
+  /** End the session without committing. Escape/discard flow. */
+  cancelBoqTargeting: () => void;
+  /** Clear the pending-commit slot after EstimationCard commits it. */
+  clearPendingCommit: () => void;
   /** Bind an existing measurement to a BOQ item. Adds a corresponding
    * history entry on the target item with sourceMeasurementId set.
    * `mode` defaults to 'add'; passing 'deduct' commits the entry as
-   * isDeduct: true. */
+   * isDeduct: true. Pass an array of ids to commit a whole session as
+   * one chip; optionally pass a pre-computed `value` string and `sessionId`. */
   bindMeasurementToItem: (
-    measurementId: string,
+    measurementId: string | string[],
     elementId: string,
     itemId: string,
-    mode?: 'add' | 'deduct'
+    mode?: 'add' | 'deduct',
+    value?: string,
+    sessionId?: string,
   ) => void;
   /** Remove the binding on a measurement AND drop the corresponding
    * history entry from whatever item it was on. */
@@ -290,6 +309,7 @@ const initialState = {
   boqElements: [createEmptyBoqElement(0)],
   focusedBoqCard: null,
   boqTargeting: null,
+  pendingCommit: null,
   pricing: {
     vatRate: 0,
     contingency: 0,
@@ -415,6 +435,10 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   selectPlan: (planId) => {
     const state = get();
     if (state.activePlanId === planId) return;
+
+    // Commit any open measuring session before switching plans so the
+    // running total isn't silently discarded.
+    if (state.boqTargeting) get().exitBoqTargeting();
 
     const planStates = snapshotActivePlanState(state);
     const next = planStates[planId] ?? emptyPlanDocumentState();
@@ -655,17 +679,37 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
           }
           // Count tool: subsequent clicks extend an existing measurement
           // rather than creating a new one, so addMeasurement's targeting
-          // path never fires. Re-stage the pending value here when the
-          // touched measurement is the one currently staged into the box.
+          // path never fires. Update the running session total here when
+          // one of the session's measurements changes quantity.
           const target = get().boqTargeting;
-          if (target?.pendingMeasurementId) {
-            const change = quantityChanges.find(
-              (c) => c.measurementId === target.pendingMeasurementId
-            );
-            if (change) {
-              get().setBoqTargetingPending(
-                Math.abs(change.quantity).toFixed(2),
-                target.pendingMeasurementId
+          if (target && target.pendingMeasurementIds.length > 0) {
+            let newTotal = target.pendingTotal;
+            for (const change of quantityChanges) {
+              if (target.pendingMeasurementIds.includes(change.measurementId)) {
+                // Replace the old contribution of that measurement with the new one.
+                // We don't know the old per-measurement value, so recompute from scratch.
+                newTotal = 0;
+                const allItems = get().takeoffItems;
+                for (const mid of target.pendingMeasurementIds) {
+                  for (const ti of allItems) {
+                    const m = ti.measurements.find((m) => m.id === mid);
+                    if (m) { newTotal += Math.abs(m.quantity); break; }
+                  }
+                }
+                break;
+              }
+            }
+            if (newTotal !== target.pendingTotal) {
+              set((state) =>
+                state.boqTargeting
+                  ? {
+                      boqTargeting: {
+                        ...state.boqTargeting,
+                        pendingTotal: newTotal,
+                        pendingValue: newTotal.toFixed(2),
+                      },
+                    }
+                  : state
               );
             }
           }
@@ -813,7 +857,19 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
 
   setActiveItemId: (id) => set({ activeItemId: id }),
 
-  setActiveTool: (tool) => set({ activeTool: tool }),
+  setActiveTool: (tool) => {
+    // If a measuring session is active and the user picks a tool whose
+    // unit no longer matches the target, close the session first so the
+    // running total is committed as one chip before switching.
+    const target = get().boqTargeting;
+    if (target && tool !== null) {
+      const toolUnit = unitForTakeoffMode(tool);
+      if (toolUnit !== target.unit) {
+        get().exitBoqTargeting();
+      }
+    }
+    set({ activeTool: tool });
+  },
 
   setActiveColor: (color) => set({ activeColor: color }),
 
@@ -822,6 +878,32 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   setFocusedBoqCard: (card) => set({ focusedBoqCard: card }),
 
   startBoqTargeting: (elementId, itemId, unit, mode = 'add') => {
+    const current = get().boqTargeting;
+    const pending = get().pendingCommit;
+    // If a session was active on a different card, stash its state into
+    // pendingCommit for later, then start fresh.
+    if (current && (current.elementId !== elementId || current.itemId !== itemId)) {
+      get().exitBoqTargeting();
+    }
+    // If the user re-enters measuring on the SAME card that has an
+    // un-committed pendingCommit, resume that session so more draws add
+    // to the same running total.
+    if (pending && pending.elementId === elementId && pending.itemId === itemId) {
+      set({
+        boqTargeting: {
+          elementId,
+          itemId,
+          unit,
+          mode,
+          pendingValue: pending.value,
+          pendingMeasurementIds: pending.measurementIds,
+          pendingTotal: pending.total,
+          sessionId: pending.sessionId,
+        },
+        pendingCommit: null,
+      });
+      return;
+    }
     set({
       boqTargeting: {
         elementId,
@@ -829,15 +911,42 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         unit,
         mode,
         pendingValue: null,
-        pendingMeasurementId: null,
+        pendingMeasurementIds: [],
+        pendingTotal: 0,
         sessionId: generateClientId(),
       },
     });
   },
 
   exitBoqTargeting: () => {
+    // Stops the drawing session but preserves the running total in
+    // pendingCommit so the user can switch tools and later commit via
+    // Add/Deduct. The takeoff input keeps showing the running total
+    // (EstimationCard reads pendingCommit.value when boqTargeting is null).
+    const target = get().boqTargeting;
+    if (target && target.pendingValue !== null && target.pendingMeasurementIds.length > 0) {
+      set({
+        pendingCommit: {
+          elementId: target.elementId,
+          itemId: target.itemId,
+          value: target.pendingValue,
+          total: target.pendingTotal,
+          measurementIds: target.pendingMeasurementIds,
+          sessionId: target.sessionId,
+        },
+      });
+    }
     set({ boqTargeting: null });
   },
+
+  cancelBoqTargeting: () => {
+    // Discard the session entirely (Escape). Measurements drawn during the
+    // session stay on the plan but remain unbound. Also clears any prior
+    // uncommitted pendingCommit — a full discard.
+    set({ boqTargeting: null, pendingCommit: null });
+  },
+
+  clearPendingCommit: () => set({ pendingCommit: null }),
 
   setBoqTargetingMode: (mode) => {
     set((state) =>
@@ -847,14 +956,14 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     );
   },
 
-  setBoqTargetingPending: (value, measurementId) => {
+  setBoqTargetingPending: (value, measurementIds) => {
     set((state) =>
       state.boqTargeting
         ? {
             boqTargeting: {
               ...state.boqTargeting,
               pendingValue: value,
-              pendingMeasurementId: measurementId,
+              pendingMeasurementIds: measurementIds,
             },
           }
         : state
@@ -893,49 +1002,52 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     get().triggerAutoSave();
   },
 
-  bindMeasurementToItem: (measurementId, elementId, itemId, mode = 'add') => {
+  bindMeasurementToItem: (measurementId, elementId, itemId, mode = 'add', value, sessionId) => {
     const projectId = get().currentProjectId;
     const previousBoqElements = get().boqElements;
-    const targeting = get().boqTargeting;
-    const sessionId =
-      targeting?.elementId === elementId && targeting?.itemId === itemId
-        ? targeting.sessionId
-        : undefined;
+    const ids = Array.isArray(measurementId) ? measurementId : [measurementId];
+    const idSet = new Set(ids);
 
     set((state) => {
-      let matchedMeasurement: Measurement | null = null;
-      const nextItems = state.takeoffItems.map((item) => {
-        const nextMeasurements = item.measurements.map((m) => {
-          if (m.id !== measurementId) return m;
-          matchedMeasurement = { ...m, boqElementId: elementId, boqItemId: itemId };
-          return matchedMeasurement;
+      // Bind every measurement id in the set.
+      const nextItems = state.takeoffItems.map((takeoffItem) => {
+        const nextMeasurements = takeoffItem.measurements.map((m) => {
+          if (!idSet.has(m.id)) return m;
+          return { ...m, boqElementId: elementId, boqItemId: itemId };
         });
-        return nextMeasurements === item.measurements
-          ? item
-          : { ...item, measurements: nextMeasurements };
+        return nextMeasurements === takeoffItem.measurements
+          ? takeoffItem
+          : { ...takeoffItem, measurements: nextMeasurements };
       });
 
-      if (!matchedMeasurement) return state;
+      // Compute the value for the history chip: use the provided value
+      // (session total) when given, otherwise derive from the single measurement.
+      let chipValue = value ?? null;
+      if (chipValue === null && ids.length === 1) {
+        for (const takeoffItem of state.takeoffItems) {
+          const m = takeoffItem.measurements.find((m) => m.id === ids[0]);
+          if (m) { chipValue = Math.abs(m.quantity).toFixed(2); break; }
+        }
+      }
+      if (chipValue === null) return { takeoffItems: nextItems };
 
-      // Add / update the corresponding history entry on the target item.
+      // One history chip for the whole session — remove any stale entries
+      // for any of the ids first.
       const nextElements = state.boqElements.map((element) => {
         if (element.id !== elementId) return element;
         return {
           ...element,
           items: element.items.map((item) => {
             if (item.id !== itemId) return item;
-            // Replace any existing linked entry for this measurement so
-            // we don't duplicate on re-bind. Use the measurement's
-            // quantity as the value. isDeduct comes from the current
-            // Add/Deduct mode of the toolbar, not the sign of the number.
             const withoutStale = item.history.filter(
-              (entry) => entry.sourceMeasurementId !== measurementId
+              (entry) => !entry.sourceMeasurementId || !idSet.has(entry.sourceMeasurementId)
             );
             withoutStale.push({
               id: generateClientId(),
-              value: Math.abs(matchedMeasurement!.quantity).toFixed(2),
+              value: chipValue!,
               isDeduct: mode === 'deduct',
-              sourceMeasurementId: measurementId,
+              // Link the first measurement id so plan-side edits still propagate.
+              sourceMeasurementId: ids[0],
               ...(sessionId ? { groupId: sessionId } : {}),
             });
             return { ...item, history: withoutStale };
@@ -943,19 +1055,18 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         };
       });
 
-      return {
-        takeoffItems: nextItems,
-        boqElements: nextElements,
-      };
+      return { takeoffItems: nextItems, boqElements: nextElements };
     });
 
     if (projectId) {
-      syncQueue.enqueue({
-        kind: 'measurement.update',
-        projectId,
-        clientUuid: measurementId,
-        patch: { boq_element_id: elementId, boq_item_id: itemId },
-      });
+      for (const id of ids) {
+        syncQueue.enqueue({
+          kind: 'measurement.update',
+          projectId,
+          clientUuid: id,
+          patch: { boq_element_id: elementId, boq_item_id: itemId },
+        });
+      }
     }
     enqueueBoqOpsFromDiff(previousBoqElements);
     get().triggerAutoSave();
@@ -1052,27 +1163,25 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
           );
           if (body) syncQueue.enqueue({ kind: 'measurement.create', projectId, body });
         }
-        // Targeting: stage the value in the input instead of committing
-        // a chip directly. The user then Add/Deduct/edits to commit.
-        // If a value was already pending, commit that one as a chip first
-        // (binding it to its measurement), then stage the new one — so
-        // drawing continuously never loses a value.
+        // Continuous measurement: accumulate all measurements in the
+        // session into a running total shown live in the takeoff box.
+        // Nothing is committed to history until the user clicks Exit.
         const target = get().boqTargeting;
         if (target) {
-          {
-            if (target.pendingValue && target.pendingMeasurementId) {
-              get().bindMeasurementToItem(
-                target.pendingMeasurementId,
-                target.elementId,
-                target.itemId,
-                target.mode
-              );
-            }
-            get().setBoqTargetingPending(
-              Math.abs(measurement.quantity).toFixed(2),
-              measurement.id
-            );
-          }
+          const newTotal = target.pendingTotal + Math.abs(measurement.quantity);
+          const newIds = [...target.pendingMeasurementIds, measurement.id];
+          set((state) =>
+            state.boqTargeting
+              ? {
+                  boqTargeting: {
+                    ...state.boqTargeting,
+                    pendingTotal: newTotal,
+                    pendingValue: newTotal.toFixed(2),
+                    pendingMeasurementIds: newIds,
+                  },
+                }
+              : state
+          );
         }
       },
       undo: () => {
