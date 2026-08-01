@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import FormulaToolbar from "@/components/ui/FormulaToolbar";
 import {
   isValidSequence,
