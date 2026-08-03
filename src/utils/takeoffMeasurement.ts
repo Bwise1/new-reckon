@@ -24,3 +24,17 @@ export const normalizeTakeoffItems = (items: TakeoffItem[]): TakeoffItem[] =>
 
 export const isCanvasTakeoffItem = (item: TakeoffItem): boolean =>
   item.id === CANVAS_TAKEOFF_ITEM_ID;
+
+/**
+ * Derive the canonical linear-family type from the current point count.
+ * Called after any edit that mutates a measurement's points so a 'linear'
+ * with 3+ points auto-converts to 'polyline' and vice versa. Only
+ * meaningful for linear/polyline; other types are returned unchanged.
+ */
+export const deriveMeasurementType = (
+  currentType: TakeoffMode,
+  pointCount: number
+): TakeoffMode => {
+  if (currentType !== 'linear' && currentType !== 'polyline') return currentType;
+  return pointCount >= 3 ? 'polyline' : 'linear';
+};

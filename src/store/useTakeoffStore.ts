@@ -9,7 +9,9 @@ import type {
   BoqPricing,
   ProjectPlan,
   PlanDiscipline,
+  Point,
 } from '@/types/takeoff';
+import { calculateAreaWithDeductions } from '@/utils/measurementUtils';
 import {
   emptyPlanDocumentState,
   type PlanDocumentState,
@@ -184,6 +186,19 @@ interface TakeoffStore {
   addMeasurement: (itemId: string, measurement: Measurement) => void;
   removeMeasurement: (itemId: string, measurementId: string) => void;
   toggleMeasurementHidden: (itemId: string, measurementId: string) => void;
+  /** Append a deduction (inner polygon) to an area measurement. Recomputes
+   * quantity as outer − Σdeductions. Undoable. */
+  addDeductionToMeasurement: (
+    itemId: string,
+    measurementId: string,
+    deduction: Point[]
+  ) => void;
+  /** Remove the deduction at deductionIndex. Recomputes quantity. Undoable. */
+  removeDeductionFromMeasurement: (
+    itemId: string,
+    measurementId: string,
+    deductionIndex: number
+  ) => void;
 
   /** Enter measuring-for-a-BOQ-line mode. Auto-switches the drawing tool
    * to match the target's unit (m→linear, m²→area, nrs→count). New
@@ -658,6 +673,10 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
               clientUuid: next.id,
               patch: {
                 points: next.points,
+                deductions:
+                  next.deductions && next.deductions.length > 0
+                    ? next.deductions
+                    : null,
                 quantity: next.quantity,
                 color: next.color,
                 hidden: Boolean(next.hidden),
@@ -887,17 +906,50 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     }
     // If the user re-enters measuring on the SAME card that has an
     // un-committed pendingCommit, resume that session so more draws add
-    // to the same running total.
+    // to the same running total. But first drop any orphaned measurement
+    // ids (deleted since the session was stashed) and recompute the total
+    // from live measurements only — otherwise stale contributions from
+    // vanished measurements would leak back into pendingTotal.
     if (pending && pending.elementId === elementId && pending.itemId === itemId) {
+      const allItems = get().takeoffItems;
+      const liveIds: string[] = [];
+      let liveTotal = 0;
+      for (const mid of pending.measurementIds) {
+        for (const ti of allItems) {
+          const m = ti.measurements.find((mm) => mm.id === mid);
+          if (m) {
+            liveIds.push(mid);
+            liveTotal += Math.abs(m.quantity);
+            break;
+          }
+        }
+      }
+      if (liveIds.length === 0) {
+        // Nothing left to resume — start fresh.
+        set({
+          boqTargeting: {
+            elementId,
+            itemId,
+            unit,
+            mode,
+            pendingValue: null,
+            pendingMeasurementIds: [],
+            pendingTotal: 0,
+            sessionId: generateClientId(),
+          },
+          pendingCommit: null,
+        });
+        return;
+      }
       set({
         boqTargeting: {
           elementId,
           itemId,
           unit,
           mode,
-          pendingValue: pending.value,
-          pendingMeasurementIds: pending.measurementIds,
-          pendingTotal: pending.total,
+          pendingValue: liveTotal.toFixed(2),
+          pendingMeasurementIds: liveIds,
+          pendingTotal: liveTotal,
           sessionId: pending.sessionId,
         },
         pendingCommit: null,
@@ -1318,6 +1370,171 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         patch: { hidden: nextHidden },
       });
     }
+  },
+
+  addDeductionToMeasurement: (itemId, measurementId, deduction) => {
+    const state = get();
+    const item = state.takeoffItems.find((i) => i.id === itemId);
+    const measurement = item?.measurements.find((m) => m.id === measurementId);
+    if (!item || !measurement) return;
+
+    const pageScale = state.scales[measurement.page] ?? null;
+    const prevDeductions = measurement.deductions ?? [];
+    const nextDeductions = [...prevDeductions, deduction];
+    const previousQuantity = measurement.quantity;
+    const pixelArea = calculateAreaWithDeductions(measurement.points, nextDeductions);
+    const nextQuantity =
+      pageScale && pageScale > 0 ? pixelArea / (pageScale * pageScale) : pixelArea;
+    const quantityDelta = nextQuantity - previousQuantity;
+
+    const applyDeductions = (deductions: Point[][], quantity: number) => {
+      set((current) => ({
+        takeoffItems: current.takeoffItems.map((ti) => {
+          if (ti.id !== itemId) return ti;
+          const nextMeasurements = ti.measurements.map((m) =>
+            m.id === measurementId
+              ? {
+                  ...m,
+                  deductions,
+                  quantity,
+                  metadata: {
+                    ...m.metadata,
+                    createdAt: m.metadata?.createdAt ?? new Date().toISOString(),
+                    lastModified: new Date().toISOString(),
+                  },
+                }
+              : m
+          );
+          return {
+            ...ti,
+            measurements: nextMeasurements,
+            totalQuantity: ti.totalQuantity + (quantity - previousQuantity),
+          };
+        }),
+      }));
+      get().triggerAutoSave();
+      const projectId = get().currentProjectId;
+      if (projectId) {
+        syncQueue.enqueue({
+          kind: 'measurement.update',
+          projectId,
+          clientUuid: measurementId,
+          patch: {
+            deductions: deductions.length > 0 ? deductions : null,
+            quantity,
+          },
+        });
+      }
+    };
+
+    executeCommand({
+      execute: () => applyDeductions(nextDeductions, nextQuantity),
+      undo: () => {
+        set((current) => ({
+          takeoffItems: current.takeoffItems.map((ti) => {
+            if (ti.id !== itemId) return ti;
+            const nextMeasurements = ti.measurements.map((m) =>
+              m.id === measurementId
+                ? { ...m, deductions: prevDeductions.length > 0 ? prevDeductions : undefined, quantity: previousQuantity }
+                : m
+            );
+            return {
+              ...ti,
+              measurements: nextMeasurements,
+              totalQuantity: ti.totalQuantity - quantityDelta,
+            };
+          }),
+        }));
+        get().triggerAutoSave();
+        const projectId = get().currentProjectId;
+        if (projectId) {
+          syncQueue.enqueue({
+            kind: 'measurement.update',
+            projectId,
+            clientUuid: measurementId,
+            patch: {
+              deductions: prevDeductions.length > 0 ? prevDeductions : null,
+              quantity: previousQuantity,
+            },
+          });
+        }
+      },
+      description: 'Add deduction',
+    });
+  },
+
+  removeDeductionFromMeasurement: (itemId, measurementId, deductionIndex) => {
+    const state = get();
+    const item = state.takeoffItems.find((i) => i.id === itemId);
+    const measurement = item?.measurements.find((m) => m.id === measurementId);
+    if (!item || !measurement || !measurement.deductions) return;
+    if (deductionIndex < 0 || deductionIndex >= measurement.deductions.length) return;
+
+    const pageScale = state.scales[measurement.page] ?? null;
+    const prevDeductions = measurement.deductions;
+    const nextDeductions = prevDeductions.filter((_, i) => i !== deductionIndex);
+    const previousQuantity = measurement.quantity;
+    const pixelArea = calculateAreaWithDeductions(measurement.points, nextDeductions);
+    const nextQuantity =
+      pageScale && pageScale > 0 ? pixelArea / (pageScale * pageScale) : pixelArea;
+    const quantityDelta = nextQuantity - previousQuantity;
+
+    const enqueueDeductionsSync = (deductions: Point[][], quantity: number) => {
+      const projectId = get().currentProjectId;
+      if (!projectId) return;
+      syncQueue.enqueue({
+        kind: 'measurement.update',
+        projectId,
+        clientUuid: measurementId,
+        patch: { deductions: deductions.length > 0 ? deductions : null, quantity },
+      });
+    };
+
+    executeCommand({
+      execute: () => {
+        set((current) => ({
+          takeoffItems: current.takeoffItems.map((ti) => {
+            if (ti.id !== itemId) return ti;
+            const nextMeasurements = ti.measurements.map((m) =>
+              m.id === measurementId
+                ? {
+                    ...m,
+                    deductions: nextDeductions.length > 0 ? nextDeductions : undefined,
+                    quantity: nextQuantity,
+                  }
+                : m
+            );
+            return {
+              ...ti,
+              measurements: nextMeasurements,
+              totalQuantity: ti.totalQuantity + quantityDelta,
+            };
+          }),
+        }));
+        get().triggerAutoSave();
+        enqueueDeductionsSync(nextDeductions, nextQuantity);
+      },
+      undo: () => {
+        set((current) => ({
+          takeoffItems: current.takeoffItems.map((ti) => {
+            if (ti.id !== itemId) return ti;
+            const nextMeasurements = ti.measurements.map((m) =>
+              m.id === measurementId
+                ? { ...m, deductions: prevDeductions, quantity: previousQuantity }
+                : m
+            );
+            return {
+              ...ti,
+              measurements: nextMeasurements,
+              totalQuantity: ti.totalQuantity - quantityDelta,
+            };
+          }),
+        }));
+        get().triggerAutoSave();
+        enqueueDeductionsSync(prevDeductions, previousQuantity);
+      },
+      description: 'Remove deduction',
+    });
   },
 
   setScale: (page, scale) => {

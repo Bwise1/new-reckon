@@ -59,6 +59,9 @@ export interface ApiMeasurement {
   type: 'linear' | 'polyline' | 'area' | 'count';
   color: string;
   points: { x: number; y: number }[];
+  /** Deductions (inner cutout polygons) for area measurements. Null/absent
+   *  when there are none; older servers omit the field entirely. */
+  deductions?: { x: number; y: number }[][] | null;
   quantity: number;
   hidden: boolean;
   metadata: {
@@ -81,6 +84,7 @@ export interface MeasurementCreateBody {
   type: 'linear' | 'polyline' | 'area' | 'count';
   color: string;
   points: { x: number; y: number }[];
+  deductions?: { x: number; y: number }[][] | null;
   quantity: number;
   hidden?: boolean;
   metadata?: ApiMeasurement['metadata'];
@@ -90,6 +94,7 @@ export type MeasurementPatchBody = Partial<
   Pick<
     MeasurementCreateBody,
     | 'points'
+    | 'deductions'
     | 'quantity'
     | 'color'
     | 'hidden'

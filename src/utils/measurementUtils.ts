@@ -79,6 +79,57 @@ export const calculateArea = (points: Point[]): number => {
 };
 
 /**
+ * Compute net area of an outer polygon minus the areas of its deductions.
+ * Deductions with fewer than 3 points or zero area contribute nothing.
+ */
+export const calculateAreaWithDeductions = (
+  outer: Point[],
+  deductions: Point[][] = []
+): number => {
+  const outerArea = calculateArea(outer);
+  if (outerArea === 0) return 0;
+  const deductArea = deductions.reduce((sum, d) => sum + calculateArea(d), 0);
+  return Math.max(0, outerArea - deductArea);
+};
+
+/**
+ * Point-in-polygon via ray casting (odd-even rule). Boundary is treated as
+ * "inside" via an epsilon tolerance so vertices shared with the outer
+ * polygon still count as inside.
+ */
+export const isPointInPolygon = (p: Point, polygon: Point[]): boolean => {
+  if (polygon.length < 3) return false;
+  let inside = false;
+  const n = polygon.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = polygon[i].x;
+    const yi = polygon[i].y;
+    const xj = polygon[j].x;
+    const yj = polygon[j].y;
+    const intersect =
+      yi > p.y !== yj > p.y &&
+      p.x < ((xj - xi) * (p.y - yi)) / (yj - yi + EPSILON) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+};
+
+/**
+ * Compute the centroid of a polygon (average of vertices). Cheap and good
+ * enough for label placement and overlap heuristics.
+ */
+export const polygonCentroid = (polygon: Point[]): Point => {
+  if (polygon.length === 0) return { x: 0, y: 0 };
+  let sx = 0;
+  let sy = 0;
+  for (const p of polygon) {
+    sx += p.x;
+    sy += p.y;
+  }
+  return { x: sx / polygon.length, y: sy / polygon.length };
+};
+
+/**
  * Check if a polygon is self-intersecting
  * Uses line segment intersection detection
  */
@@ -207,19 +258,26 @@ export const validateMeasurement = (
     if (isSelfIntersecting(measurement.points)) {
       return { isValid: false, error: 'Polygon is self-intersecting' };
     }
-    
+
     // Check for degenerate polygon
     const area = calculateArea(measurement.points);
     if (area < MIN_AREA) {
       return { isValid: false, error: 'Polygon area is too small or degenerate' };
     }
-    
+
     // Check for duplicate consecutive points
     for (let i = 0; i < measurement.points.length; i++) {
       const next = (i + 1) % measurement.points.length;
       if (calculateDistance(measurement.points[i], measurement.points[next]) < MIN_DISTANCE) {
         return { isValid: false, error: 'Polygon has duplicate consecutive points' };
       }
+    }
+
+    // Validate any deductions: each must be a valid polygon, non-self-intersecting,
+    // fully inside the outer polygon, and non-overlapping with other deductions.
+    if (measurement.deductions && measurement.deductions.length > 0) {
+      const dv = validateDeductions(measurement.points, measurement.deductions);
+      if (!dv.isValid) return dv;
     }
   }
   
@@ -232,12 +290,53 @@ export const validateMeasurement = (
 };
 
 /**
- * Calculate quantity from points with scale
+ * Validate a set of deductions against an outer polygon. Each deduction must:
+ *   - have ≥3 points and non-zero area
+ *   - not self-intersect
+ *   - lie fully inside the outer polygon (every vertex inside)
+ *   - not overlap another deduction (cheap centroid-in-other check)
+ */
+export const validateDeductions = (
+  outer: Point[],
+  deductions: Point[][]
+): { isValid: boolean; error?: string } => {
+  for (let di = 0; di < deductions.length; di++) {
+    const d = deductions[di];
+    if (d.length < 3) {
+      return { isValid: false, error: `Deduction ${di + 1} needs at least 3 points` };
+    }
+    if (calculateArea(d) < MIN_AREA) {
+      return { isValid: false, error: `Deduction ${di + 1} is too small or degenerate` };
+    }
+    if (isSelfIntersecting(d)) {
+      return { isValid: false, error: `Deduction ${di + 1} is self-intersecting` };
+    }
+    for (const v of d) {
+      if (!isPointInPolygon(v, outer)) {
+        return { isValid: false, error: `Deduction ${di + 1} extends outside the area` };
+      }
+    }
+    for (let dj = 0; dj < deductions.length; dj++) {
+      if (di === dj) continue;
+      const other = deductions[dj];
+      const ci = polygonCentroid(d);
+      if (isPointInPolygon(ci, other)) {
+        return { isValid: false, error: `Deduction ${di + 1} overlaps deduction ${dj + 1}` };
+      }
+    }
+  }
+  return { isValid: true };
+};
+
+/**
+ * Calculate quantity from points with scale. When `type === 'area'`,
+ * deductions are subtracted from the outer polygon's area before scaling.
  */
 export const calculateQuantity = (
   points: Point[],
   type: 'linear' | 'area' | 'polyline',
-  scale: number | null
+  scale: number | null,
+  deductions: Point[][] = []
 ): number => {
   if (type === 'linear' && points.length === 2) {
     const dist = calculateDistance(points[0], points[1]);
@@ -253,7 +352,7 @@ export const calculateQuantity = (
   }
 
   if (type === 'area' && points.length >= 3) {
-    const area = calculateArea(points);
+    const area = calculateAreaWithDeductions(points, deductions);
     return scale && scale > 0 ? area / (scale * scale) : area;
   }
 

@@ -30,6 +30,10 @@ export interface Measurement {
   boqElementId?: string;
   /** Bound BOQ Item id (per-Element card). */
   boqItemId?: string;
+  /** Deductions (cutouts) inside an area measurement. Each deduction is
+   *  an inner polygon (≥3 points) whose area is subtracted from the outer
+   *  polygon's area. Only meaningful when type === 'area'. */
+  deductions?: Point[][];
   metadata?: MeasurementMetadata;
 }
 

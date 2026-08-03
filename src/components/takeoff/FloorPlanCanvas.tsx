@@ -5,6 +5,7 @@ import {
   Circle,
   Text,
   Group,
+  Shape,
 } from "react-konva";
 import { useTakeoffStore } from "@/store/useTakeoffStore";
 import type { Point, Measurement } from "@/types/takeoff";
@@ -16,6 +17,7 @@ import {
   calculateQuantity,
   validateMeasurement,
   validateScale,
+  validateDeductions,
 } from "@/utils/measurementUtils";
 import { useCanvasState } from "@/components/takeoff/hooks/useCanvasState";
 import { useCanvasMedia } from "@/components/takeoff/hooks/useCanvasMedia";
@@ -33,8 +35,12 @@ import { measurementBelongsToPlan } from "@/utils/planDocument";
 import { useConfirm } from "@/contexts/ConfirmProvider";
 import { itemLabelFromIndex } from "@/utils/boqCalculations";
 
-const MIN_DISTANCE = 0.001; // Minimum valid distance in pixels
+const MIN_DISTANCE = 0.001; // Minimum valid distance in image pixels
 const MIN_LINEAR_EDIT_DISTANCE = 2; // Prevent collapsing line while editing
+// Screen-space threshold for rejecting stutter clicks — a new vertex placed
+// within this many CSS pixels of the previous one (in current run OR nearest
+// existing) is treated as an accidental double-click and dropped silently.
+const MIN_CLICK_SEPARATION_SCREEN = 8;
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
@@ -81,6 +87,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     setNumPages: setStoreNumPages,
     setBackgroundImage,
     addMeasurement,
+    addDeductionToMeasurement,
+    removeDeductionFromMeasurement,
     ensureCanvasItemId,
     updateTakeoffItem,
     removeMeasurement,
@@ -170,6 +178,20 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   const [pendingCalibration, setPendingCalibration] = useState<
     { p1: Point; p2: Point } | null
   >(null);
+  // When set, points collected in `currentPoints` are treated as an
+  // in-progress deduction for the referenced area measurement instead of
+  // a new outer polygon. Set explicitly via right-click "Add deduction".
+  const [deductionTarget, setDeductionTarget] = useState<{
+    itemId: string;
+    measurementId: string;
+  } | null>(null);
+  // Screen-position of the right-click context menu on a selected area.
+  const [areaContextMenu, setAreaContextMenu] = useState<{
+    itemId: string;
+    measurementId: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   // Rebuild spatial index when measurements change
   useEffect(() => {
@@ -360,7 +382,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     formatDistance,
     formatArea,
     calculateAreaFromPoints,
-    getEdgeMidpoints,
   } = useCanvasInteractions({
     takeoffItems,
     activePlanId,
@@ -433,68 +454,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   const handleToggleSnap = useCallback(() => {
     setSnapEnabled((prev) => !prev);
   }, []);
-
-  // Add vertex at edge midpoint
-  const handleEdgeMidpointDrag = useCallback(
-    (
-      itemId: string,
-      measurementId: string,
-      edgeIndex: number,
-      newPos: Point
-    ) => {
-      const item = takeoffItems.find((i) => i.id === itemId);
-    if (!item) return;
-
-      const measurement = item.measurements.find((m) => m.id === measurementId);
-    if (!measurement || measurement.points.length < 2) return;
-
-    // Insert new vertex after the edge start point
-    const updatedPoints = [...measurement.points];
-    updatedPoints.splice(edgeIndex + 1, 0, newPos);
-
-    // Recalculate quantity for area measurements
-    const mType = getMeasurementType(measurement, item);
-    let newQuantity = measurement.quantity;
-      if (mType === "area") {
-      newQuantity = calculateAreaFromPoints(updatedPoints);
-      } else if (mType === "linear" && updatedPoints.length === 2) {
-        newQuantity = calculateQuantity(updatedPoints, "linear", currentScale);
-    }
-
-    const oldTotal = item.totalQuantity;
-    const diff = newQuantity - measurement.quantity;
-    const newTotal = oldTotal + diff;
-
-    const now = new Date().toISOString();
-    const updatedMetadata = {
-      ...measurement.metadata,
-      lastModified: now,
-      createdAt: measurement.metadata?.createdAt || now,
-    };
-
-      const updatedMeasurements = item.measurements.map((m) =>
-      m.id === measurementId
-          ? {
-            ...m,
-            points: updatedPoints,
-            quantity: newQuantity,
-            metadata: updatedMetadata,
-          }
-        : m
-    );
-
-    updateTakeoffItem(itemId, {
-      measurements: updatedMeasurements,
-        totalQuantity: newTotal,
-      });
-    },
-    [
-      takeoffItems,
-      currentScale,
-      calculateAreaFromPoints,
-      updateTakeoffItem,
-    ]
-  );
 
   // Handle canvas click
   const handleStageClick = useCallback(
@@ -660,46 +619,68 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         }
       }
     } else if (activeTool === "linear") {
-      if (currentPoints.length === 0) {
-        setCurrentPoints([point]);
-      } else {
-        const p1 = currentPoints[0];
-        let p2 = point;
-        if (isShiftPressed) {
-          p2 = getAngleSnappedPoint(point, p1);
-        }
-        if (calculateDistance(p1, p2) < MIN_DISTANCE) {
-          return;
-        }
-        const qty = calculateQuantity([p1, p2], "linear", currentScale);
-        const lineLength = calculateDistance(p1, p2);
+      // Unified linear: always accumulate points. Finish is explicit
+      // (dbl-click / Enter / right-click / click-near-first-vertex on ≥4 pts).
+      let nextPoint = point;
+      if (currentPoints.length > 0 && isShiftPressed) {
+        nextPoint = getAngleSnappedPoint(
+          point,
+          currentPoints[currentPoints.length - 1]
+        );
+      }
+
+      // Auto-close into an area when clicking near the first vertex —
+      // requires ≥4 points so a 3-segment run isn't hijacked into a triangle.
+      const closeSnapRadius = 12 / stageScale;
+      if (
+        currentPoints.length >= 4 &&
+        calculateDistance(nextPoint, currentPoints[0]) < closeSnapRadius
+      ) {
+        const pixelArea = calculateArea(currentPoints);
         const confidence = currentScale
-          ? Math.min(1.0, lineLength / (currentScale * 10))
+          ? Math.min(1.0, pixelArea / (currentScale * currentScale * 100))
           : 0.5;
-        const measurement: Measurement = {
+        const closeMeasurement: Measurement = {
           id: generateClientId(),
-          points: [p1, p2],
-          quantity: qty,
+          points: [...currentPoints],
+          quantity: calculateAreaFromPoints(currentPoints),
           planId: activePlanId,
           page: currentPage,
-          type: "linear",
+          type: "area",
           color: activeColor,
-          strokeWidth: currentScale != null ? Math.max(activeRealWidth * currentScale, 2) : 2,
+          strokeWidth: 2,
           metadata: {
             createdAt: now,
             lastModified: now,
             confidence: Math.max(0.1, confidence),
           },
         };
-        const validation = validateMeasurement(measurement, "linear");
+        const validation = validateMeasurement(closeMeasurement, "area");
         if (validation.isValid) {
-          addMeasurement(canvasItemId, measurement);
-          // Tool stays active; next click starts a fresh measurement.
+          addMeasurement(canvasItemId, closeMeasurement);
           setCurrentPoints([]);
         } else {
           console.warn("Invalid measurement:", validation.error);
         }
+        return;
       }
+
+      // Reject stutter clicks: any new vertex within ~8 screen pixels of
+      // the previous one is treated as an accidental double-click. Converts
+      // screen threshold to image-pixel space so it feels the same at any zoom.
+      const effectiveScale = stageScale * (imageScale > 0 ? imageScale : 1);
+      const clickSep = MIN_CLICK_SEPARATION_SCREEN / effectiveScale;
+      if (
+        currentPoints.length > 0 &&
+        calculateDistance(
+          currentPoints[currentPoints.length - 1],
+          nextPoint
+        ) < clickSep
+      ) {
+        return;
+      }
+
+      setCurrentPoints([...currentPoints, nextPoint]);
     } else if (activeTool === "area") {
       let finalPoint = point;
       if (currentPoints.length > 0 && isShiftPressed) {
@@ -709,13 +690,41 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         );
       }
 
+      // Deduction entry is explicit-only: right-click on an area → "Add deduction".
+      // We used to also auto-detect "click inside an existing area" but a
+      // very large existing polygon (e.g. accidentally-drawn ~1M m²) would
+      // silently swallow every subsequent new area drawing. Explicit entry
+      // is unambiguous and matches user expectation.
+
       // Auto-close when clicking near the first vertex (snap radius in screen px)
       const closeSnapRadius = 12 / stageScale;
       if (
         currentPoints.length >= 3 &&
         calculateDistance(finalPoint, currentPoints[0]) < closeSnapRadius
       ) {
-        // Treat this as a finish — call the same logic as double-click
+        if (deductionTarget) {
+          // Finalize the deduction against its target measurement.
+          const validation = validateDeductions(
+            (() => {
+              const it = takeoffItems.find((i) => i.id === deductionTarget.itemId);
+              const m = it?.measurements.find((mm) => mm.id === deductionTarget.measurementId);
+              return m?.points ?? [];
+            })(),
+            [[...currentPoints]]
+          );
+          if (validation.isValid) {
+            addDeductionToMeasurement(deductionTarget.itemId, deductionTarget.measurementId, [
+              ...currentPoints,
+            ]);
+            setCurrentPoints([]);
+            setDeductionTarget(null);
+          } else {
+            console.warn("Invalid deduction:", validation.error);
+          }
+          return;
+        }
+
+        // Standard area auto-close.
         const area = calculateAreaFromPoints(currentPoints);
         const quantity = area;
         const pixelArea = calculateArea(currentPoints);
@@ -741,10 +750,22 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         if (validation.isValid) {
           addMeasurement(ensureCanvasItemId(), closeMeasurement);
           setCurrentPoints([]);
-          setActiveTool(null);
         } else {
           console.warn("Invalid measurement:", validation.error);
         }
+        return;
+      }
+
+      // Same stutter-click guard as the linear branch.
+      const effectiveScale = stageScale * (imageScale > 0 ? imageScale : 1);
+      const clickSep = MIN_CLICK_SEPARATION_SCREEN / effectiveScale;
+      if (
+        currentPoints.length > 0 &&
+        calculateDistance(
+          currentPoints[currentPoints.length - 1],
+          finalPoint
+        ) < clickSep
+      ) {
         return;
       }
 
@@ -761,7 +782,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       activeTool,
       activeColor,
       activeRealWidth,
-      setActiveTool,
       ensureCanvasItemId,
       currentPoints,
       isShiftPressed,
@@ -773,6 +793,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       currentScale,
       currentPage,
       addMeasurement,
+      addDeductionToMeasurement,
+      deductionTarget,
       takeoffItems,
       updateTakeoffItem,
       setSelectedMeasurement,
@@ -781,7 +803,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       stageSize,
       image,
       imageScale,
-
     ]
   );
 
@@ -878,24 +899,88 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     [stagePos, stageScale, getSnappedPoint, stageSize, setMousePos, setSnappedPoint, image, imageScale]
   );
 
-  // Handle double click to finish area
+  // Handle double click / Enter / right-click to finish the current run.
+  //
+  // Linear tool (unified): <2 points discards silently; exactly 2 → 'linear';
+  // ≥3 → 'polyline'. Area tool: needs ≥3 points to close.
   const handleDblClick = useCallback(() => {
-    if (activeTool === "area" && activePlanId && currentPoints.length > 2) {
-      // Validate measurement before adding
-      const area = calculateAreaFromPoints(currentPoints);
-      const quantity = area;
+    if (!activePlanId) return;
+    const now = new Date().toISOString();
 
-      // Calculate confidence based on polygon area and scale
+    if (activeTool === "linear") {
+      if (currentPoints.length < 2) {
+        setCurrentPoints([]);
+        return;
+      }
+      const type: TakeoffMode = currentPoints.length >= 3 ? "polyline" : "linear";
+      const qty = calculateQuantity(currentPoints, type, currentScale);
+      const lineLength = calculateDistance(
+        currentPoints[0],
+        currentPoints[currentPoints.length - 1]
+      );
+      const confidence = currentScale
+        ? Math.min(1.0, lineLength / (currentScale * 10))
+        : 0.5;
+      const measurement: Measurement = {
+        id: generateClientId(),
+        points: [...currentPoints],
+        quantity: qty,
+        planId: activePlanId,
+        page: currentPage,
+        type,
+        color: activeColor,
+        strokeWidth:
+          currentScale != null ? Math.max(activeRealWidth * currentScale, 2) : 2,
+        metadata: {
+          createdAt: now,
+          lastModified: now,
+          confidence: Math.max(0.1, confidence),
+        },
+      };
+      const validation = validateMeasurement(measurement, type);
+      if (validation.isValid) {
+        addMeasurement(ensureCanvasItemId(), measurement);
+        setCurrentPoints([]);
+      } else {
+        console.warn("Invalid measurement:", validation.error);
+      }
+      return;
+    }
+
+    if (activeTool === "area" && currentPoints.length > 2) {
+      // Finalize an in-progress deduction if deduction-mode is active.
+      if (deductionTarget) {
+        const targetItem = takeoffItems.find((i) => i.id === deductionTarget.itemId);
+        const targetM = targetItem?.measurements.find(
+          (mm) => mm.id === deductionTarget.measurementId
+        );
+        if (targetM) {
+          const validation = validateDeductions(targetM.points, [[...currentPoints]]);
+          if (validation.isValid) {
+            addDeductionToMeasurement(
+              deductionTarget.itemId,
+              deductionTarget.measurementId,
+              [...currentPoints]
+            );
+            setCurrentPoints([]);
+            setDeductionTarget(null);
+          } else {
+            console.warn("Invalid deduction:", validation.error);
+          }
+        }
+        return;
+      }
+
+      const area = calculateAreaFromPoints(currentPoints);
       const pixelArea = calculateArea(currentPoints);
       const confidence = currentScale
         ? Math.min(1.0, pixelArea / (currentScale * currentScale * 100))
         : 0.5;
-      const now = new Date().toISOString();
 
       const measurement: Measurement = {
         id: generateClientId(),
         points: [...currentPoints],
-        quantity,
+        quantity: area,
         planId: activePlanId,
         page: currentPage,
         type: activeTool,
@@ -919,22 +1004,55 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     activePlanId,
     activeTool,
     activeColor,
+    activeRealWidth,
     ensureCanvasItemId,
     currentPoints,
     calculateAreaFromPoints,
     currentPage,
     addMeasurement,
+    addDeductionToMeasurement,
+    deductionTarget,
+    takeoffItems,
     currentScale,
     setCurrentPoints,
   ]);
 
-  // Handle context menu (right-click) to finish area.
+  // Handle context menu (right-click).
+  //  1. Drawing in progress → finalize current run (mirrors dbl-click / Enter).
+  //  2. Hovered/selected area, no drawing → open area context menu
+  //     (Add deduction / Remove last deduction / Duplicate / Delete).
+  //  3. Otherwise → let the native browser menu through.
   const handleContextMenu = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
-      e.evt.preventDefault();
-      handleDblClick();
+      if (currentPoints.length > 0) {
+        e.evt.preventDefault();
+        handleDblClick();
+        return;
+      }
+      const target = hoveredMeasurement ?? selectedMeasurement;
+      if (target) {
+        const item = takeoffItems.find((i) => i.id === target.itemId);
+        const m = item?.measurements.find(
+          (mm) => mm.id === target.measurementId
+        );
+        if (m && item && getMeasurementType(m, item) === "area") {
+          e.evt.preventDefault();
+          setAreaContextMenu({
+            itemId: target.itemId,
+            measurementId: target.measurementId,
+            x: e.evt.clientX,
+            y: e.evt.clientY,
+          });
+        }
+      }
     },
-    [handleDblClick]
+    [
+      handleDblClick,
+      currentPoints.length,
+      hoveredMeasurement,
+      selectedMeasurement,
+      takeoffItems,
+    ]
   );
 
   const handleClearAllMeasurements = useCallback(async () => {
@@ -990,6 +1108,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       let anchor: Point | null = null;
       if (mType === "linear" && measurement.points.length === 2) {
         anchor = measurement.points[pointIndex === 0 ? 1 : 0];
+      } else if (mType === "polyline" && measurement.points.length >= 2) {
+        anchor =
+          measurement.points[
+            pointIndex === 0 ? 1 : pointIndex - 1
+          ];
       } else if (mType === "area" && measurement.points.length >= 2) {
         const prevIdx =
           (pointIndex - 1 + measurement.points.length) % measurement.points.length;
@@ -1025,6 +1148,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       let anchor: Point | null = null;
       if (mType === "linear" && measurement.points.length === 2) {
         anchor = measurement.points[pointIndex === 0 ? 1 : 0];
+      } else if (mType === "polyline" && measurement.points.length >= 2) {
+        anchor =
+          measurement.points[
+            pointIndex === 0 ? 1 : pointIndex - 1
+          ];
       } else if (mType === "area" && measurement.points.length >= 2) {
         const prevIdx =
           (pointIndex - 1 + measurement.points.length) % measurement.points.length;
@@ -1054,11 +1182,13 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       return;
     }
 
-    // Recalculate quantity
+    // Recalculate quantity — dragging never changes point count, so type stays the same.
     let newQuantity = measurement.quantity;
-      if (mType === "linear" && updatedPoints.length === 2) {
-        newQuantity = calculateQuantity(updatedPoints, "linear", currentScale);
-      } else if (mType === "area" && updatedPoints.length >= 3) {
+    if (mType === "linear" && updatedPoints.length === 2) {
+      newQuantity = calculateQuantity(updatedPoints, "linear", currentScale);
+    } else if (mType === "polyline" && updatedPoints.length >= 2) {
+      newQuantity = calculateQuantity(updatedPoints, "polyline", currentScale);
+    } else if (mType === "area" && updatedPoints.length >= 3) {
       newQuantity = calculateAreaFromPoints(updatedPoints);
     }
 
@@ -1175,7 +1305,12 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     const mType = getMeasurementType(measurement, item);
     const updatedPoints = [...measurement.points];
     const idx1 = edgeIndex;
-    const idx2 = (edgeIndex + 1) % measurement.points.length;
+    // Polylines are open — never wrap the last edge back to the first vertex.
+    const isOpen = mType === "polyline";
+    const idx2 = isOpen
+      ? edgeIndex + 1
+      : (edgeIndex + 1) % measurement.points.length;
+    if (idx2 >= measurement.points.length) return;
 
     const p1 = updatedPoints[idx1];
     const p2 = updatedPoints[idx2];
@@ -1184,7 +1319,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
 
     // Acrobat-style: Constrain movement to be perpendicular to the edge (normal vector)
     // unless Shift is pressed for free translation
-      if (!isShiftPressed && mType === "area") {
+      if (!isShiftPressed && (mType === "area" || mType === "polyline")) {
       const dx = p2.x - p1.x;
       const dy = p2.y - p1.y;
       const length = Math.sqrt(dx * dx + dy * dy);
@@ -1229,9 +1364,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     };
 
     let newQuantity = 0;
-      if (mType === "linear" && updatedPoints.length === 2) {
-        newQuantity = calculateQuantity(updatedPoints, "linear", currentScale);
-      } else if (mType === "area" && updatedPoints.length >= 3) {
+    if (mType === "linear" && updatedPoints.length === 2) {
+      newQuantity = calculateQuantity(updatedPoints, "linear", currentScale);
+    } else if (mType === "polyline" && updatedPoints.length >= 2) {
+      newQuantity = calculateQuantity(updatedPoints, "polyline", currentScale);
+    } else if (mType === "area" && updatedPoints.length >= 3) {
       newQuantity = calculateAreaFromPoints(updatedPoints);
     }
 
@@ -1361,6 +1498,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           return;
         }
         setCurrentPoints([]);
+        setDeductionTarget(null);
+        setAreaContextMenu(null);
         setCalibrationMode(false);
         setCalibrationPoint1(null);
         setPendingCalibration(null);
@@ -1486,18 +1625,29 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     [stageScale, stagePos, setStageScale, setStagePos]
   );
 
-  // Update cursor dynamically
+  // Compute the base ("nothing hovered") cursor for current mode.
+  const computeBaseCursor = useCallback((): string => {
+    if (isPanningMode) return "move";
+    if (isSelectMode) return "default";
+    if (calibrationMode || activeTool) return "crosshair";
+    return "crosshair";
+  }, [isPanningMode, isSelectMode, calibrationMode, activeTool]);
+
+  // Restore base cursor — called from onMouseLeave handlers when hover ends.
+  const resetCursor = useCallback(
+    (container: HTMLDivElement | undefined | null) => {
+      if (!container) return;
+      container.style.cursor = computeBaseCursor();
+    },
+    [computeBaseCursor]
+  );
+
+  // Update cursor dynamically when mode changes.
   useEffect(() => {
     const container = stageRef.current?.container();
     if (!container) return;
-
-    let cursor = "default";
-    if (isPanningMode) cursor = "move";
-    else if (isSelectMode) cursor = "pointer";
-    else if (calibrationMode || activeTool) cursor = "crosshair";
-
-    container.style.cursor = cursor;
-  }, [isPanningMode, isSelectMode, calibrationMode, activeTool, stageRef]);
+    container.style.cursor = computeBaseCursor();
+  }, [computeBaseCursor, stageRef]);
 
   // Keep labels at a constant screen size regardless of zoom
   // Elements inside the imageScale group are affected by both stageScale (zoom)
@@ -1527,9 +1677,19 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         calculateQuantity(measurement.points, "linear", currentScale)
       );
     }
+    if (mType === "polyline" && measurement.points.length >= 2) {
+      return formatDistance(
+        calculateQuantity(measurement.points, "polyline", currentScale)
+      );
+    }
     if (mType === "area" && measurement.points.length >= 3) {
       return formatArea(
-        calculateQuantity(measurement.points, "area", currentScale)
+        calculateQuantity(
+          measurement.points,
+          "area",
+          currentScale,
+          measurement.deductions ?? []
+        )
       );
     }
     return null;
@@ -1650,6 +1810,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                         onDragStart={(e) => {
                           if (e.target !== e.currentTarget) return;
                           setIsDraggingObject(true);
+                          const container = e.target.getStage()?.container();
+                          if (container) container.style.cursor = "grabbing";
                         }}
                         ref={(node) => {
                           if (isSelected && node) {
@@ -1667,9 +1829,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           }
                           setIsDraggingObject(false);
                           group.position({ x: 0, y: 0 });
+                          resetCursor(e.target.getStage()?.container());
                         }}
                         onClick={(e) => {
                           if (activeTool || calibrationMode || isPanningMode) return;
+                          if (!isSelectMode) return;
                           e.cancelBubble = true;
                           setSelectedMeasurement({
                             itemId: item.id,
@@ -1677,9 +1841,12 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           });
                         }}
                         onMouseEnter={(e) => {
-                          if (isSelectMode) {
-                            const container = e.target.getStage()?.container();
-                            if (container) container.style.cursor = "move";
+                          const container = e.target.getStage()?.container();
+                          if (container) {
+                            const isSel =
+                              selectedMeasurement?.itemId === item.id &&
+                              selectedMeasurement?.measurementId === m.id;
+                            container.style.cursor = isSel ? "move" : "pointer";
                           }
                           setHoveredMeasurement({
                             itemId: item.id,
@@ -1687,10 +1854,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           });
                         }}
                         onMouseLeave={(e) => {
-                          if (isSelectMode) {
-                            const container = e.target.getStage()?.container();
-                            if (container) container.style.cursor = "pointer";
-                          }
+                          resetCursor(e.target.getStage()?.container());
                           setHoveredMeasurement(null);
                         }}
                       >
@@ -1759,10 +1923,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                             }}
                             onMouseLeave={(e) => {
                               setHoveredEdge(null);
-                              const container = e.target
-                                .getStage()
-                                ?.container();
-                              if (container) container.style.cursor = "pointer";
+                              resetCursor(e.target.getStage()?.container());
                             }}
                           />
                         )}
@@ -1799,8 +1960,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                             const perpTickLen = 8 * labelScale;
                             const perpDX = -Math.sin(angle) * perpTickLen;
                             const perpDY = Math.cos(angle) * perpTickLen;
-                            const dotRadius = 2 * labelScale;
-                            const hoverRingRadius = 7 * labelScale;
+                            const ringRadius = (isHovered ? 6 : 4.5) * labelScale;
+                            const ringStroke = 1.75 * labelScale;
                             const hitRadius = 10 * labelScale;
 
                             return (
@@ -1819,25 +1980,16 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                                     strokeWidth={1.5 * labelScale}
                                   />
                                 )}
-                                {/* Hover ring — appears on hover, hidden on drag. */}
-                                {isHovered && !isDragging && (
-                                  <Circle
-                                    listening={false}
-                                    x={p.x}
-                                    y={p.y}
-                                    radius={hoverRingRadius}
-                                    stroke={mColor}
-                                    strokeWidth={1.5 * labelScale}
-                                    opacity={0.6}
-                                  />
-                                )}
-                                {/* Precise center dot — always visible, sits on the exact vertex. */}
+                                {/* Hollow endpoint ring — thick colored stroke, white fill.
+                                    PlanSwift-style so vertices are legible against the plan. */}
                                 <Circle
                                   listening={false}
                                   x={p.x}
                                   y={p.y}
-                                  radius={dotRadius}
-                                  fill={mColor}
+                                  radius={ringRadius}
+                                  stroke={mColor}
+                                  strokeWidth={ringStroke}
+                                  fill="#ffffff"
                                 />
                                 {/* Invisible hit target — larger than the visuals so the
                                     handle is easy to grab, but doesn't obscure the plan. */}
@@ -1907,11 +2059,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                                   }}
                                   onMouseLeave={(e) => {
                                     setHoveredPoint(null);
-                                    const container = e.target
-                                      .getStage()
-                                      ?.container();
-                                    if (container)
-                                      container.style.cursor = "pointer";
+                                    resetCursor(e.target.getStage()?.container());
                                   }}
                                 />
                               </React.Fragment>
@@ -1930,47 +2078,162 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                         i === dragging.pointIndex ? dragging.pos : p
                       );
                     }
-                    let totalLen = 0;
-                    for (let i = 1; i < displayPoints.length; i++) {
-                      totalLen += calculateDistance(displayPoints[i - 1], displayPoints[i]);
-                    }
-                    const totalQty = currentScale && currentScale > 0
-                      ? totalLen / currentScale
-                      : totalLen;
-                    const midX =
-                      displayPoints.reduce((acc, p) => acc + p.x, 0) / displayPoints.length;
-                    const midY =
-                      displayPoints.reduce((acc, p) => acc + p.y, 0) / displayPoints.length;
+                    const isSelected =
+                      selectedMeasurement?.itemId === item.id &&
+                      selectedMeasurement?.measurementId === m.id;
+                    const isHovered =
+                      hoveredMeasurement?.itemId === item.id &&
+                      hoveredMeasurement?.measurementId === m.id;
+                    const flatPoints = displayPoints.flatMap((p) => [p.x, p.y]);
                     return (
-                      <Group key={m.id}>
+                      <Group
+                        key={m.id}
+                        draggable={isSelectMode}
+                        onDragStart={(e) => {
+                          if (e.target !== e.currentTarget) return;
+                          setIsDraggingObject(true);
+                          const container = e.target.getStage()?.container();
+                          if (container) container.style.cursor = "grabbing";
+                        }}
+                        ref={(node) => {
+                          if (isSelected && node) {
+                            selectedShapeRef.current = node;
+                          }
+                        }}
+                        onDragEnd={(e) => {
+                          const group = e.currentTarget;
+                          if (e.target === e.currentTarget && isSelectMode) {
+                            const offset = { x: group.x(), y: group.y() };
+                            handleMeasurementDrag(item.id, m.id, offset);
+                          }
+                          setIsDraggingObject(false);
+                          group.position({ x: 0, y: 0 });
+                          resetCursor(e.target.getStage()?.container());
+                        }}
+                        onClick={(e) => {
+                          if (activeTool || calibrationMode || isPanningMode) return;
+                          if (!isSelectMode) return;
+                          e.cancelBubble = true;
+                          setSelectedMeasurement({
+                            itemId: item.id,
+                            measurementId: m.id,
+                          });
+                        }}
+                        onMouseEnter={(e) => {
+                          const container = e.target.getStage()?.container();
+                          if (container) {
+                            const isSel =
+                              selectedMeasurement?.itemId === item.id &&
+                              selectedMeasurement?.measurementId === m.id;
+                            container.style.cursor = isSel ? "move" : "pointer";
+                          }
+                          setHoveredMeasurement({
+                            itemId: item.id,
+                            measurementId: m.id,
+                          });
+                        }}
+                        onMouseLeave={(e) => {
+                          resetCursor(e.target.getStage()?.container());
+                          setHoveredMeasurement(null);
+                        }}
+                      >
+                        {/* Invisible thick hit-line so clicks anywhere along
+                            the polyline register, not just on-pixel. */}
                         <Line
-                          points={displayPoints.flatMap((p) => [p.x, p.y])}
-                          stroke={mColor}
-                          strokeWidth={mStroke * strokeScale}
+                          points={flatPoints}
+                          stroke="rgba(0,0,0,0.001)"
+                          strokeWidth={15 * strokeScale}
                           lineJoin="round"
                           lineCap="round"
+                        />
+                        {/* Selection halo */}
+                        {isSelected && (
+                          <Line
+                            points={flatPoints}
+                            stroke={mColor}
+                            strokeWidth={mStroke * 3 * strokeScale}
+                            opacity={0.22}
+                            lineJoin="round"
+                            lineCap="round"
+                            listening={false}
+                          />
+                        )}
+                        {/* Visible line */}
+                        <Line
+                          points={flatPoints}
+                          stroke={mColor}
+                          strokeWidth={(isSelected || isHovered ? mStroke * 1.5 : mStroke) * strokeScale}
+                          opacity={isSelected || isHovered ? 0.9 : 0.75}
+                          lineJoin="round"
+                          lineCap="round"
+                          listening={false}
                         />
                         {displayPoints.map((p, i) => (
                           <Circle
                             key={i}
                             x={p.x}
                             y={p.y}
-                            radius={2 * strokeScale}
-                            fill={mColor}
+                            radius={4.5 * strokeScale}
+                            fill="#ffffff"
+                            stroke={mColor}
+                            strokeWidth={1.75 * strokeScale}
                             listening={false}
                           />
                         ))}
-                        <Text
-                          x={midX}
-                          y={midY}
-                          text={formatDistance(totalQty)}
-                          fontSize={LABEL_FONT_SIZE * labelScale}
-                          fill={mColor}
-                          align="center"
-                          verticalAlign="middle"
-                          offsetY={4 * labelScale}
-                          listening={false}
-                        />
+                        {/* Per-edge hit lines for segment translation — only
+                            N-1 edges since the polyline is open. */}
+                        {isSelected &&
+                          displayPoints.slice(0, -1).map((p1, edgeIdx) => {
+                            const p2 = displayPoints[edgeIdx + 1];
+                            const isEdgeHovered =
+                              hoveredEdge?.itemId === item.id &&
+                              hoveredEdge?.measurementId === m.id &&
+                              hoveredEdge?.edgeIndex === edgeIdx;
+                            return (
+                              <Group key={`edge-hit-${edgeIdx}`}>
+                                <Line
+                                  points={[p1.x, p1.y, p2.x, p2.y]}
+                                  stroke="transparent"
+                                  strokeWidth={15 * strokeScale}
+                                  draggable={true}
+                                  onDragStart={() => setIsDraggingObject(true)}
+                                  onDragMove={(e) => {
+                                    const delta = {
+                                      x: e.target.x(),
+                                      y: e.target.y(),
+                                    };
+                                    handleEdgeDrag(item.id, m.id, edgeIdx, delta);
+                                    e.target.position({ x: 0, y: 0 });
+                                  }}
+                                  onDragEnd={() => setIsDraggingObject(false)}
+                                  onMouseEnter={(e) => {
+                                    setHoveredEdge({
+                                      itemId: item.id,
+                                      measurementId: m.id,
+                                      edgeIndex: edgeIdx,
+                                    });
+                                    const container = e.target
+                                      .getStage()
+                                      ?.container();
+                                    if (container) container.style.cursor = "move";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    setHoveredEdge(null);
+                                    resetCursor(e.target.getStage()?.container());
+                                  }}
+                                />
+                                {isEdgeHovered && (
+                                  <Line
+                                    points={[p1.x, p1.y, p2.x, p2.y]}
+                                    stroke={mColor}
+                                    strokeWidth={6 * strokeScale}
+                                    opacity={0.5}
+                                    listening={false}
+                                  />
+                                )}
+                              </Group>
+                            );
+                          })}
                       </Group>
                     );
                   } else if (mType === "area") {
@@ -1984,13 +2247,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                         i === dragging.pointIndex ? dragging.pos : p
                       );
                     }
-                    const center = displayPoints.reduce(
-                      (acc, p) => ({
-                        x: acc.x + p.x / displayPoints.length,
-                        y: acc.y + p.y / displayPoints.length,
-                      }),
-                      { x: 0, y: 0 }
-                    );
                     const isSelected =
                       selectedMeasurement?.itemId === item.id &&
                       selectedMeasurement?.measurementId === m.id;
@@ -2005,6 +2261,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                         onDragStart={(e) => {
                           if (e.target !== e.currentTarget) return;
                           setIsDraggingObject(true);
+                          const container = e.target.getStage()?.container();
+                          if (container) container.style.cursor = "grabbing";
                         }}
                         ref={(node) => {
                           if (isSelected && node) {
@@ -2022,9 +2280,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           }
                           setIsDraggingObject(false);
                           group.position({ x: 0, y: 0 });
+                          resetCursor(e.target.getStage()?.container());
                         }}
                         onClick={(e) => {
                           if (activeTool || calibrationMode || isPanningMode) return;
+                          if (!isSelectMode) return;
                           e.cancelBubble = true;
                           setSelectedMeasurement({
                             itemId: item.id,
@@ -2032,9 +2292,12 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           });
                         }}
                         onMouseEnter={(e) => {
-                          if (isSelectMode) {
-                            const container = e.target.getStage()?.container();
-                            if (container) container.style.cursor = "move";
+                          const container = e.target.getStage()?.container();
+                          if (container) {
+                            const isSel =
+                              selectedMeasurement?.itemId === item.id &&
+                              selectedMeasurement?.measurementId === m.id;
+                            container.style.cursor = isSel ? "move" : "pointer";
                           }
                           setHoveredMeasurement({
                             itemId: item.id,
@@ -2042,21 +2305,82 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           });
                         }}
                         onMouseLeave={(e) => {
-                          if (isSelectMode) {
-                            const container = e.target.getStage()?.container();
-                            if (container) container.style.cursor = "pointer";
-                          }
+                          resetCursor(e.target.getStage()?.container());
                           setHoveredMeasurement(null);
                         }}
                       >
-                        <Line
-                          points={displayPoints.flatMap((p) => [p.x, p.y])}
-                          stroke={mColor}
-                          strokeWidth={(isSelected || isHovered ? mStroke * 2 : mStroke) * strokeScale}
-                          fill={mColor + "44"}
-                          opacity={isHovered ? 0.8 : 1}
-                          closed
-                        />
+                        {m.deductions && m.deductions.length > 0 && (
+                          // Invisible hit area so clicks / hover still register
+                          // on the punched shape (Shape below is non-listening).
+                          <Line
+                            points={displayPoints.flatMap((p) => [p.x, p.y])}
+                            fill="rgba(0,0,0,0.001)"
+                            closed
+                          />
+                        )}
+                        {m.deductions && m.deductions.length > 0 ? (
+                          <Shape
+                            sceneFunc={(ctx) => {
+                              // Punch deductions via evenodd fill: outer + all
+                              // deduction paths in one Path2D, then fill('evenodd').
+                              // Stroke separately so the fill rule doesn't
+                              // affect the outer boundary stroke.
+                              const path = new Path2D();
+                              displayPoints.forEach((p, i) => {
+                                if (i === 0) path.moveTo(p.x, p.y);
+                                else path.lineTo(p.x, p.y);
+                              });
+                              path.closePath();
+                              (m.deductions ?? []).forEach((d) => {
+                                d.forEach((p, i) => {
+                                  if (i === 0) path.moveTo(p.x, p.y);
+                                  else path.lineTo(p.x, p.y);
+                                });
+                                path.closePath();
+                              });
+                              const native = (ctx as unknown as {
+                                _context: CanvasRenderingContext2D;
+                              })._context;
+                              native.fillStyle = mColor + "44";
+                              native.fill(path, "evenodd");
+                              const strokePath = new Path2D();
+                              displayPoints.forEach((p, i) => {
+                                if (i === 0) strokePath.moveTo(p.x, p.y);
+                                else strokePath.lineTo(p.x, p.y);
+                              });
+                              strokePath.closePath();
+                              native.strokeStyle = mColor;
+                              native.lineWidth =
+                                (isSelected || isHovered ? mStroke * 2 : mStroke) *
+                                strokeScale;
+                              native.stroke(strokePath);
+                            }}
+                            opacity={isHovered ? 0.8 : 1}
+                            listening={false}
+                          />
+                        ) : (
+                          <Line
+                            points={displayPoints.flatMap((p) => [p.x, p.y])}
+                            stroke={mColor}
+                            strokeWidth={(isSelected || isHovered ? mStroke * 2 : mStroke) * strokeScale}
+                            fill={mColor + "44"}
+                            opacity={isHovered ? 0.8 : 1}
+                            closed
+                          />
+                        )}
+                        {/* Deduction strokes — dashed to distinguish from outer boundary */}
+                        {m.deductions?.map((d, di) => (
+                          <Line
+                            key={`deduction-${di}`}
+                            points={d.flatMap((p) => [p.x, p.y])}
+                            stroke={mColor}
+                            strokeWidth={mStroke * strokeScale}
+                            dash={[6 * strokeScale, 4 * strokeScale]}
+                            opacity={0.8}
+                            closed
+                            listening={false}
+                          />
+                        ))}
                         {/* Selection highlight */}
                         {isSelected && (
                           <Line
@@ -2068,18 +2392,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                             listening={false}
                           />
                         )}
-                        <Text
-                          x={center.x}
-                          y={center.y}
-                          text={formatArea(m.quantity)}
-                          fontSize={LABEL_FONT_SIZE * labelScale}
-                          fontStyle="bold"
-                          fill={mColor}
-                          align="center"
-                          verticalAlign="middle"
-                          offsetY={0}
-                          listening={false}
-                        />
                         {/* Edge hit areas for dragging segments */}
                         {isSelected &&
                           m.points.map((p, i) => {
@@ -2121,11 +2433,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                                 }}
                                 onMouseLeave={(e) => {
                                   setHoveredEdge(null);
-                                    const container = e.target
-                                      .getStage()
-                                      ?.container();
-                                    if (container)
-                                      container.style.cursor = "pointer";
+                                    resetCursor(e.target.getStage()?.container());
                                 }}
                               />
                               {isEdgeHovered && (
@@ -2202,6 +2510,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           }}
                           onClick={(e) => {
                             if (activeTool || calibrationMode || isPanningMode) return;
+                          if (!isSelectMode) return;
                             e.cancelBubble = true;
                             setSelectedMeasurement({
                               itemId: item.id,
@@ -2209,9 +2518,12 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                             });
                           }}
                           onMouseEnter={(e) => {
-                            if (isSelectMode) {
-                              const container = e.target.getStage()?.container();
-                              if (container) container.style.cursor = "move";
+                            const container = e.target.getStage()?.container();
+                            if (container) {
+                              const isSel =
+                                selectedMeasurement?.itemId === item.id &&
+                                selectedMeasurement?.measurementId === m.id;
+                              container.style.cursor = isSel ? "move" : "pointer";
                             }
                             setHoveredMeasurement({
                               itemId: item.id,
@@ -2219,10 +2531,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                             });
                           }}
                           onMouseLeave={(e) => {
-                            if (isSelectMode) {
-                              const container = e.target.getStage()?.container();
-                              if (container) container.style.cursor = "pointer";
-                            }
+                            resetCursor(e.target.getStage()?.container());
                             setHoveredMeasurement(null);
                           }}
                         />
@@ -2235,7 +2544,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                 })
             )}
 
-            {/* Draggable vertices in select mode (area only).
+            {/* Draggable vertices in select mode (area + polyline).
                 Linear/count have dedicated drag handles above. */}
             {isSelectMode &&
               takeoffItems.map((item) =>
@@ -2243,7 +2552,10 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                   .filter(
           (m) => measurementBelongsToPlan(m, activePlanId) && m.page === currentPage && !m.hidden
         )
-                  .filter((m) => getMeasurementType(m, item) === "area")
+                  .filter((m) => {
+                    const t = getMeasurementType(m, item);
+                    return t === "area" || t === "polyline";
+                  })
                   .flatMap((m) => {
                     const mColor = getMeasurementColor(m, item);
                     const isSelected =
@@ -2259,16 +2571,13 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                         key={`${m.id}-point-${idx}`}
                         x={p.x}
                         y={p.y}
-                        radius={(isSelected ? 10 : isHovered ? 8 : 6) * strokeScale}
-                          fill={
-                            isSelected
-                              ? mColor
-                              : isHovered
-                                ? mColor
-                                : "white"
-                          }
+                        radius={(isHovered ? 6 : 5) * strokeScale}
+                        // Solid fill only on hover of THIS vertex — selection
+                        // of the whole measurement is signaled by the halo
+                        // behind the line, not by filling every point.
+                        fill={isHovered ? mColor : "#ffffff"}
                         stroke={mColor}
-                        strokeWidth={(isSelected || isHovered ? 3 : 2) * strokeScale}
+                        strokeWidth={(isHovered ? 2.5 : 2) * strokeScale}
                         draggable={true}
                         onDragStart={(e) => {
                           e.cancelBubble = true;
@@ -2317,20 +2626,15 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                         }}
                         onMouseEnter={(e) => {
                           const container = e.target.getStage()?.container();
-                          if (container) {
-                              container.style.cursor = "grab";
-                            }
-                            setHoveredPoint({
-                              itemId: item.id,
-                              measurementId: m.id,
-                              pointIndex: idx,
-                            });
+                          if (container) container.style.cursor = "crosshair";
+                          setHoveredPoint({
+                            itemId: item.id,
+                            measurementId: m.id,
+                            pointIndex: idx,
+                          });
                         }}
                         onMouseLeave={(e) => {
-                          const container = e.target.getStage()?.container();
-                          if (container) {
-                              container.style.cursor = "pointer";
-                          }
+                          resetCursor(e.target.getStage()?.container());
                           setHoveredPoint(null);
                         }}
                         shadowColor={isSelected ? mColor : undefined}
@@ -2342,137 +2646,46 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                 })
               )}
 
-            {/* Edge midpoint handles in select mode (for area measurements) */}
-            {isSelectMode &&
-              takeoffItems.map((item) =>
-              item.measurements
-                  .filter(
-          (m) => measurementBelongsToPlan(m, activePlanId) && m.page === currentPage && !m.hidden
-        )
-                  .filter((m) => getMeasurementType(m, item) === "area" && m.points.length >= 3)
-                  .flatMap((m) => {
-                    const mColor = getMeasurementColor(m, item);
-                    const isSelected =
-                      selectedMeasurement?.itemId === item.id &&
-                      selectedMeasurement?.measurementId === m.id;
-                  if (!isSelected) return [];
-
-                  const midpoints = getEdgeMidpoints(m.points);
-                  return midpoints.map((midpoint, edgeIdx) => {
-                      const isHovered =
-                        hoveredEdge?.itemId === item.id &&
-                        hoveredEdge?.measurementId === m.id &&
-                        hoveredEdge?.edgeIndex === edgeIdx;
-                    return (
-                      <Circle
-                        key={`${m.id}-edge-${edgeIdx}`}
-                        x={midpoint.x}
-                        y={midpoint.y}
-                        radius={(isHovered ? 7 : 5) * strokeScale}
-                        fill="white"
-                        stroke={mColor}
-                        strokeWidth={2 * strokeScale}
-                        opacity={isHovered ? 1 : 0.7}
-                        draggable={true}
-                        onDragStart={(e) => {
-                          setIsDraggingObject(true);
-                          const container = e.target.getStage()?.container();
-                          if (container) {
-                              container.style.cursor = "grabbing";
-                          }
-                        }}
-                        onDragMove={(e) => {
-                          const pos = e.target.position();
-                            handleEdgeMidpointDrag(item.id, m.id, edgeIdx, {
-                              x: pos.x,
-                              y: pos.y,
-                            });
-                        }}
-                        onDragEnd={(e) => {
-                          setIsDraggingObject(false);
-                          e.target.position(midpoint);
-                        }}
-                        onClick={(e) => {
-                          e.cancelBubble = true;
-                        }}
-                        onMouseEnter={(e) => {
-                          const container = e.target.getStage()?.container();
-                          if (container) {
-                              container.style.cursor = "cell";
-                            }
-                            setHoveredEdge({
-                              itemId: item.id,
-                              measurementId: m.id,
-                              edgeIndex: edgeIdx,
-                            });
-                        }}
-                        onMouseLeave={(e) => {
-                          const container = e.target.getStage()?.container();
-                          if (container) {
-                              container.style.cursor = "pointer";
-                          }
-                          setHoveredEdge(null);
-                        }}
-                      />
-                    );
-                  });
-                })
-              )}
-
         </>}
         draftChildren={<>
             {/* Render current drawing points */}
-            {currentPoints.length > 0 && activeTool && (
+            {currentPoints.length > 0 && activeTool && (() => {
+              const drawColor = deductionTarget ? "#ef4444" : activeColor;
+              return (
               <>
                 {currentPoints.map((p, i) => {
-                  const tickLen = 8;
                   const isFirst = i === 0 && activeTool === "area" && currentPoints.length >= 3;
                   // Check if cursor is near the first point (for close-area highlight)
                   const closeSnapRadius = 12 / stageScale;
                   const nearClose = isFirst && mousePos && calculateDistance(mousePos, p) < closeSnapRadius;
+                  // PlanSwift-style hollow ring: thick colored stroke, white fill.
+                  const ringRadius = (isFirst && nearClose ? 8 : 5) * labelScale;
+                  const ringStroke = 2 * labelScale;
                   return (
                     <Group key={i}>
-                      {/* First vertex of area: large ring to indicate click-to-close */}
-                      {isFirst ? (
-                        <>
-                          <Circle
-                            x={p.x}
-                            y={p.y}
-                            radius={(nearClose ? 10 : 6) * labelScale}
-                            stroke={activeColor}
-                            strokeWidth={2 * labelScale}
-                            fill={nearClose ? activeColor : "rgba(255,255,255,0.6)"}
-                            listening={false}
-                          />
-                        </>
-                      ) : (
-                        <>
-                          <Line
-                            points={[p.x - tickLen * labelScale, p.y, p.x + tickLen * labelScale, p.y]}
-                            stroke={activeColor}
-                            strokeWidth={3 * labelScale}
-                          />
-                          <Circle
-                            x={p.x}
-                            y={p.y}
-                            radius={2 * labelScale}
-                            fill={activeColor}
-                          />
-                        </>
-                      )}
+                      <Circle
+                        x={p.x}
+                        y={p.y}
+                        radius={ringRadius}
+                        stroke={drawColor}
+                        strokeWidth={ringStroke}
+                        fill={isFirst && nearClose ? drawColor : "#ffffff"}
+                        listening={false}
+                      />
                     </Group>
                   );
                 })}
                 {currentPoints.length > 1 && (
                   <Line
                     points={currentPoints.flatMap((p) => [p.x, p.y])}
-                    stroke={activeColor}
+                    stroke={drawColor}
                     strokeWidth={2 * strokeScale}
                     dash={[5 * strokeScale, 5 * strokeScale]}
                   />
                 )}
               </>
-            )}
+              );
+            })()}
 
             {/* Ghost line preview */}
             {mousePos &&
@@ -2875,6 +3088,36 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         snapEnabled={snapEnabled}
         onToggleSnap={handleToggleSnap}
       />
+      {(() => {
+        // Slim status pill — top-center of viewport. Only appears when a
+        // tool that benefits from hints is armed (linear / area / deduction).
+        // Suppressed while a BOQ measuring session is active — the orange
+        // "Measuring for..." pill occupies the same slot and takes priority.
+        if (boqTargeting) return null;
+        let text: string | null = null;
+        let accent = "bg-gray-800/85";
+        if (calibrationMode) {
+          text = "Calibration — click two points, then enter the real distance";
+          accent = "bg-orange-600/90";
+        } else if (deductionTarget && activeTool === "area") {
+          text = "Deducting — double-click / Enter to finish, Esc to cancel";
+          accent = "bg-red-600/90";
+        } else if (activeTool === "linear") {
+          text = "Linear — click points, double-click / Enter to finish";
+        } else if (activeTool === "area") {
+          text = "Area — click points, double-click / Enter to close";
+        } else if (activeTool === "count") {
+          text = "Count — click each item, Esc to finish";
+        }
+        if (!text) return null;
+        return (
+          <div
+            className={`absolute top-16 left-1/2 -translate-x-1/2 z-20 ${accent} backdrop-blur text-white px-3 py-1.5 rounded-full shadow-lg text-[11px] font-medium tracking-wide max-w-[420px] text-center pointer-events-none whitespace-nowrap`}
+          >
+            {text}
+          </div>
+        );
+      })()}
       <CalibrationDialog
         open={!!pendingCalibration}
         pixelDistance={
@@ -2913,6 +3156,78 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           setCalibrationMode(false);
         }}
       />
+      {areaContextMenu && (() => {
+        const item = takeoffItems.find((i) => i.id === areaContextMenu.itemId);
+        const m = item?.measurements.find((mm) => mm.id === areaContextMenu.measurementId);
+        const deductionCount = m?.deductions?.length ?? 0;
+        return (
+          <>
+            <div
+              className="fixed inset-0 z-[9998]"
+              onClick={() => setAreaContextMenu(null)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setAreaContextMenu(null);
+              }}
+            />
+            <div
+              className="fixed z-[9999] bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-[180px] text-sm"
+              style={{ left: areaContextMenu.x, top: areaContextMenu.y }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedMeasurement({
+                    itemId: areaContextMenu.itemId,
+                    measurementId: areaContextMenu.measurementId,
+                  });
+                  setDeductionTarget({
+                    itemId: areaContextMenu.itemId,
+                    measurementId: areaContextMenu.measurementId,
+                  });
+                  setCurrentPoints([]);
+                  onSelectTool("area");
+                  setAreaContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-gray-100 cursor-pointer"
+              >
+                Deduct
+              </button>
+              <button
+                type="button"
+                disabled={deductionCount === 0}
+                onClick={() => {
+                  if (deductionCount === 0) return;
+                  removeDeductionFromMeasurement(
+                    areaContextMenu.itemId,
+                    areaContextMenu.measurementId,
+                    deductionCount - 1
+                  );
+                  setAreaContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-gray-100 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Remove last deduction {deductionCount > 0 ? `(${deductionCount})` : ''}
+              </button>
+              <div className="h-px bg-gray-200 my-1" />
+              <button
+                type="button"
+                onClick={() => {
+                  removeMeasurement(
+                    areaContextMenu.itemId,
+                    areaContextMenu.measurementId
+                  );
+                  setSelectedMeasurement(null);
+                  setAreaContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600 cursor-pointer"
+              >
+                Delete area
+              </button>
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 };

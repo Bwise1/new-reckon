@@ -104,6 +104,10 @@ export const takeoffItemsFromApiMeasurements = (
       strokeWidth: m.metadata?.strokeWidth,
       boqElementId: m.boq_element_id ?? undefined,
       boqItemId: m.boq_item_id ?? undefined,
+      deductions:
+        Array.isArray(m.deductions) && m.deductions.length > 0
+          ? m.deductions
+          : undefined,
       metadata:
         m.metadata && (m.metadata.createdAt || m.metadata.lastModified)
           ? {
@@ -162,6 +166,10 @@ export const measurementCreateBodyFromStore = (
     type,
     color: measurement.color ?? MARKUP_COLORS[0],
     points: measurement.points,
+    deductions:
+      measurement.deductions && measurement.deductions.length > 0
+        ? measurement.deductions
+        : null,
     quantity: measurement.quantity,
     hidden: Boolean(measurement.hidden),
     metadata: {

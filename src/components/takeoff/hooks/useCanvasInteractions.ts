@@ -223,19 +223,6 @@ if (pdfSnap) {
     [currentScale]
   );
 
-  const getEdgeMidpoints = useCallback((points: Point[]): Point[] => {
-    if (points.length < 2) return [];
-    const midpoints: Point[] = [];
-    for (let i = 0; i < points.length; i++) {
-      const p1 = points[i];
-      const p2 = points[(i + 1) % points.length];
-      midpoints.push({
-        x: (p1.x + p2.x) / 2,
-        y: (p1.y + p2.y) / 2,
-      });
-    }
-    return midpoints;
-  }, []);
 
   return {
     getSnappedPoint,
@@ -243,7 +230,6 @@ if (pdfSnap) {
     formatDistance,
     formatArea,
     calculateAreaFromPoints,
-    getEdgeMidpoints,
   };
 };
 

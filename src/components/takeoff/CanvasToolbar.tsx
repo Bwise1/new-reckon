@@ -117,13 +117,21 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         <span className="text-xs font-medium text-gray-400 mr-0.5">Tools</span>
         {MEASUREMENT_TOOLS.map((tool, index) => {
           const isActive = activeTool === tool.type || (tool.type === 'linear' && activeTool === 'polyline');
+          const tooltip = (() => {
+            if (isActive) return `${tool.label} — click again or Done to exit`;
+            if (tool.type === 'linear')
+              return 'Linear — click points; double-click, Enter, or right-click to finish. Click first point (≥4 pts) to close as area.';
+            if (tool.type === 'area')
+              return 'Area — click points; double-click or Enter to close. Right-click a finished area to deduct.';
+            return tool.label;
+          })();
           return (
             <React.Fragment key={tool.type}>
               {index > 0 && <div className="w-px h-4 bg-gray-200" />}
               <button
                 type="button"
                 onClick={() => onSelectTool(tool.type)}
-                title={isActive ? `${tool.label} — click again or Done to exit` : tool.label}
+                title={tooltip}
                 aria-pressed={isActive}
                 className={`flex items-center justify-center w-8 h-6 rounded text-sm font-bold transition cursor-pointer outline-none ${
                   isActive ? 'bg-secondary text-white outline-2 outline-secondary/30' : 'text-gray-600 hover:bg-gray-100'
