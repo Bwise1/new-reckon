@@ -1473,6 +1473,14 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     ]
   );
 
+  // Spacebar-hold pan: mirror the Figma / Photoshop convention. Holding
+  // Space temporarily activates pan; releasing restores whatever mode was
+  // active. spacePanRef stores the pre-hold state so we can restore accurately.
+  const spacePanRef = useRef<
+    | { active: false }
+    | { active: true; prevPanning: boolean }
+  >({ active: false });
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1505,6 +1513,19 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         setPendingCalibration(null);
       }
       if (isTypingInField) return;
+      // Hold-space to pan. First keydown remembers current pan state and
+      // switches to pan; subsequent auto-repeats do nothing. Key-up restores.
+      if (e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        if (!spacePanRef.current.active) {
+          spacePanRef.current = {
+            active: true,
+            prevPanning: isPanningMode,
+          };
+          if (!isPanningMode) setIsPanningMode(true);
+        }
+        return;
+      }
       if (e.key === "Enter" && currentPoints.length > 0) {
         e.preventDefault();
         handleDblClick();
@@ -1567,13 +1588,32 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.key === "Shift") setIsShiftPressed(false);
+      if (e.key === " " || e.code === "Space") {
+        const state = spacePanRef.current;
+        if (state.active) {
+          spacePanRef.current = { active: false };
+          setIsPanningMode(state.prevPanning);
+        }
+      }
     };
 
+    // If the window loses focus while space is held, keyup never fires —
+    // recover by clearing the space-held state and restoring the prev mode.
+    const handleBlur = () => {
+      const state = spacePanRef.current;
+      if (state.active) {
+        spacePanRef.current = { active: false };
+        setIsPanningMode(state.prevPanning);
+      }
+      setIsShiftPressed(false);
+    };
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
     };
   }, [
     currentPoints,
@@ -1591,6 +1631,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     boqTargeting,
     exitBoqTargeting,
     cancelBoqTargeting,
+    isPanningMode,
   ]);
 
   // Handle zoom
