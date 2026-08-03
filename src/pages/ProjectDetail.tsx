@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useRef, useCallback, useEffect, useState } from 'react';
 import PlanNavigator from '@/components/takeoff/PlanNavigator';
 import FloorPlanCanvas from '@/components/takeoff/FloorPlanCanvas';
@@ -6,17 +6,35 @@ import TakeoffRightSidebar from '@/components/takeoff/TakeoffRightSidebar';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useProject } from '@/hooks/useProjects';
 import { useProjectData } from '@/hooks/useProjectData';
+import { ApiError } from '@/lib/api-client';
 import type { TakeoffMode } from '@/types/takeoff';
 
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const { data: projectResponse, isLoading: isProjectLoading } = useProject(id ?? '');
+  const navigate = useNavigate();
+  const {
+    data: projectResponse,
+    isLoading: isProjectLoading,
+    error: projectError,
+  } = useProject(id ?? '');
   const project = projectResponse?.data?.project;
+
+  // If the project fetch failed with a permanent 4xx (404 = doesn't exist,
+  // 403 = not owned by this user), skip all downstream hydration so we
+  // don't fire cascading 404s for plans/BOQ/measurements/calibrations,
+  // and so the user gets a stable error UI instead of a flickering loader.
+  const projectFetchStatus =
+    projectError instanceof ApiError ? projectError.status : undefined;
+  const projectDenied =
+    projectFetchStatus === 404 ||
+    projectFetchStatus === 403 ||
+    projectFetchStatus === 401;
 
   const { isReady: isProjectDataReady } = useProjectData(id, {
     clientUuid: project?.client_uuid,
     title: project?.title,
     location: project?.location,
+    skip: projectDenied,
   });
 
   // FloorPlanCanvas must stay mounted for its plan-loading hook to run at
@@ -154,6 +172,32 @@ const ProjectDetail = () => {
     planLoadStatus === 'error' ||
     (planLoadStatus === 'idle' && !activePlanId) ||
     planLoadTimedOut;
+
+  if (projectDenied) {
+    const heading =
+      projectFetchStatus === 404
+        ? 'Project not found'
+        : "You don't have access to this project";
+    const body =
+      projectFetchStatus === 404
+        ? "This project may have been deleted, or the link you followed is out of date."
+        : "You're signed in, but this project belongs to someone else.";
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#f0f2f5]">
+        <div className="max-w-sm rounded-lg bg-white px-6 py-5 shadow-lg border border-gray-200 text-center">
+          <h2 className="text-base font-semibold text-gray-900">{heading}</h2>
+          <p className="mt-2 text-sm text-gray-600">{body}</p>
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            className="mt-4 rounded-md bg-secondary px-4 py-2 text-sm font-semibold text-white hover:bg-secondary/90 transition cursor-pointer"
+          >
+            Back to dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (isProjectLoading || !isProjectDataReady) {
     return (

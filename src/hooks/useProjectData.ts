@@ -32,14 +32,21 @@ import {
  */
 export const useProjectData = (
   projectId: string | undefined,
-  projectInfo?: { clientUuid?: string | null; title?: string; location?: string }
+  projectInfo?: {
+    clientUuid?: string | null;
+    title?: string;
+    location?: string;
+    /** When true, the project fetch itself failed (404/403/etc). Skip all
+     * hydration and mark ready so the caller can render an error UI. */
+    skip?: boolean;
+  }
 ) => {
   const loadedRef = useRef<string | null>(null);
   const isLoggedIn = Boolean(localStorage.getItem('token'));
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    if (!projectId || !isLoggedIn) {
+    if (!projectId || !isLoggedIn || projectInfo?.skip) {
       setIsReady(true);
       return;
     }
@@ -182,7 +189,7 @@ export const useProjectData = (
     return () => {
       if (projectId) void syncQueue.flush(projectId);
     };
-  }, [projectId, projectInfo?.clientUuid, isLoggedIn]);
+  }, [projectId, projectInfo?.clientUuid, projectInfo?.skip, isLoggedIn]);
 
   return { isReady };
 };
