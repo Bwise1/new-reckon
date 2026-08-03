@@ -185,6 +185,13 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     itemId: string;
     measurementId: string;
   } | null>(null);
+  // Cursor is over a specific deduction outline. Tooltip shows −{area} instead
+  // of the parent measurement's net.
+  const [hoveredDeduction, setHoveredDeduction] = useState<{
+    itemId: string;
+    measurementId: string;
+    index: number;
+  } | null>(null);
   // Screen-position of the right-click context menu on a selected area.
   const [areaContextMenu, setAreaContextMenu] = useState<{
     itemId: string;
@@ -1704,8 +1711,24 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
 
   // PlanSwift-style hover tooltip: instead of an inline dimension label
   // baked into the line, show the value in a small floating box that
-  // follows the cursor while hovering any measurement.
+  // follows the cursor while hovering any measurement. If the cursor is
+  // over a specific deduction, show "−{area}" for that cutout instead.
   const hoverTooltipText = useMemo(() => {
+    if (hoveredDeduction) {
+      const item = takeoffItems.find((i) => i.id === hoveredDeduction.itemId);
+      const measurement = item?.measurements.find(
+        (m) => m.id === hoveredDeduction.measurementId
+      );
+      const deduction = measurement?.deductions?.[hoveredDeduction.index];
+      if (deduction && deduction.length >= 3) {
+        const pixelArea = calculateArea(deduction);
+        const area =
+          currentScale && currentScale > 0
+            ? pixelArea / (currentScale * currentScale)
+            : pixelArea;
+        return `−${formatArea(area)}`;
+      }
+    }
     if (!hoveredMeasurement) return null;
     const item = takeoffItems.find((i) => i.id === hoveredMeasurement.itemId);
     const measurement = item?.measurements.find(
@@ -1734,7 +1757,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       );
     }
     return null;
-  }, [hoveredMeasurement, takeoffItems, currentScale]);
+  }, [hoveredDeduction, hoveredMeasurement, takeoffItems, currentScale]);
 
   return (
     <div className="flex-1 flex flex-col relative overflow-hidden min-h-0">
@@ -2409,19 +2432,49 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                             closed
                           />
                         )}
-                        {/* Deduction strokes — dashed to distinguish from outer boundary */}
-                        {m.deductions?.map((d, di) => (
-                          <Line
-                            key={`deduction-${di}`}
-                            points={d.flatMap((p) => [p.x, p.y])}
-                            stroke={mColor}
-                            strokeWidth={mStroke * strokeScale}
-                            dash={[6 * strokeScale, 4 * strokeScale]}
-                            opacity={0.8}
-                            closed
-                            listening={false}
-                          />
-                        ))}
+                        {/* Deduction strokes — dashed to distinguish from outer boundary.
+                            Interactive so hover shows a "−{area}" tooltip. */}
+                        {m.deductions?.map((d, di) => {
+                          const isDedHovered =
+                            hoveredDeduction?.itemId === item.id &&
+                            hoveredDeduction?.measurementId === m.id &&
+                            hoveredDeduction?.index === di;
+                          return (
+                            <React.Fragment key={`deduction-${di}`}>
+                              {/* Visible dashed outline */}
+                              <Line
+                                points={d.flatMap((p) => [p.x, p.y])}
+                                stroke={mColor}
+                                strokeWidth={(isDedHovered ? mStroke * 2 : mStroke) * strokeScale}
+                                dash={[6 * strokeScale, 4 * strokeScale]}
+                                opacity={isDedHovered ? 1 : 0.8}
+                                closed
+                                listening={false}
+                              />
+                              {/* Invisible thicker fill for hit-testing */}
+                              <Line
+                                points={d.flatMap((p) => [p.x, p.y])}
+                                fill="rgba(0,0,0,0.001)"
+                                closed
+                                onMouseEnter={(e) => {
+                                  setHoveredDeduction({
+                                    itemId: item.id,
+                                    measurementId: m.id,
+                                    index: di,
+                                  });
+                                  const container = e.target
+                                    .getStage()
+                                    ?.container();
+                                  if (container) container.style.cursor = "pointer";
+                                }}
+                                onMouseLeave={(e) => {
+                                  setHoveredDeduction(null);
+                                  resetCursor(e.target.getStage()?.container());
+                                }}
+                              />
+                            </React.Fragment>
+                          );
+                        })}
                         {/* Selection highlight */}
                         {isSelected && (
                           <Line
