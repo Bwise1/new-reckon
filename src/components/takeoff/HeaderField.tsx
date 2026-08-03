@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { boqService } from '@/services/boq.service';
+import { useSuggestions } from '@/hooks/useSuggestions';
 
 interface HeaderFieldProps {
   value: string;
@@ -7,27 +7,9 @@ interface HeaderFieldProps {
 }
 
 const HeaderField: React.FC<HeaderFieldProps> = ({ value, onChange }) => {
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const suggestions = useSuggestions('header');
   const [isFocused, setIsFocused] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    boqService
-      .getSuggestions('header')
-      .then((response) => {
-        if (!mounted) return;
-        setSuggestions(
-          (response.data?.suggestions || []).map((s) => s.value).filter(Boolean)
-        );
-      })
-      .catch(() => {
-        if (mounted) setSuggestions([]);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
