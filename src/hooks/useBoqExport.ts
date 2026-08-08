@@ -10,7 +10,11 @@ export function useBoqExport() {
   const { id: projectId } = useParams<{ id: string }>();
   const { data: projectResponse } = useProject(projectId ?? '');
   const project = projectResponse?.data?.project;
-  const { boqElements, pricing, setPricing } = useTakeoffStore();
+  // Per-field selectors: a whole-store subscription re-rendered every consumer
+  // of this hook on any unrelated store mutation.
+  const boqElements = useTakeoffStore((s) => s.boqElements);
+  const pricing = useTakeoffStore((s) => s.pricing);
+  const setPricing = useTakeoffStore((s) => s.setPricing);
 
   const [exportModalMode, setExportModalMode] = useState<'preview' | 'export' | null>(null);
   const [busyAction, setBusyAction] = useState(false);

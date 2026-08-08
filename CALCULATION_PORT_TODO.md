@@ -22,6 +22,12 @@ This checklist mirrors mobile calculation behavior from `Reckon-v2` and tracks w
 
 ## Material Schedule Presets
 
+The checkboxes below track the **spec data** ported into
+`src/constants/mobileMaterialCalculationSpecs.ts`. That file currently has no
+importers: the presets are transcribed but nothing consumes them until the
+"Add material preset selector UI" item under *Web Wiring* is done. Delete the
+constants file if that UI is dropped from scope.
+
 - [x] Blocks / Default
 - [x] Concrete / `1:2:4`
 - [x] Concrete / `1:3:6`

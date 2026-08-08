@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 
 TESTING_GUIDE.md
+# Local environment (use .env.example as the template)
+.env
+.env.local

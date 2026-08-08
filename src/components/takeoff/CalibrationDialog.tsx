@@ -17,12 +17,22 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  // Reset during render on the open transition rather than in an effect, which
+  // would paint the previous value for one frame first.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) {
       setValue('');
       setError(null);
-      requestAnimationFrame(() => inputRef.current?.focus());
     }
+  }
+
+  // Focusing is a DOM side effect, so it stays in an effect.
+  useEffect(() => {
+    if (!open) return;
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, [open]);
 
   if (!open) return null;

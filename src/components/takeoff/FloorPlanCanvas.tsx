@@ -7,6 +7,7 @@ import {
   Group,
   Shape,
 } from "react-konva";
+import { useShallow } from "zustand/react/shallow";
 import { useTakeoffStore } from "@/store/useTakeoffStore";
 import type { Point, Measurement } from "@/types/takeoff";
 import "@/utils/planMediaLoader";
@@ -66,6 +67,9 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   registerUploadHandler,
   onPlanLoadStatusChange,
 }) => {
+  // Shallow-compared selector rather than useTakeoffStore(): a whole-store
+  // subscription re-rendered this component (and its whole Konva tree) on every
+  // unrelated mutation, e.g. typing in the BOQ sidebar.
   const {
     currentProjectId,
     activePlanId,
@@ -100,7 +104,43 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     boqElements,
     exitBoqTargeting,
     cancelBoqTargeting,
-  } = useTakeoffStore();
+  } = useTakeoffStore(
+    useShallow((s) => ({
+      currentProjectId: s.currentProjectId,
+      activePlanId: s.activePlanId,
+      takeoffItems: s.takeoffItems,
+      activeItemId: s.activeItemId,
+      activeTool: s.activeTool,
+      activeColor: s.activeColor,
+      activeRealWidth: s.activeRealWidth,
+      setActiveTool: s.setActiveTool,
+      scales: s.scales,
+      calibrationMode: s.calibrationMode,
+      currentPage: s.currentPage,
+      backgroundImage: s.backgroundImage,
+      setCalibrationMode: s.setCalibrationMode,
+      setScale: s.setScale,
+      setCalibrationLine: s.setCalibrationLine,
+      setTakeoffItems: s.setTakeoffItems,
+      setCurrentPage: s.setCurrentPage,
+      setNumPages: s.setNumPages,
+      setBackgroundImage: s.setBackgroundImage,
+      addMeasurement: s.addMeasurement,
+      addDeductionToMeasurement: s.addDeductionToMeasurement,
+      removeDeductionFromMeasurement: s.removeDeductionFromMeasurement,
+      ensureCanvasItemId: s.ensureCanvasItemId,
+      updateTakeoffItem: s.updateTakeoffItem,
+      removeMeasurement: s.removeMeasurement,
+      undo: s.undo,
+      redo: s.redo,
+      canUndo: s.canUndo,
+      canRedo: s.canRedo,
+      boqTargeting: s.boqTargeting,
+      boqElements: s.boqElements,
+      exitBoqTargeting: s.exitBoqTargeting,
+      cancelBoqTargeting: s.cancelBoqTargeting,
+    }))
+  );
   const {
     stageRef,
     containerRef,

@@ -70,13 +70,17 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
 
   const liveColor = useTakeoffStore((s) => s.activeColor);
 
-  // Local input state so the field stays editable mid-type
+  // Local input state so the field stays editable mid-type.
   const [widthInput, setWidthInput] = useState(Number(activeRealWidth).toFixed(3));
 
-  // Sync input when selected measurement changes (activeRealWidth changes) or deselects
-  useEffect(() => {
+  // Re-seed when the selection or its width changes. Done during render rather
+  // than in an effect so the field never paints a stale value first.
+  const widthSeed = `${selectedMeasurementId ?? ''}:${activeRealWidth}`;
+  const [seededWidth, setSeededWidth] = useState(widthSeed);
+  if (widthSeed !== seededWidth) {
+    setSeededWidth(widthSeed);
     setWidthInput(Number(activeRealWidth).toFixed(3));
-  }, [activeRealWidth, selectedMeasurementId]);
+  }
 
   const commitWidth = (raw: string) => {
     const parsed = parseFloat(raw);
@@ -87,7 +91,16 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     }
   };
 
-  const color = usePortalDropdown();
+  // Destructured rather than kept as `color.*`: reading ref properties off an
+  // object in JSX trips react-hooks' "cannot access refs during render" rule.
+  const {
+    open: colorOpen,
+    setOpen: setColorOpen,
+    toggle: toggleColor,
+    triggerRef: colorTriggerRef,
+    menuRef: colorMenuRef,
+    pos: colorPos,
+  } = usePortalDropdown();
 
   return (
     <div className="shrink-0 px-3 bg-white border-b border-gray-200 flex items-center gap-2 z-10 h-14">
@@ -154,10 +167,10 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
       </div>
 
       {/* Color dropdown */}
-      <div className="shrink-0" ref={color.triggerRef}>
+      <div className="shrink-0" ref={colorTriggerRef}>
         <button
           type="button"
-          onClick={color.toggle}
+          onClick={toggleColor}
           title="Markup color"
           className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 shadow-sm hover:bg-gray-50 transition cursor-pointer h-10"
         >
@@ -169,10 +182,10 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         </button>
       </div>
 
-      {color.open && createPortal(
+      {colorOpen && createPortal(
         <div
-          ref={color.menuRef}
-          style={{ position: 'fixed', top: color.pos.top, left: color.pos.left, zIndex: 99999 }}
+          ref={colorMenuRef}
+          style={{ position: 'fixed', top: colorPos.top, left: colorPos.left, zIndex: 99999 }}
           className="bg-white border border-gray-200 rounded-xl shadow-xl p-3"
         >
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Markup Color</p>
@@ -181,7 +194,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               <button
                 key={c}
                 type="button"
-                onMouseDown={(e) => { e.preventDefault(); onColorChange(c); color.setOpen(false); }}
+                onMouseDown={(e) => { e.preventDefault(); onColorChange(c); setColorOpen(false); }}
                 className="relative w-8 h-10 rounded-full transition hover:scale-110 cursor-pointer"
                 style={{ backgroundColor: c }}
                 title={c}

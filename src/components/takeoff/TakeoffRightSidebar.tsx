@@ -4,6 +4,7 @@ import { FiUser } from "react-icons/fi";
 import EstimationCard from "./EstimationCard";
 import BoqExportModal from "./BoqExportModal";
 import SyncStatusBadge from "@/components/ui/SyncStatusBadge";
+import { useShallow } from "zustand/react/shallow";
 import { useTakeoffStore } from "@/store/useTakeoffStore";
 import { useAuthStore } from "@/stores/auth.store";
 import { useBoqExport } from "@/hooks/useBoqExport";
@@ -29,6 +30,8 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
   } = useBoqExport();
   const { isOnline } = useSyncStatus();
 
+  // Shallow selector, not a whole-store subscription: canvas measurements
+  // mutate the store constantly and would re-render this whole sidebar.
   const {
     boqElements,
     addBoqElement,
@@ -46,7 +49,26 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
     clearPendingCommit,
     bindMeasurementToItem,
     setFocusedBoqCard,
-  } = useTakeoffStore();
+  } = useTakeoffStore(
+    useShallow((s) => ({
+      boqElements: s.boqElements,
+      addBoqElement: s.addBoqElement,
+      updateBoqElement: s.updateBoqElement,
+      addElementItem: s.addElementItem,
+      updateElementItem: s.updateElementItem,
+      deleteElementItem: s.deleteElementItem,
+      duplicateElementItem: s.duplicateElementItem,
+      boqTargeting: s.boqTargeting,
+      pendingCommit: s.pendingCommit,
+      startBoqTargeting: s.startBoqTargeting,
+      exitBoqTargeting: s.exitBoqTargeting,
+      setBoqTargetingMode: s.setBoqTargetingMode,
+      setBoqTargetingPending: s.setBoqTargetingPending,
+      clearPendingCommit: s.clearPendingCommit,
+      bindMeasurementToItem: s.bindMeasurementToItem,
+      setFocusedBoqCard: s.setFocusedBoqCard,
+    }))
+  );
 
   const [expandedElements, setExpandedElements] = React.useState<Record<string, boolean>>({});
   const [activeElementId, setActiveElementId] = React.useState<string | null>(null);

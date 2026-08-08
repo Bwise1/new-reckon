@@ -93,6 +93,8 @@ export type SyncOp =
 
 const QUEUE_KEY = (projectId: string) => `reckon_sync_queue_${projectId}`;
 const MAX_BACKOFF_MS = 30_000;
+/** Starting delay for auth/throttle failures, which need a token refresh. */
+const AUTH_RETRY_BACKOFF_MS = 5_000;
 
 type QueueMap = Record<string, SyncOp[]>;
 const queues: QueueMap = {};
@@ -299,13 +301,27 @@ const runOp = async (op: SyncOp): Promise<void> => {
   }
 };
 
+const statusOf = (error: unknown): number | undefined =>
+  error instanceof ApiError
+    ? error.status
+    : typeof error === 'object' && error !== null && 'response' in error
+      ? (error as { response?: { status?: number } }).response?.status
+      : undefined;
+
+/**
+ * 401/403 (expired or not-yet-refreshed token) and 429 (throttled) look like
+ * client errors but are transient from the user's point of view. Dropping the
+ * op on those destroyed queued offline edits the moment a token expired, so
+ * they are retried with backoff instead.
+ */
+const RETRYABLE_CLIENT_STATUSES = new Set([401, 403, 408, 429]);
+
+const isRetryableStatus = (status: number | undefined): boolean =>
+  typeof status === 'number' && RETRYABLE_CLIENT_STATUSES.has(status);
+
 const isClientError = (error: unknown): boolean => {
-  const status =
-    error instanceof ApiError
-      ? error.status
-      : typeof error === 'object' && error !== null && 'response' in error
-        ? (error as { response?: { status?: number } }).response?.status
-        : undefined;
+  const status = statusOf(error);
+  if (isRetryableStatus(status)) return false;
   return typeof status === 'number' && status >= 400 && status < 500;
 };
 
@@ -344,7 +360,14 @@ const drainInternal = async (projectId: string): Promise<void> => {
           notifyListeners();
           continue;
         }
-        // Transient (5xx/network). Keep the op at the head and back off.
+        // Transient (5xx/network/auth/throttle). Keep the op at the head and
+        // back off. Auth failures start from a longer delay: they only clear
+        // once the token is refreshed or the user signs back in, so retrying
+        // every 500ms just burns requests.
+        const status = statusOf(error);
+        if (isRetryableStatus(status)) {
+          state.backoffMs = Math.max(state.backoffMs, AUTH_RETRY_BACKOFF_MS);
+        }
         console.warn(
           `[syncQueue] transient failure — backing off ${state.backoffMs}ms`,
           error

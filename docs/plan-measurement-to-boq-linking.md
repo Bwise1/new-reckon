@@ -1,7 +1,20 @@
 # Plan measurement → BOQ item linking
 
 Reference plan for wiring canvas measurements into estimation-card `history`.
-Not yet implemented — coded when we come back to this.
+
+**Status: implemented.** `Measurement.boqElementId`/`boqItemId`,
+`HistoryItem.sourceMeasurementId`, `bindMeasurementToItem`/`unbindMeasurement`
+in `useTakeoffStore`, cascade removal of history on measurement delete, and
+`source_measurement_client_uuid` round-tripping through per-entity sync are all
+in place.
+
+Two deviations from what is described below:
+
+- Binding happens through the measuring-session / BOQ-targeting flow (measure
+  against a focused card, then Add/Deduct to commit), not the "Send to…" row
+  affordance sketched in the *Chosen model* section.
+- The `WebDataSyncPayload` section is obsolete: the JSON-blob sync it refers to
+  was replaced by per-entity endpoints. See `docs/sync-rebuild.md`.
 
 ## Problem
 

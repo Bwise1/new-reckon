@@ -3,6 +3,7 @@ import { useRef, useCallback, useEffect, useState } from 'react';
 import PlanNavigator from '@/components/takeoff/PlanNavigator';
 import FloorPlanCanvas from '@/components/takeoff/FloorPlanCanvas';
 import TakeoffRightSidebar from '@/components/takeoff/TakeoffRightSidebar';
+import { useShallow } from 'zustand/react/shallow';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useProject } from '@/hooks/useProjects';
 import { useProjectData } from '@/hooks/useProjectData';
@@ -69,6 +70,8 @@ const ProjectDetail = () => {
     null
   );
 
+  // Shallow selector, not a whole-store subscription: this page re-rendered on
+  // every unrelated store mutation otherwise.
   const {
     plans,
     activePlanId,
@@ -84,7 +87,24 @@ const ProjectDetail = () => {
     focusedBoqCard,
     boqTargeting,
     startBoqTargeting,
-  } = useTakeoffStore();
+  } = useTakeoffStore(
+    useShallow((s) => ({
+      plans: s.plans,
+      activePlanId: s.activePlanId,
+      takeoffItems: s.takeoffItems,
+      activeItemId: s.activeItemId,
+      activeTool: s.activeTool,
+      activeColor: s.activeColor,
+      setActiveItemId: s.setActiveItemId,
+      setActiveTool: s.setActiveTool,
+      setActiveColor: s.setActiveColor,
+      selectPlan: s.selectPlan,
+      removeMeasurement: s.removeMeasurement,
+      focusedBoqCard: s.focusedBoqCard,
+      boqTargeting: s.boqTargeting,
+      startBoqTargeting: s.startBoqTargeting,
+    }))
+  );
 
   // Note: we intentionally do NOT reset() on unmount. Under React StrictMode the mount/
   // unmount/mount cycle would fire reset() between the two mounts, wiping currentProjectId

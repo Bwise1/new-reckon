@@ -52,6 +52,7 @@ export const useCanvasMedia = ({
 }: UseCanvasMediaParams) => {
     const plans = useTakeoffStore((s) => s.plans);
     const addPlanFromUpload = useTakeoffStore((s) => s.addPlanFromUpload);
+    const removePlan = useTakeoffStore((s) => s.removePlan);
     const triggerAutoSave = useTakeoffStore((s) => s.triggerAutoSave);
     const rotations = useTakeoffStore((s) => s.rotations);
 
@@ -494,35 +495,60 @@ export const useCanvasMedia = ({
             setPlanLoadStatus("loading");
             setPlanLoadError(null);
 
+            // A parse failure used to reject unhandled, leaving planLoadStatus
+            // stuck on "loading" forever with a half-added plan in the store.
+            const failPlan = (message: string, error: unknown) => {
+                console.warn("[canvas-media] plan upload failed", error);
+                setPlanLoadStatus("error");
+                setPlanLoadError(message);
+                removePlan(planId);
+            };
+
             if (file.type === "application/pdf") {
-                const pdfjsLib = await import("pdfjs-dist");
-                const buffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-                setPlanPdf(planId, pdf);
-                setPdfDoc(pdf);
-                setBackgroundImage(null);
-                setNumPages(pdf.numPages);
-                setStoreNumPages(pdf.numPages);
-                setCurrentPage(1);
-                await renderPdfPage(pdf, 1, planId, rotations[1] ?? 0);
-                setPlanLoadStatus("ready");
-                void uploadPlanToCloud(planId, file, pdf.numPages);
+                try {
+                    const pdfjsLib = await import("pdfjs-dist");
+                    const buffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+                    setPlanPdf(planId, pdf);
+                    setPdfDoc(pdf);
+                    setBackgroundImage(null);
+                    setNumPages(pdf.numPages);
+                    setStoreNumPages(pdf.numPages);
+                    setCurrentPage(1);
+                    await renderPdfPage(pdf, 1, planId, rotations[1] ?? 0);
+                    setPlanLoadStatus("ready");
+                    void uploadPlanToCloud(planId, file, pdf.numPages);
+                } catch (error) {
+                    failPlan(
+                        "This PDF could not be opened. It may be corrupted or password-protected.",
+                        error
+                    );
+                }
             } else if (file.type.startsWith("image/")) {
                 setPdfDoc(null);
                 setNumPages(1);
                 setStoreNumPages(1);
                 setCurrentPage(1);
                 const reader = new FileReader();
+                reader.onerror = (error) => {
+                    failPlan("This image could not be read.", error);
+                };
                 reader.onload = (ev) => {
                     const imageDataUrl = ev.target?.result as string;
                     setBackgroundImage(imageDataUrl);
                     const img = new window.Image();
-                    img.src = imageDataUrl;
+                    img.onerror = (error) => {
+                        failPlan(
+                            "This image could not be opened. It may be corrupted.",
+                            error
+                        );
+                    };
                     img.onload = () => {
                         setImage(img);
                         fitImageToStage(img, `${planId}:1`);
                         setPlanLoadStatus("ready");
                     };
+                    img.src = imageDataUrl;
                 };
                 reader.readAsDataURL(file);
                 void uploadPlanToCloud(planId, file, 1);
@@ -530,6 +556,7 @@ export const useCanvasMedia = ({
         },
         [
             addPlanFromUpload,
+            removePlan,
             fitImageToStage,
             renderPdfPage,
             setBackgroundImage,

@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useState } from 'react';
 import ConfirmDialog, { type ConfirmVariant } from '@/components/ui/ConfirmDialog';
 import PromptDialog, { type PromptVariant } from '@/components/ui/PromptDialog';
 
@@ -43,58 +43,56 @@ interface QueuedPrompt extends PromptOptions {
 
 export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentConfirm, setCurrentConfirm] = useState<QueuedConfirm | null>(null);
-  const currentConfirmRef = useRef<QueuedConfirm | null>(null);
-  currentConfirmRef.current = currentConfirm;
-
   const [currentPrompt, setCurrentPrompt] = useState<QueuedPrompt | null>(null);
-  const currentPromptRef = useRef<QueuedPrompt | null>(null);
-  currentPromptRef.current = currentPrompt;
 
+  // These previously mirrored state into refs and wrote them during render
+  // (a React 19 correctness hazard). The functional setState updater already
+  // hands us the latest value, so the mirrors are unnecessary.
   const confirm = useCallback<Confirm>((options) => {
     return new Promise<boolean>((resolve) => {
-      // If a dialog is somehow already open, cancel it before opening a new one.
-      if (currentConfirmRef.current) {
-        currentConfirmRef.current.resolve(false);
-      }
-      setCurrentConfirm({ ...options, resolve });
+      setCurrentConfirm((active) => {
+        // If a dialog is somehow already open, cancel it before opening a new one.
+        active?.resolve(false);
+        return { ...options, resolve };
+      });
     });
   }, []);
 
   const prompt = useCallback<Prompt>((options) => {
     return new Promise<string | null>((resolve) => {
-      if (currentPromptRef.current) {
-        currentPromptRef.current.resolve(null);
-      }
-      setCurrentPrompt({ ...options, resolve });
+      setCurrentPrompt((active) => {
+        active?.resolve(null);
+        return { ...options, resolve };
+      });
     });
   }, []);
 
   const handleConfirmConfirm = useCallback(() => {
-    const active = currentConfirmRef.current;
-    if (!active) return;
-    active.resolve(true);
-    setCurrentConfirm(null);
+    setCurrentConfirm((active) => {
+      active?.resolve(true);
+      return null;
+    });
   }, []);
 
   const handleConfirmCancel = useCallback(() => {
-    const active = currentConfirmRef.current;
-    if (!active) return;
-    active.resolve(false);
-    setCurrentConfirm(null);
+    setCurrentConfirm((active) => {
+      active?.resolve(false);
+      return null;
+    });
   }, []);
 
   const handlePromptConfirm = useCallback((value: string) => {
-    const active = currentPromptRef.current;
-    if (!active) return;
-    active.resolve(value);
-    setCurrentPrompt(null);
+    setCurrentPrompt((active) => {
+      active?.resolve(value);
+      return null;
+    });
   }, []);
 
   const handlePromptCancel = useCallback(() => {
-    const active = currentPromptRef.current;
-    if (!active) return;
-    active.resolve(null);
-    setCurrentPrompt(null);
+    setCurrentPrompt((active) => {
+      active?.resolve(null);
+      return null;
+    });
   }, []);
 
   return (

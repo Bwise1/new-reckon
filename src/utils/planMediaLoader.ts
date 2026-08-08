@@ -12,7 +12,7 @@ export const isPdfMimeType = (mimeType?: string | null, url?: string): boolean =
     /\.pdf($|\?|#)/i.test(url) ||
     /\/raw\/upload\//i.test(url) ||
     /[?&]format=pdf/i.test(url) ||
-    /\/f_pdf[,\/]/i.test(url)
+    /\/f_pdf[,/]/i.test(url)
   );
 };
 

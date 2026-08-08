@@ -19,7 +19,6 @@ import {
   resolvePlanBackgroundForCanvas,
 } from '@/utils/planDocument';
 import { inferPlanMediaKind } from '@/utils/planMediaLoader';
-import { mergePlanLists } from '@/utils/planMapper';
 import { clearAllPlanPdfs, clearPlanPdf } from '@/utils/planPdfCache';
 import { MARKUP_COLORS } from '@/constants/takeoffDesign';
 import { createEmptyBoqElement, createEmptyBoqItem } from '@/utils/boqCalculations';
@@ -142,18 +141,6 @@ interface TakeoffStore {
   // Persistence
   loadProject: (projectId: string) => void;
   triggerAutoSave: () => void;
-  applyServerSync: (updates: {
-    boqElements?: BoqElementData[];
-    takeoffItems?: TakeoffItem[];
-    scales?: Record<number, number>;
-    calibrationLines?: Record<number, CalibrationLine>;
-    currentPage?: number;
-    numPages?: number;
-    plans?: ProjectPlan[];
-    activePlanId?: string | null;
-    planStates?: Record<string, PlanDocumentState>;
-  }) => void;
-
   selectPlan: (planId: string) => void;
   addPlanFromUpload: (
     name: string,
@@ -526,12 +513,38 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     delete planStates[planId];
 
     // Drop every measurement bound to the deleted plan and recompute item totals.
+    const removedMeasurementIds: string[] = [];
     const takeoffItems = state.takeoffItems.map((item) => {
       const kept = item.measurements.filter((m) => m.planId !== planId);
       if (kept.length === item.measurements.length) return item;
+      for (const m of item.measurements) {
+        if (m.planId === planId) removedMeasurementIds.push(m.id);
+      }
       const totalQuantity = kept.reduce((sum, m) => sum + m.quantity, 0);
       return { ...item, measurements: kept, totalQuantity };
     });
+
+    // There is no DB cascade from plans to measurements/calibrations (the FK is
+    // app-enforced), so without these the rows survive server-side and come
+    // back on the next hydration pointing at a plan that no longer exists.
+    if (state.currentProjectId) {
+      const projectId = state.currentProjectId;
+      for (const measurementId of removedMeasurementIds) {
+        syncQueue.enqueue({
+          kind: 'measurement.delete',
+          projectId,
+          clientUuid: measurementId,
+        });
+      }
+      for (const page of Object.keys(state.planStates[planId]?.scales ?? {})) {
+        syncQueue.enqueue({
+          kind: 'calibration.delete',
+          projectId,
+          planUuid: planId,
+          page: Number(page),
+        });
+      }
+    }
 
     // Cached PDF for this plan is useless now.
     clearPlanPdf(planId);
@@ -560,54 +573,6 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       ...view,
     });
     get().triggerAutoSave();
-  },
-
-  applyServerSync: (updates) => {
-    set((state) => {
-      const merged = {
-        ...state,
-        ...(updates.boqElements !== undefined ? { boqElements: updates.boqElements } : {}),
-        ...(updates.takeoffItems !== undefined ? { takeoffItems: updates.takeoffItems } : {}),
-        ...(updates.scales !== undefined ? { scales: updates.scales } : {}),
-        ...(updates.calibrationLines !== undefined
-          ? { calibrationLines: updates.calibrationLines }
-          : {}),
-        ...(updates.currentPage !== undefined ? { currentPage: updates.currentPage } : {}),
-        ...(updates.numPages !== undefined ? { numPages: updates.numPages } : {}),
-        ...(updates.plans !== undefined
-          ? { plans: mergePlanLists(state.plans, updates.plans, state.deletedPlanIds) }
-          : {}),
-        ...(updates.activePlanId !== undefined ? { activePlanId: updates.activePlanId } : {}),
-        ...(updates.planStates !== undefined ? { planStates: updates.planStates } : {}),
-        undoStack: [],
-        redoStack: [],
-        canUndo: false,
-        canRedo: false,
-      };
-      const view = hydrateActivePlanView(merged);
-      return { ...merged, ...view };
-    });
-
-    const projectId = get().currentProjectId;
-    if (projectId) {
-      const latest = get();
-      const planStates = snapshotActivePlanState(latest);
-      autoSaveProject(projectId, {
-        takeoffItems: latest.takeoffItems,
-        scales: latest.scales,
-        calibrationLines: latest.calibrationLines,
-        currentPage: latest.currentPage,
-        numPages: latest.numPages,
-        backgroundImage: latest.backgroundImage,
-        plans: latest.plans,
-        activePlanId: latest.activePlanId,
-        planStates,
-        deletedPlanIds: latest.deletedPlanIds,
-        boqElements: latest.boqElements,
-        pricing: latest.pricing,
-        rotations: latest.rotations,
-      });
-    }
   },
 
   setTakeoffItems: (items) => {

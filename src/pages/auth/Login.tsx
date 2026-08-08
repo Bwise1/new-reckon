@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import PasswordInput from "@/components/ui/PasswordInput";
@@ -12,18 +12,16 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
-  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+  // Read (and consume) the one-shot notice during initialisation rather than
+  // in an effect, which would render once with no notice and then again with it.
+  const [sessionNotice] = useState<string | null>(() => {
+    const notice = sessionStorage.getItem("reckon_auth_notice");
+    if (notice) sessionStorage.removeItem("reckon_auth_notice");
+    return notice;
+  });
   const navigate = useNavigate();
 
   const { mutate: login, isPending, error } = useLogin();
-
-  useEffect(() => {
-    const notice = sessionStorage.getItem("reckon_auth_notice");
-    if (notice) {
-      setSessionNotice(notice);
-      sessionStorage.removeItem("reckon_auth_notice");
-    }
-  }, []);
 
   const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();

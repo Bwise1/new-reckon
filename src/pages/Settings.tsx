@@ -83,16 +83,20 @@ export default function Settings() {
 
   const picInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (profile) {
-      setFirstName(profile.firstName ?? "");
-      setLastName(profile.lastName ?? "");
-      setPhoneNumber(profile.phoneNumber ?? "");
-      setProfession(profile.profession ?? "");
-      setLevel(profile.level ?? "");
-      setDateOfBirth(profile.dateOfBirth ?? "");
-    }
-  }, [profile]);
+  // Seed the form from the fetched profile without an effect: adjusting state
+  // during render (guarded by a changed-identity check) avoids the extra
+  // render pass a setState-in-effect causes.
+  const [seededProfileId, setSeededProfileId] = useState<string | null>(null);
+  const profileKey = profile ? String(profile.id ?? profile.email ?? "") : null;
+  if (profile && profileKey !== seededProfileId) {
+    setSeededProfileId(profileKey);
+    setFirstName(profile.firstName ?? "");
+    setLastName(profile.lastName ?? "");
+    setPhoneNumber(profile.phoneNumber ?? "");
+    setProfession(profile.profession ?? "");
+    setLevel(profile.level ?? "");
+    setDateOfBirth(profile.dateOfBirth ?? "");
+  }
 
   const showToast = (message: string, type: "success" | "error") =>
     setToast({ message, type });

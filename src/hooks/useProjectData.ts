@@ -42,6 +42,9 @@ export const useProjectData = (
   }
 ) => {
   const loadedRef = useRef<string | null>(null);
+  // Guards against a slow hydration for a previously-selected project landing
+  // on the global store after the user has already switched to another one.
+  const loadGenerationRef = useRef(0);
   const isLoggedIn = Boolean(localStorage.getItem('token'));
   const [isReady, setIsReady] = useState(false);
 
@@ -51,6 +54,9 @@ export const useProjectData = (
       return;
     }
     setIsReady(false);
+
+    const generation = ++loadGenerationRef.current;
+    const isStale = () => loadGenerationRef.current !== generation;
 
     // Local baseline: always load persisted store first so the canvas has
     // something to render before the network responses arrive.
@@ -72,6 +78,22 @@ export const useProjectData = (
           );
           return;
         }
+
+        // Flush anything queued from a previous session BEFORE reading the
+        // server. Hydration replaces takeoffItems wholesale, so fetching first
+        // meant work created offline was absent from the response and vanished
+        // from the UI until another reload.
+        if (syncQueue.size(projectId) > 0) {
+          try {
+            await syncQueue.flush(projectId);
+          } catch (error) {
+            console.warn(
+              '[project-data] pre-hydration flush failed — keeping local state',
+              error
+            );
+          }
+        }
+
         const [boqResponse, plansPromise, calibrationsResponse, measurementsResponse] =
           await Promise.all([
             boqSync.list(projectId).catch((error) => {
@@ -91,6 +113,15 @@ export const useProjectData = (
               return null;
             }),
           ]);
+
+        // Another project was selected while these were in flight; its own
+        // effect owns the store now.
+        if (isStale()) {
+          console.log(
+            `[project-data] discarding stale hydration for project=${projectId}`
+          );
+          return;
+        }
 
         // Plans are already merged into the store by fetchAndMergeProjectPlans.
         void plansPromise;
@@ -143,11 +174,17 @@ export const useProjectData = (
                 calibrationsResponse.data?.calibrations ?? []
               )
             : state.planStates;
-          const nextTakeoffItems = measurementsResponse
-            ? takeoffItemsFromApiMeasurements(
-                measurementsResponse.data?.measurements ?? []
-              )
-            : state.takeoffItems;
+          // Only trust the server list when nothing is still queued. If the
+          // pre-hydration flush could not complete (offline, auth expired),
+          // the response cannot contain those ops and replacing state here
+          // would discard them.
+          const hasPendingOps = syncQueue.size(projectId) > 0;
+          const nextTakeoffItems =
+            measurementsResponse && !hasPendingOps
+              ? takeoffItemsFromApiMeasurements(
+                  measurementsResponse.data?.measurements ?? []
+                )
+              : state.takeoffItems;
 
           // Rehydrate flat scales/calibrationLines from the active plan's state.
           const activePlanState = state.activePlanId
@@ -182,7 +219,9 @@ export const useProjectData = (
       } catch (error) {
         console.warn('[project-data] hydration failed', error);
       } finally {
-        setIsReady(true);
+        // A superseded run must not flip the loading gate for the project the
+        // user actually has open.
+        if (!isStale()) setIsReady(true);
       }
     })();
 
