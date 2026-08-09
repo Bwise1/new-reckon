@@ -20,7 +20,6 @@ const ProjectList = () => {
   const { mutate: duplicateProject, isPending: isDuplicating } = useDuplicateProject();
   const { mutate: updateProject, isPending: isUpdating } = useUpdateProject();
   const confirm = useConfirm();
-  const prompt = usePrompt();
 
 
   const projects = projectsData?.data?.projects || [];
