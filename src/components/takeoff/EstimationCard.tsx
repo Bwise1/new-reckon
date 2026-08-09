@@ -241,7 +241,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
           : "border-gray-200 bg-gray-50 opacity-55 hover:opacity-80"
       } ${className}`}
     >
-      <div onClick={(e) => e.stopPropagation()} className="space-y-3">
+      <div onClick={(e) => e.stopPropagation()} className="space-y-3 pt-2">
         {/* 5-button unit row replaced by the editable dropdown beside Qty below. */}
         {/* <UnitSelector selectedUnit={unit} onChange={updateUnit} className="mt-3" /> */}
 
