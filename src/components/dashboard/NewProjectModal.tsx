@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FiX } from "react-icons/fi";
 
 interface NewProjectModalProps {
@@ -6,12 +6,36 @@ interface NewProjectModalProps {
   isPending: boolean;
   onClose: () => void;
   onCreate: (data: { title: string; location: string; file?: File }) => void;
+  /** Edit mode: pre-fill fields and switch labels to "Save changes". */
+  mode?: "create" | "edit";
+  initialTitle?: string;
+  initialLocation?: string;
 }
 
-const NewProjectModal = ({ isOpen, isPending, onClose, onCreate }: NewProjectModalProps) => {
-  const [title, setTitle] = useState("");
-  const [location, setLocation] = useState("");
+const NewProjectModal = ({
+  isOpen,
+  isPending,
+  onClose,
+  onCreate,
+  mode = "create",
+  initialTitle = "",
+  initialLocation = "",
+}: NewProjectModalProps) => {
+  const [title, setTitle] = useState(initialTitle);
+  const [location, setLocation] = useState(initialLocation);
+
+  // Re-seed when the modal opens (so editing a different project shows its
+  // current values rather than stale ones).
+  useEffect(() => {
+    if (isOpen) {
+      setTitle(initialTitle);
+      setLocation(initialLocation);
+    }
+  }, [isOpen, initialTitle, initialLocation]);
+
   if (!isOpen) return null;
+
+  const isEdit = mode === "edit";
 
   const handleSubmit = () => {
     if (!title.trim()) return;
@@ -19,8 +43,8 @@ const NewProjectModal = ({ isOpen, isPending, onClose, onCreate }: NewProjectMod
   };
 
   const handleClose = () => {
-    setTitle("");
-    setLocation("");
+    setTitle(initialTitle);
+    setLocation(initialLocation);
     onClose();
   };
 
@@ -31,7 +55,9 @@ const NewProjectModal = ({ isOpen, isPending, onClose, onCreate }: NewProjectMod
     >
       <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-900">New Project</h2>
+          <h2 className="text-sm font-semibold text-gray-900">
+            {isEdit ? "Edit Project" : "New Project"}
+          </h2>
           <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <FiX className="w-4 h-4" />
           </button>
@@ -71,7 +97,13 @@ const NewProjectModal = ({ isOpen, isPending, onClose, onCreate }: NewProjectMod
             disabled={!title.trim() || isPending}
             className="flex-1 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
           >
-            {isPending ? "Creating…" : "Create"}
+            {isPending
+              ? isEdit
+                ? "Saving…"
+                : "Creating…"
+              : isEdit
+                ? "Save changes"
+                : "Create"}
           </button>
         </div>
       </div>

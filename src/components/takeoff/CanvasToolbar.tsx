@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { TakeoffMode } from '@/types/takeoff';
 import { MARKUP_COLORS, MEASUREMENT_TOOLS } from '@/constants/takeoffDesign';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
+import { useFullscreen } from '@/hooks/useFullscreen';
 
 interface CanvasToolbarProps {
   calibrationMode: boolean;
@@ -69,6 +70,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   const scaleDisplay = currentScale ? `1m = ${currentScale.toFixed(1)}px` : 'Unscaled';
 
   const liveColor = useTakeoffStore((s) => s.activeColor);
+  const fullscreen = useFullscreen();
 
   // Local input state so the field stays editable mid-type.
   const [widthInput, setWidthInput] = useState(Number(activeRealWidth).toFixed(3));
@@ -270,6 +272,27 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         <button type="button" onClick={onRotateAllCCW} title="Rotate all CCW" className="h-7 px-1.5 rounded text-xs font-medium text-gray-600 hover:bg-gray-100 transition cursor-pointer whitespace-nowrap">↺ All</button>
         <button type="button" onClick={onRotateAllCW} title="Rotate all CW" className="h-7 px-1.5 rounded text-xs font-medium text-gray-600 hover:bg-gray-100 transition cursor-pointer whitespace-nowrap">↻ All</button>
       </div>
+
+      {/* Fullscreen toggle */}
+      {fullscreen.supported && (
+        <button
+          type="button"
+          onClick={fullscreen.toggle}
+          title={fullscreen.isFullscreen ? 'Exit full screen' : 'Full screen'}
+          aria-label={fullscreen.isFullscreen ? 'Exit full screen' : 'Full screen'}
+          className="shrink-0 ml-auto flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition cursor-pointer"
+        >
+          {fullscreen.isFullscreen ? (
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 3v4a1 1 0 0 1-1 1H3M16 3v4a1 1 0 0 0 1 1h4M8 21v-4a1 1 0 0 0-1-1H3M16 21v-4a1 1 0 0 1 1-1h4" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 8V5a2 2 0 0 1 2-2h3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M21 16v3a2 2 0 0 1-2 2h-3" />
+            </svg>
+          )}
+        </button>
+      )}
 
     </div>
   );

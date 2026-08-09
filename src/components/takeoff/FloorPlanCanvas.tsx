@@ -676,24 +676,31 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         );
       }
 
-      // Auto-close into an area when clicking near the first vertex —
-      // requires ≥4 points so a 3-segment run isn't hijacked into a triangle.
+      // Closing a linear run near the first vertex makes a CLOSED PERIMETER,
+      // not an area. The measurement stays a polyline and its quantity is the
+      // total boundary length (all segments including the closing edge back to
+      // the start). Users tracing a perimeter with the linear tool expect a
+      // length in metres, not an enclosed area in m² — the old behavior silently
+      // turned this into a type:"area" measurement.
       const closeSnapRadius = 12 / stageScale;
       if (
-        currentPoints.length >= 4 &&
+        currentPoints.length >= 3 &&
         calculateDistance(nextPoint, currentPoints[0]) < closeSnapRadius
       ) {
-        const pixelArea = calculateArea(currentPoints);
+        // Append the first point so the outline visually closes and the closing
+        // edge is included in the perimeter length.
+        const closedPoints = [...currentPoints, currentPoints[0]];
+        const perimeter = calculateQuantity(closedPoints, "polyline", currentScale);
         const confidence = currentScale
-          ? Math.min(1.0, pixelArea / (currentScale * currentScale * 100))
+          ? Math.min(1.0, perimeter / (currentScale * 10))
           : 0.5;
         const closeMeasurement: Measurement = {
           id: generateClientId(),
-          points: [...currentPoints],
-          quantity: calculateAreaFromPoints(currentPoints),
+          points: closedPoints,
+          quantity: perimeter,
           planId: activePlanId,
           page: currentPage,
-          type: "area",
+          type: "polyline",
           color: activeColor,
           strokeWidth: 2,
           metadata: {
@@ -702,7 +709,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
             confidence: Math.max(0.1, confidence),
           },
         };
-        const validation = validateMeasurement(closeMeasurement, "area");
+        const validation = validateMeasurement(closeMeasurement, "polyline");
         if (validation.isValid) {
           addMeasurement(canvasItemId, closeMeasurement);
           setCurrentPoints([]);

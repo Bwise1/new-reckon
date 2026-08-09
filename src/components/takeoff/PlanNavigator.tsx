@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { ChevronRight, Eye, EyeOff, FileText, Link2, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, ChevronRight, Eye, EyeOff, FileText, Link2, Trash2 } from 'lucide-react';
 import ReckonLogo from '@/assets/images/logo.svg';
 import type { PlanDiscipline, TakeoffItem, TakeoffMode, ProjectPlan } from '@/types/takeoff';
 import { getMeasurementColor, getMeasurementType } from '@/utils/takeoffMeasurement';
@@ -53,6 +54,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
   onDeleteMeasurement,
   onFileUpload,
 }) => {
+  const navigate = useNavigate();
   const uploadRef = useRef<HTMLInputElement>(null);
   const setPlanDiscipline = useTakeoffStore((s) => s.setPlanDiscipline);
   const toggleMeasurementHidden = useTakeoffStore((s) => s.toggleMeasurementHidden);
@@ -236,7 +238,16 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
 
   return (
     <aside className="w-[260px] min-w-[260px] max-w-[260px] shrink-0 h-full flex flex-col bg-[#0a0a0a] text-gray-200 border-r border-black/60">
-      <div className="shrink-0 px-5 pt-5 pb-4 flex items-center">
+      <div className="shrink-0 px-5 pt-5 pb-4 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard')}
+          title="Back to dashboard"
+          aria-label="Back to dashboard"
+          className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
         <img src={ReckonLogo} alt="Reckon" className="h-9 w-9" />
       </div>
 

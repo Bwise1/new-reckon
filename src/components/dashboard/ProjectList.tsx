@@ -7,15 +7,18 @@ import {
   useUpdateProject,
 } from "@/hooks/useProjects";
 import { FiSearch, FiCopy, FiEdit2, FiTrash2 } from "react-icons/fi";
-import { useConfirm, usePrompt } from "@/contexts/ConfirmProvider";
+import { useConfirm } from "@/contexts/ConfirmProvider";
+import NewProjectModal from "@/components/dashboard/NewProjectModal";
+import type { Project } from "@/types/project";
 
 const ProjectList = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
   const { data: projectsData, isLoading } = useProjects();
   const { mutate: deleteProject } = useDeleteProject();
   const { mutate: duplicateProject, isPending: isDuplicating } = useDuplicateProject();
-  const { mutate: updateProject } = useUpdateProject();
+  const { mutate: updateProject, isPending: isUpdating } = useUpdateProject();
   const confirm = useConfirm();
   const prompt = usePrompt();
 
@@ -54,17 +57,18 @@ const ProjectList = () => {
     duplicateProject({ id });
   };
 
-  const handleEdit = async (id: string) => {
+  const handleEdit = (id: string) => {
     const project = projects.find((p) => String(p.id) === id);
-    const newTitle = await prompt({
-      title: "Rename project",
-      label: "Project name",
-      defaultValue: project?.title ?? "",
-      confirmLabel: "Save",
+    if (project) setEditingProject(project);
+  };
+
+  const handleEditSave = ({ title, location }: { title: string; location: string }) => {
+    if (!editingProject) return;
+    updateProject({
+      id: String(editingProject.id),
+      data: { title: title.trim(), location: location.trim() },
     });
-    const trimmed = newTitle?.trim();
-    if (!trimmed || trimmed === project?.title) return;
-    updateProject({ id, data: { title: trimmed } });
+    setEditingProject(null);
   };
 
   if (isLoading) {
@@ -148,6 +152,16 @@ const ProjectList = () => {
           ))
         )}
       </div>
+
+      <NewProjectModal
+        mode="edit"
+        isOpen={editingProject !== null}
+        isPending={isUpdating}
+        initialTitle={editingProject?.title ?? ""}
+        initialLocation={editingProject?.location ?? ""}
+        onClose={() => setEditingProject(null)}
+        onCreate={handleEditSave}
+      />
     </div>
   );
 };
