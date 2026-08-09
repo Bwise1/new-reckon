@@ -72,7 +72,22 @@ export interface CalibrationLine {
   distance: number;
 }
 
-export type UnitType = "m" | "m2" | "m3" | "nrs" | "item";
+// The common presets kept as named suggestions, but units are free-text now
+// (users can type custom ones like "kg", "tonns", "bags"), so UnitType is a
+// string. The backend accepts any short non-empty unit label.
+export type UnitPreset = "m" | "m2" | "m3" | "nrs" | "item" | "kg" | "tonns";
+export type UnitType = string;
+
+/** Preset unit options offered in the unit dropdown (user can also type). */
+export const UNIT_PRESETS: { value: UnitPreset; label: string }[] = [
+  { value: "m", label: "m" },
+  { value: "m2", label: "m²" },
+  { value: "m3", label: "m³" },
+  { value: "nrs", label: "nrs" },
+  { value: "item", label: "item" },
+  { value: "kg", label: "kg" },
+  { value: "tonns", label: "tonns" },
+];
 
 export interface HistoryItem {
   id: string;

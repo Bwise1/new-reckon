@@ -1,6 +1,9 @@
 import React, { useMemo, useState, useRef } from "react";
 import { Copy, Trash2, X } from "lucide-react";
-import UnitSelector from "./UnitSelector";
+// UnitSelector (the 5-button row) is commented out below in favor of the
+// editable unit dropdown beside the Qty field. Kept imported-out for easy revert.
+// import UnitSelector from "./UnitSelector";
+import UnitCombobox from "./UnitCombobox";
 import FormulaInput, { type FormulaInputHandle } from "./FormulaInput";
 import DescriptionField from "./DescriptionField";
 import HeaderField from "./HeaderField";
@@ -222,8 +225,6 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
     syncToParent({ unit: newUnit });
   };
 
-  const unitDisplay = unit === "m2" ? "m²" : unit === "m3" ? "m³" : unit;
-
   return (
     <div
       role="button"
@@ -241,7 +242,8 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
       } ${className}`}
     >
       <div onClick={(e) => e.stopPropagation()} className="space-y-3">
-        <UnitSelector selectedUnit={unit} onChange={updateUnit} className="mt-3" />
+        {/* 5-button unit row replaced by the editable dropdown beside Qty below. */}
+        {/* <UnitSelector selectedUnit={unit} onChange={updateUnit} className="mt-3" /> */}
 
         <HeaderField
           value={header}
@@ -337,7 +339,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
               {qty}
             </span>
             <span className="text-gray-300 shrink-0">|</span>
-            <span className="text-[13px] text-gray-400 shrink-0">{unitDisplay}</span>
+            <UnitCombobox value={unit} onChange={updateUnit} className="shrink-0" />
           </div>
           <div className="min-w-0 flex items-center gap-1 rounded-lg border border-[#D9D9D9] bg-white px-3 py-3 overflow-hidden">
             <span className="text-[13px] text-gray-400 shrink-0">Rate</span>
