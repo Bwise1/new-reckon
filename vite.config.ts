@@ -5,6 +5,14 @@ import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Pin the dev server to 5173 and fail loudly if it's taken. Tauri's devUrl is
+  // hardcoded to 5173, so without strictPort Vite would silently move to 5174+
+  // and the desktop webview would load a stale/other instance on 5173 (or
+  // nothing). strictPort surfaces the conflict instead of hiding it.
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
   plugins: [
     react(),
     VitePWA({
