@@ -46,6 +46,13 @@ export const projectService = {
     return apiClient.put<{ data: { project: Project } }>(`/projects/${id}`, data);
   },
 
+  duplicateProject: (id: string, title?: string) => {
+    return apiClient.post<{ data: { project: Project } }>(
+      `/projects/${id}/duplicate`,
+      title ? { title } : {},
+    );
+  },
+
   deleteProject: (id: string) => {
     return apiClient.delete(`/projects/${id}`);
   },

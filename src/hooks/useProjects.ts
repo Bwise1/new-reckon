@@ -49,6 +49,19 @@ export function useUpdateProject() {
   });
 }
 
+export function useDuplicateProject() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, title }: { id: string; title?: string }) =>
+      projectService.duplicateProject(id, title),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['project-stats'] });
+    },
+  });
+}
+
 export function useDeleteProject() {
   const queryClient = useQueryClient();
 

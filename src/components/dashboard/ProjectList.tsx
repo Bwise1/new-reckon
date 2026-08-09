@@ -1,15 +1,23 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useProjects, useDeleteProject } from "@/hooks/useProjects";
+import {
+  useProjects,
+  useDeleteProject,
+  useDuplicateProject,
+  useUpdateProject,
+} from "@/hooks/useProjects";
 import { FiSearch, FiCopy, FiEdit2, FiTrash2 } from "react-icons/fi";
-import { useConfirm } from "@/contexts/ConfirmProvider";
+import { useConfirm, usePrompt } from "@/contexts/ConfirmProvider";
 
 const ProjectList = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const { data: projectsData, isLoading } = useProjects();
   const { mutate: deleteProject } = useDeleteProject();
+  const { mutate: duplicateProject, isPending: isDuplicating } = useDuplicateProject();
+  const { mutate: updateProject } = useUpdateProject();
   const confirm = useConfirm();
+  const prompt = usePrompt();
 
 
   const projects = projectsData?.data?.projects || [];
@@ -39,6 +47,24 @@ const ProjectList = () => {
     });
     if (!ok) return;
     deleteProject(id);
+  };
+
+  const handleDuplicate = (id: string) => {
+    if (isDuplicating) return;
+    duplicateProject({ id });
+  };
+
+  const handleEdit = async (id: string) => {
+    const project = projects.find((p) => String(p.id) === id);
+    const newTitle = await prompt({
+      title: "Rename project",
+      label: "Project name",
+      defaultValue: project?.title ?? "",
+      confirmLabel: "Save",
+    });
+    const trimmed = newTitle?.trim();
+    if (!trimmed || trimmed === project?.title) return;
+    updateProject({ id, data: { title: trimmed } });
   };
 
   if (isLoading) {
@@ -87,14 +113,21 @@ const ProjectList = () => {
               </div>
               <div className="flex items-center gap-2 ml-3">
                 <button
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDuplicate(project.id.toString());
+                  }}
+                  disabled={isDuplicating}
+                  className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
                   title="Duplicate"
                 >
                   <FiCopy className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEdit(project.id.toString());
+                  }}
                   className="text-gray-400 hover:text-gray-600 transition-colors"
                   title="Edit"
                 >
