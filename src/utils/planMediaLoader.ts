@@ -1,4 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist';
+import { fetchPlanBlobWithCache } from '@/utils/planBlobCache';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
@@ -44,21 +45,15 @@ export const inferPlanMediaKind = (plan: {
 };
 
 export const loadPdfFromUrl = async (url: string): Promise<pdfjsLib.PDFDocumentProxy> => {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch plan PDF (${response.status})`);
-  }
-  const buffer = await response.arrayBuffer();
+  // Cache-backed fetch: network first, IndexedDB fallback when offline.
+  const blob = await fetchPlanBlobWithCache(url);
+  const buffer = await blob.arrayBuffer();
   return pdfjsLib.getDocument({ data: buffer }).promise;
 };
 
 /** Load image from Cloudinary URL; returns the URL for use as img.src (with CORS). */
 export const loadImageSourceFromUrl = async (url: string): Promise<string> => {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch plan image (${response.status})`);
-  }
-  const blob = await response.blob();
+  const blob = await fetchPlanBlobWithCache(url);
   return URL.createObjectURL(blob);
 };
 
