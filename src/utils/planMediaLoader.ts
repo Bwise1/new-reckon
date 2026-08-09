@@ -1,7 +1,11 @@
 import * as pdfjsLib from 'pdfjs-dist';
+// Bundle the pdf.js worker locally (Vite emits it into the build) instead of
+// loading from the unpkg CDN. This makes the canvas work fully offline and in
+// the packaged desktop (Tauri) app, which has no guaranteed network.
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { fetchPlanBlobWithCache } from '@/utils/planBlobCache';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 export type PlanMediaKind = 'pdf' | 'image' | 'unknown';
 
