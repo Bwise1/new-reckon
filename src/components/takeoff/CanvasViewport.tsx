@@ -49,7 +49,10 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
     <div
       id="canvas-container"
       ref={containerRef}
-      className="flex-1 bg-gray-200 relative overflow-auto"
+      // pt-6 gives the plan breathing room below the toolbar instead of sitting
+      // flush against it. Padding-top doesn't affect offsetWidth, so the
+      // width-based fit math in fitImageToStage is unchanged.
+      className="flex-1 bg-gray-200 relative overflow-auto pt-6"
     >
       <Stage
         ref={stageRef}
