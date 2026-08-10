@@ -936,24 +936,10 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   },
 
   exitBoqTargeting: () => {
-    // Stops the drawing session but preserves the running total in
-    // pendingCommit so the user can switch tools and later commit via
-    // Add/Deduct. The takeoff input keeps showing the running total
-    // (EstimationCard reads pendingCommit.value when boqTargeting is null).
-    const target = get().boqTargeting;
-    if (target && target.pendingValue !== null && target.pendingMeasurementIds.length > 0) {
-      set({
-        pendingCommit: {
-          elementId: target.elementId,
-          itemId: target.itemId,
-          value: target.pendingValue,
-          total: target.pendingTotal,
-          measurementIds: target.pendingMeasurementIds,
-          sessionId: target.sessionId,
-        },
-      });
-    }
-    set({ boqTargeting: null });
+    // Measurements now commit to history immediately as they're drawn (each its
+    // own chip), so ending the session just clears targeting — there is nothing
+    // left to commit. No pendingCommit is stashed anymore.
+    set({ boqTargeting: null, pendingCommit: null });
   },
 
   cancelBoqTargeting: () => {
@@ -1180,20 +1166,42 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
           );
           if (body) syncQueue.enqueue({ kind: 'measurement.create', projectId, body });
         }
-        // Continuous measurement: accumulate all measurements in the
-        // session into a running total shown live in the takeoff box.
-        // Nothing is committed to history until the user clicks Exit.
+        // Per-measurement history: each measurement immediately becomes its own
+        // history chip on the targeted BOQ item, signed by the current
+        // Add/Deduct mode. The takeoff box shows the growing expression
+        // (m1 + m2 - m3 …). No separate commit step — the mode toggle is the
+        // sign. (Replaces the old single-summed-chip-on-Exit flow.)
         const target = get().boqTargeting;
         if (target) {
-          const newTotal = target.pendingTotal + Math.abs(measurement.quantity);
+          const chipValue = Math.abs(measurement.quantity).toFixed(2);
+          const isDeduct = target.mode === 'deduct';
+
+          // Bind this one measurement and add a single signed history chip.
+          get().bindMeasurementToItem(
+            measurement.id,
+            target.elementId,
+            target.itemId,
+            target.mode,
+            chipValue,
+            target.sessionId,
+          );
+
+          // Rebuild the live expression shown in the takeoff box from the
+          // item's own history so it always matches what's committed.
+          const term = `${isDeduct ? '-' : '+'} ${chipValue}`;
+          const newExpr = target.pendingValue
+            ? `${target.pendingValue} ${term}`
+            : (isDeduct ? `- ${chipValue}` : chipValue);
           const newIds = [...target.pendingMeasurementIds, measurement.id];
           set((state) =>
             state.boqTargeting
               ? {
                   boqTargeting: {
                     ...state.boqTargeting,
-                    pendingTotal: newTotal,
-                    pendingValue: newTotal.toFixed(2),
+                    pendingTotal:
+                      target.pendingTotal +
+                      (isDeduct ? -1 : 1) * Math.abs(measurement.quantity),
+                    pendingValue: newExpr,
                     pendingMeasurementIds: newIds,
                   },
                 }
@@ -1202,6 +1210,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         }
       },
       undo: () => {
+        const boqBefore = get().boqElements;
         set((state) => ({
           takeoffItems: state.takeoffItems.map((item) => {
             if (item.id === itemId) {
@@ -1213,7 +1222,19 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
             }
             return item;
           }),
+          // Also drop the history chip this measurement created (per-measurement
+          // history), so undo fully reverses the add.
+          boqElements: state.boqElements.map((element) => ({
+            ...element,
+            items: element.items.map((item) => ({
+              ...item,
+              history: item.history.filter(
+                (entry) => entry.sourceMeasurementId !== measurement.id
+              ),
+            })),
+          })),
         }));
+        enqueueBoqOpsFromDiff(boqBefore);
         const projectId = get().currentProjectId;
         if (projectId) {
           syncQueue.enqueue({
