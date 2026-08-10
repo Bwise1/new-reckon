@@ -207,13 +207,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     return () => window.clearTimeout(timer);
   }, [uncalibratedWarning]);
 
-  // Re-fit the open plan when the fit-mode preference changes (from Settings).
-  useEffect(() => {
-    const onFitModeChange = () => refitToView(image);
-    window.addEventListener("reckon:canvas-fit-mode", onFitModeChange);
-    return () => window.removeEventListener("reckon:canvas-fit-mode", onFitModeChange);
-  }, [refitToView, image]);
-
   const confirm = useConfirm();
   const snapSettings = useMemo(
     () => ({
@@ -321,6 +314,15 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   useEffect(() => {
     onPlanLoadStatusChange?.(planLoadStatus);
   }, [planLoadStatus, onPlanLoadStatusChange]);
+
+  // Re-fit the open plan when the fit-mode preference changes (from Settings).
+  // Placed AFTER useCanvasMedia so refitToView exists — declaring the effect
+  // before the hook that produces refitToView caused a use-before-init crash.
+  useEffect(() => {
+    const onFitModeChange = () => refitToView(image);
+    window.addEventListener("reckon:canvas-fit-mode", onFitModeChange);
+    return () => window.removeEventListener("reckon:canvas-fit-mode", onFitModeChange);
+  }, [refitToView, image]);
 
   // Returns a point transformer for a 90° rotation of an image W×H.
   // Points are in image-pixel space; rotation pivots around the image centre.
