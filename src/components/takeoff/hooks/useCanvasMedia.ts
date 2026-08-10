@@ -8,6 +8,7 @@ import { useTakeoffStore } from "@/store/useTakeoffStore";
 import { getPlanPdf, setPlanPdf } from "@/utils/planPdfCache";
 import { inferPlanMediaKind, loadPlanFromRemoteUrl } from "@/utils/planMediaLoader";
 import { extractPdfSegments, SegmentIndex } from "@/utils/pdfLineExtractor";
+import { getCanvasFitMode } from "@/utils/canvasPrefs";
 
 interface UseCanvasMediaParams {
     containerRef: React.RefObject<HTMLDivElement | null>;
@@ -79,26 +80,74 @@ export const useCanvasMedia = ({
         (img: HTMLImageElement, fitKey?: string, naturalSize?: { width: number; height: number }) => {
             if (!containerRef.current) return;
             const containerWidth = containerRef.current.offsetWidth;
+            const containerHeight = containerRef.current.offsetHeight;
             if (containerWidth <= 0) return;
             // Use PDF natural dimensions when available so that imageScale is stable
             // regardless of the render quality scale factor. For raster images, img.width
             // is the correct natural size already (no high-res overscaling).
             const refWidth = naturalSize?.width ?? img.width;
             const refHeight = naturalSize?.height ?? img.height;
+
+            // imageScale stays width-based and MUST NOT change with fit mode —
+            // all stored measurement points are in image-pixel space and every
+            // coordinate conversion multiplies by imageScale. Fit mode only
+            // changes the initial ZOOM (stageScale) and PAN (stagePos), which is
+            // exactly what the user's own zoom/pan does, so measurements stay put.
             const scaleFactor = containerWidth / refWidth;
             setImageScale(scaleFactor);
+
+            // The stage (unzoomed) is the plan drawn at imageScale.
+            const baseStageWidth = containerWidth;
+            const baseStageHeight = refHeight * scaleFactor;
             setStageSize({
-                width: containerWidth,
-                height: refHeight * scaleFactor,
+                width: baseStageWidth,
+                height: baseStageHeight,
             });
-            // Only reset zoom/pan on the very first time this plan+page is displayed
+
+            // Only set the initial zoom/pan the first time this plan+page shows.
             if (fitKey && !fittedRef.current.has(fitKey)) {
                 fittedRef.current.add(fitKey);
-                setStageScale(1);
-                setStagePos({ x: 0, y: 0 });
+
+                const mode = getCanvasFitMode();
+                let initialScale = 1;
+                if (mode === "page" && baseStageHeight > 0 && containerHeight > 0) {
+                    // Fit-page: scale up (or down) so the whole plan fits the box,
+                    // limited by whichever dimension runs out first.
+                    initialScale = Math.min(
+                        containerWidth / baseStageWidth,
+                        containerHeight / baseStageHeight,
+                    );
+                }
+
+                // Center the (scaled) plan in the container. In width mode this
+                // just balances the leftover height above/below instead of
+                // dumping it all below; in page mode it centers the enlarged plan.
+                const scaledWidth = baseStageWidth * initialScale;
+                const scaledHeight = baseStageHeight * initialScale;
+                const posX = Math.max(0, (containerWidth - scaledWidth) / 2);
+                const posY = Math.max(0, (containerHeight - scaledHeight) / 2);
+
+                setStageScale(initialScale);
+                setStagePos({ x: posX, y: posY });
             }
         },
         [containerRef, setImageScale, setStagePos, setStageScale, setStageSize]
+    );
+
+    /**
+     * Force a re-fit of the currently displayed plan to the view, using the
+     * current fit-mode setting. Clears the "already fitted" guard for the active
+     * plan+page so fitImageToStage re-applies the initial zoom/pan. Used by the
+     * canvas "fit" button and when the fit-mode preference changes.
+     */
+    const refitToView = useCallback(
+        (img: HTMLImageElement | null) => {
+            if (!img) return;
+            // Drop all fitted keys so the next fit re-applies zoom/pan.
+            fittedRef.current.clear();
+            fitImageToStage(img, `refit:${activePlanId}:${currentPage}:${Date.now()}`, naturalSizeRef.current ?? undefined);
+        },
+        [fitImageToStage, activePlanId, currentPage]
     );
 
     const renderPdfPage = useCallback(
@@ -595,6 +644,7 @@ export const useCanvasMedia = ({
         handleFileUpload,
         changePage,
         rerenderCurrentPage,
+        refitToView,
         hasLoadedPlan,
         planLoadStatus,
         planLoadError,

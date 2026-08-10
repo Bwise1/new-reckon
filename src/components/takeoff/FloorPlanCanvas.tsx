@@ -206,6 +206,14 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     const timer = window.setTimeout(() => setUncalibratedWarning(false), 2500);
     return () => window.clearTimeout(timer);
   }, [uncalibratedWarning]);
+
+  // Re-fit the open plan when the fit-mode preference changes (from Settings).
+  useEffect(() => {
+    const onFitModeChange = () => refitToView(image);
+    window.addEventListener("reckon:canvas-fit-mode", onFitModeChange);
+    return () => window.removeEventListener("reckon:canvas-fit-mode", onFitModeChange);
+  }, [refitToView, image]);
+
   const confirm = useConfirm();
   const snapSettings = useMemo(
     () => ({
@@ -288,7 +296,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   const rotateAllPages = useTakeoffStore((s) => s.rotateAllPages);
   const activeRealWidthLive = useTakeoffStore((s) => s.activeRealWidth);
 
-  const { handleFileUpload, changePage, rerenderCurrentPage, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfSegmentIndexRef } =
+  const { handleFileUpload, changePage, rerenderCurrentPage, refitToView, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfSegmentIndexRef } =
     useCanvasMedia({
     containerRef,
     backgroundImage,
@@ -3228,6 +3236,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         }}
         snapEnabled={snapEnabled}
         onToggleSnap={handleToggleSnap}
+        onFit={() => refitToView(image)}
       />
       {(() => {
         // Slim status pill — top-center of viewport. Only appears when a

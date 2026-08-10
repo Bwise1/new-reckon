@@ -11,6 +11,7 @@ import {
   Undo2,
   RotateCcw,
   Magnet,
+  Maximize2,
 } from "lucide-react";
 
 interface CanvasOverlaysProps {
@@ -30,6 +31,8 @@ interface CanvasOverlaysProps {
   onClearAll: () => void;
   snapEnabled: boolean;
   onToggleSnap: () => void;
+  /** Re-fit the plan to the view using the current fit mode. */
+  onFit: () => void;
 }
 
 const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
@@ -48,6 +51,7 @@ const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
   onClearAll,
   snapEnabled,
   onToggleSnap,
+  onFit,
 }) => {
   return (
     <>
@@ -104,6 +108,15 @@ const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
 
       {/* Zoom — bottom right */}
       <div className="absolute bottom-6 right-4 flex items-center gap-px bg-white/85 backdrop-blur-sm py-1 px-1 rounded-lg shadow-md border border-gray-200/60 z-20">
+        <button
+          type="button"
+          onClick={onFit}
+          title="Fit plan to view"
+          className="p-1.5 hover:bg-gray-100 rounded-md cursor-pointer"
+        >
+          <Maximize2 className="w-4 h-4 text-gray-600" />
+        </button>
+        <div className="h-5 w-px bg-gray-200 mx-0.5" />
         <button
           type="button"
           onClick={() => {

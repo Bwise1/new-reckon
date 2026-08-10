@@ -49,10 +49,11 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
     <div
       id="canvas-container"
       ref={containerRef}
-      // pt-6 gives the plan breathing room below the toolbar instead of sitting
-      // flush against it. Padding-top doesn't affect offsetWidth, so the
-      // width-based fit math in fitImageToStage is unchanged.
-      className="flex-1 bg-gray-200 relative overflow-auto pt-6"
+      // Vertical breathing room is now handled by fit-mode centering in
+      // fitImageToStage (stagePos), which balances the leftover space above and
+      // below the plan — so no container padding (padding would offset the
+      // measured height used by the fit math).
+      className="flex-1 bg-gray-200 relative overflow-auto"
     >
       <Stage
         ref={stageRef}

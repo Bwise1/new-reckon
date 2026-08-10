@@ -9,6 +9,45 @@ import { useStorage } from "@/hooks/useStorage";
 import { useLogout } from "@/hooks/useAuth";
 import { useConfirm } from "@/contexts/ConfirmProvider";
 import DashboardLayout from "@/layouts/DashboardLayout";
+import { getCanvasFitMode, setCanvasFitMode, type CanvasFitMode } from "@/utils/canvasPrefs";
+
+/** Canvas display preferences — how a plan fits the takeoff view by default. */
+function CanvasPrefsCard() {
+  const [mode, setMode] = useState<CanvasFitMode>(getCanvasFitMode());
+  const options: { value: CanvasFitMode; label: string; hint: string }[] = [
+    { value: "width", label: "Fit width", hint: "Plan fills the width; scroll for the rest" },
+    { value: "page", label: "Fit page", hint: "Whole plan visible, centered in the view" },
+  ];
+  const choose = (m: CanvasFitMode) => {
+    setMode(m);
+    setCanvasFitMode(m); // persists + notifies any open canvas to re-fit
+  };
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+      <p className="text-sm font-medium text-gray-700 mb-1">Plan fit</p>
+      <p className="text-xs text-gray-400 mb-3">How a plan sizes itself when you open it.</p>
+      <div className="grid grid-cols-2 gap-2">
+        {options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => choose(o.value)}
+            className={`text-left rounded-xl border p-3 transition-colors ${
+              mode === o.value
+                ? "border-secondary bg-secondary/5"
+                : "border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            <span className={`block text-sm font-semibold ${mode === o.value ? "text-secondary" : "text-gray-800"}`}>
+              {o.label}
+            </span>
+            <span className="block text-[11px] text-gray-400 mt-0.5">{o.hint}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const PROFESSIONS = [
   "Quantity Surveyor", "Architect", "Realtor", "Builder",
@@ -281,6 +320,9 @@ export default function Settings() {
                 />
               </div>
             )}
+
+            {/* Canvas display preferences */}
+            <CanvasPrefsCard />
 
             {/* Nav items */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
