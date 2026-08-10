@@ -686,11 +686,48 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         );
       }
 
-      // NOTE: auto-close-to-close-the-outline was removed. Clicking near the
-      // first vertex no longer auto-finishes the linear/polyline into a closed
-      // shape — it's just another vertex. The user finishes explicitly
-      // (double-click / Enter / right-click), and the result stays an open
-      // linear/polyline. (The Area tool keeps its own click-near-start close.)
+      // Closing a linear run near the first vertex makes a CLOSED PERIMETER,
+      // not an area. The measurement stays a polyline and its quantity is the
+      // total boundary length (all segments including the closing edge back to
+      // the start). Users tracing a perimeter with the linear tool expect a
+      // length in metres, not an enclosed area in m² — the old behavior silently
+      // turned this into a type:"area" measurement.
+      const closeSnapRadius = 12 / stageScale;
+      if (
+        currentPoints.length >= 3 &&
+        calculateDistance(nextPoint, currentPoints[0]) < closeSnapRadius
+      ) {
+        // Append the first point so the outline visually closes and the closing
+        // edge is included in the perimeter length.
+        const closedPoints = [...currentPoints, currentPoints[0]];
+        const perimeter = calculateQuantity(closedPoints, "polyline", currentScale);
+        const confidence = currentScale
+          ? Math.min(1.0, perimeter / (currentScale * 10))
+          : 0.5;
+        const closeMeasurement: Measurement = {
+          id: generateClientId(),
+          points: closedPoints,
+          quantity: perimeter,
+          planId: activePlanId,
+          page: currentPage,
+          type: "polyline",
+          color: activeColor,
+          strokeWidth: 2,
+          metadata: {
+            createdAt: now,
+            lastModified: now,
+            confidence: Math.max(0.1, confidence),
+          },
+        };
+        const validation = validateMeasurement(closeMeasurement, "polyline");
+        if (validation.isValid) {
+          addMeasurement(canvasItemId, closeMeasurement);
+          setCurrentPoints([]);
+        } else {
+          console.warn("Invalid measurement:", validation.error);
+        }
+        return;
+      }
 
       // Reject stutter clicks: any new vertex within ~8 screen pixels of
       // the previous one is treated as an accidental double-click. Converts
