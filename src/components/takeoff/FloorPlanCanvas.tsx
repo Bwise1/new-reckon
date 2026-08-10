@@ -3191,16 +3191,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
               ? 'm³'
               : boqTargeting.unit;
         return (
+          // Indicator only — the toolbar "Done" button (or Esc) finishes
+          // measuring; the separate Exit button here was redundant with it.
           <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-[#f97316] text-white px-3 py-1.5 shadow-lg text-xs font-semibold">
             <span>Measuring for {elementLabel} · Item {itemLetter} ({unitLabel})</span>
-            <button
-              type="button"
-              onClick={exitBoqTargeting}
-              className="ml-1 rounded-full bg-white/20 hover:bg-white/30 px-2 py-0.5 text-[11px] font-bold cursor-pointer"
-              title="Exit measuring mode (Esc)"
-            >
-              Exit
-            </button>
+            <span className="ml-1 text-[11px] font-normal text-white/80">— click Done when finished</span>
           </div>
         );
       })()}

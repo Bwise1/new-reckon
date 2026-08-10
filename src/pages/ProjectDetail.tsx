@@ -87,6 +87,7 @@ const ProjectDetail = () => {
     focusedBoqCard,
     boqTargeting,
     startBoqTargeting,
+    exitBoqTargeting,
   } = useTakeoffStore(
     useShallow((s) => ({
       plans: s.plans,
@@ -103,6 +104,7 @@ const ProjectDetail = () => {
       focusedBoqCard: s.focusedBoqCard,
       boqTargeting: s.boqTargeting,
       startBoqTargeting: s.startBoqTargeting,
+      exitBoqTargeting: s.exitBoqTargeting,
     }))
   );
 
@@ -155,8 +157,12 @@ const ProjectDetail = () => {
   }, [focusedBoqCard]);
 
   const handleFinishTool = useCallback(() => {
+    // "Done" is the single finish control: put the tool down AND end any active
+    // measuring session (which clears the orange banner). Measurements already
+    // committed to history as they were drawn, so there's nothing else to do.
     setActiveTool(null);
-  }, [setActiveTool]);
+    exitBoqTargeting();
+  }, [setActiveTool, exitBoqTargeting]);
 
   const handleColorChange = useCallback(
     (color: string) => {
