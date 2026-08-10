@@ -1698,6 +1698,30 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     isPanningMode,
   ]);
 
+  // Keep at least a margin of the plan on screen in every direction, so panning
+  // feels the same up/down/left/right and the plan can never fully escape the
+  // view. Symmetric — fixes the old asymmetry where up (pan) was unbounded but
+  // down (scroll) was clamped. The Fit button recenters if needed.
+  const clampStagePos = useCallback(
+    (pos: { x: number; y: number }) => {
+      const viewW = containerRef.current?.offsetWidth ?? stageSize.width;
+      const viewH = containerRef.current?.offsetHeight ?? stageSize.height;
+      const contentW = stageSize.width * stageScale;
+      const contentH = stageSize.height * stageScale;
+      // Keep this much of the plan visible at any edge.
+      const margin = 80;
+      const minX = Math.min(margin, viewW) - contentW;
+      const maxX = viewW - Math.min(margin, viewW);
+      const minY = Math.min(margin, viewH) - contentH;
+      const maxY = viewH - Math.min(margin, viewH);
+      return {
+        x: clamp(pos.x, minX, maxX),
+        y: clamp(pos.y, minY, maxY),
+      };
+    },
+    [containerRef, stageSize.width, stageSize.height, stageScale]
+  );
+
   // Handle zoom
   const handleWheel = useCallback(
     (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -1725,9 +1749,9 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     };
 
     setStageScale(clampedScale);
-    setStagePos(newPos);
+    setStagePos(clampStagePos(newPos));
     },
-    [stageScale, stagePos, setStageScale, setStagePos]
+    [stageScale, stagePos, setStageScale, setStagePos, clampStagePos]
   );
 
   // Compute the base ("nothing hovered") cursor for current mode.
@@ -1884,7 +1908,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         onStageContextMenu={handleContextMenu}
         onStageDragEnd={(e) => {
             if (e.target === e.target.getStage()) {
-              setStagePos({ x: e.target.x(), y: e.target.y() });
+              const clamped = clampStagePos({ x: e.target.x(), y: e.target.y() });
+              // Snap the Konva node to the clamped position too, so the visual
+              // matches the state (otherwise it can drift past the margin).
+              e.target.position(clamped);
+              setStagePos(clamped);
             }
           }}
         measurementsChildren={<>

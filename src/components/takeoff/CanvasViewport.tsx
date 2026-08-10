@@ -49,11 +49,11 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
     <div
       id="canvas-container"
       ref={containerRef}
-      // Vertical breathing room is now handled by fit-mode centering in
-      // fitImageToStage (stagePos), which balances the leftover space above and
-      // below the plan — so no container padding (padding would offset the
-      // measured height used by the fit math).
-      className="flex-1 bg-gray-200 relative overflow-auto"
+      // overflow-hidden (not auto): the plan is moved by Konva pan (stagePos),
+      // clamped symmetrically in all directions. With overflow-auto, browser
+      // scroll competed with pan and only bounded the bottom, causing the
+      // "free up, limited down" asymmetry.
+      className="flex-1 bg-gray-200 relative overflow-hidden"
     >
       <Stage
         ref={stageRef}
