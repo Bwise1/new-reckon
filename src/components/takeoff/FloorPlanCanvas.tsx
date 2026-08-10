@@ -517,6 +517,15 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     (e: Konva.KonvaEventObject<MouseEvent>) => {
     if (isPanningMode) return;
 
+    // Click-away to finish: if a measuring session is open but NO drawing tool
+    // is active (and we're not calibrating), a click on the canvas ends the
+    // session — the same as clicking Done. While a tool IS active, clicks place
+    // measurement points as normal, so measuring is never interrupted.
+    if (boqTargeting && !activeTool && !calibrationMode && !isSelectMode) {
+      exitBoqTargeting();
+      return;
+    }
+
     // In select mode, clicking on empty space deselects
     if (isSelectMode && e.target === e.target.getStage()) {
       setSelectedMeasurement(null);
@@ -867,6 +876,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       stageSize,
       image,
       imageScale,
+      boqTargeting,
+      exitBoqTargeting,
     ]
   );
 
