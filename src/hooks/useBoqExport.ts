@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useProject } from '@/hooks/useProjects';
 import { openAuthenticatedDownload } from '@/lib/api-client';
-import { buildBoqPayload, boqService } from '@/services/boq.service';
+import { buildBoqPayload, boqService, hasExportableBoq } from '@/services/boq.service';
 import type { ExportFormat } from '@/components/takeoff/BoqExportModal';
 
 export function useBoqExport() {
@@ -36,6 +36,11 @@ export function useBoqExport() {
   };
 
   const runPreview = async (vat: number, contingency: number, format: ExportFormat) => {
+    if (!hasExportableBoq(boqElements)) {
+      setStatusMessage('Add at least one item with a measurement or quantity before exporting.');
+      setExportModalMode(null);
+      return;
+    }
     setPricing({ vatRate: vat, contingency });
     try {
       setBusyAction(true);
@@ -60,10 +65,8 @@ export function useBoqExport() {
       setExportModalMode(null);
       return;
     }
-    const storedUser = localStorage.getItem('user');
-    const email = storedUser ? JSON.parse(storedUser).email : '';
-    if (!email) {
-      setStatusMessage('User email is required for payment.');
+    if (!hasExportableBoq(boqElements)) {
+      setStatusMessage('Add at least one item with a measurement or quantity before exporting.');
       setExportModalMode(null);
       return;
     }
@@ -73,13 +76,12 @@ export function useBoqExport() {
       setBusyAction(true);
       setStatusMessage('');
       const payload = buildExportPayload(vat, contingency);
-      const init = await boqService.initPayment(projectId, email);
-      if (init.data.reference) {
-        await boqService.verifyPayment(init.data.reference);
-      }
+      // Exports are free — no payment step. The server generates a filename
+      // suffix itself when exportId is omitted.
+      const exportId = `${projectId}_${Date.now()}`;
       const exported = format === 'excel'
-        ? await boqService.exportExcel(payload, init.data.exportId)
-        : await boqService.exportPdf(payload, init.data.exportId);
+        ? await boqService.exportExcel(payload, exportId)
+        : await boqService.exportPdf(payload, exportId);
       await openDownload(exported.data.downloadUrl);
       setStatusMessage('Export completed.');
     } catch (error) {

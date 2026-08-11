@@ -168,7 +168,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
 
         <button
           type="button"
-          onClick={() => setExportModalMode("preview")}
+          onClick={() => setExportModalMode("export")}
           disabled={busyAction || !isOnline}
           title={!isOnline ? "Export requires an internet connection" : undefined}
           className="shrink-0 px-5 py-2 rounded-lg bg-secondary text-white text-sm font-bold hover:bg-[#002847] disabled:opacity-50 shadow-sm cursor-pointer disabled:cursor-not-allowed"

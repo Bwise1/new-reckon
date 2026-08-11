@@ -160,7 +160,7 @@ class APIClient {
   }
 
   /** Fetch a generated file with auth + X-Request-Source (same as mobile dio.download). */
-  async downloadBlob(url: string): Promise<Blob> {
+  async downloadBlob(url: string): Promise<{ blob: Blob; filename: string }> {
     const response = await this.client.get<Blob>(url, {
       responseType: 'blob',
     });
@@ -181,20 +181,70 @@ class APIClient {
       }
     }
 
-    return blob;
+    // Prefer the server-supplied name (Content-Disposition), else the URL's
+    // basename — never the blob UUID.
+    const disposition = response.headers['content-disposition'] ?? '';
+    const filename = filenameFromDisposition(disposition) || basenameFromUrl(url) || 'download';
+    return { blob, filename };
   }
 }
 
 export const apiClient = new APIClient();
 
-/** Open preview/export PDF or Excel in a new tab with required API headers. */
-export async function openAuthenticatedDownload(downloadUrl: string): Promise<void> {
-  const blob = await apiClient.downloadBlob(downloadUrl);
-  const blobUrl = URL.createObjectURL(blob);
-  const opened = window.open(blobUrl, '_blank', 'noopener,noreferrer');
-  if (!opened) {
-    URL.revokeObjectURL(blobUrl);
-    throw new Error('Pop-up blocked. Allow pop-ups to view the download.');
+/** Pull "foo.pdf" out of a Content-Disposition header, if present. */
+function filenameFromDisposition(disposition: string): string {
+  // Handles: filename="foo.pdf", filename=foo.pdf, filename*=UTF-8''foo.pdf
+  const star = /filename\*=(?:UTF-8'')?["']?([^"';]+)["']?/i.exec(disposition);
+  if (star?.[1]) {
+    try { return decodeURIComponent(star[1]); } catch { return star[1]; }
   }
+  const plain = /filename=["']?([^"';]+)["']?/i.exec(disposition);
+  return plain?.[1]?.trim() ?? '';
+}
+
+/** Last path segment of a URL, stripped of any query string. */
+function basenameFromUrl(url: string): string {
+  const path = url.split('?')[0].split('#')[0];
+  return path.substring(path.lastIndexOf('/') + 1);
+}
+
+/** True when running inside the Tauri desktop shell (vs a plain browser/PWA). */
+function isTauri(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
+/**
+ * Download a generated PDF/Excel with its real filename (never the blob UUID).
+ * - Web / PWA: triggers a normal browser download via <a download>.
+ * - Desktop (Tauri): shows a native Save-As dialog and writes the file to disk.
+ * The saved file can then be opened to view.
+ */
+export async function openAuthenticatedDownload(downloadUrl: string): Promise<void> {
+  const { blob, filename } = await apiClient.downloadBlob(downloadUrl);
+
+  if (isTauri()) {
+    // Desktop: native Save-As. Dynamic import so the browser build never
+    // pulls in the Tauri plugins.
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const { writeFile } = await import('@tauri-apps/plugin-fs');
+    const ext = filename.split('.').pop() || '';
+    const targetPath = await save({
+      defaultPath: filename,
+      filters: ext ? [{ name: ext.toUpperCase(), extensions: [ext] }] : undefined,
+    });
+    if (!targetPath) return; // user cancelled the dialog
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    await writeFile(targetPath, bytes);
+    return;
+  }
+
+  // Web / PWA.
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
   window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
 }

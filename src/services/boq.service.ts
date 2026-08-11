@@ -51,6 +51,26 @@ const itemQty = (item: BoqElementData['items'][number]): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+// An item is "real" if the user entered anything meaningful into it — whether
+// by drawing a measurement (history) OR by typing values manually (qty, rate,
+// header, description). Empty seed items are qty '0' / rate '0' / m3 / no text.
+const itemHasContent = (item: BoqElementData['items'][number]): boolean =>
+  !!(item.header && item.header.trim()) ||
+  !!(item.description && item.description.trim()) ||
+  item.history.length > 0 ||
+  itemQty(item) > 0 ||
+  parseRateNumber(item.rate) > 0;
+
+// The editor always seeds one blank element/item; those must not appear in
+// exports (they showed up as an empty "ELEMENT NO.1" in the PDF/Excel).
+export const elementHasContent = (element: BoqElementData): boolean =>
+  element.items.some(itemHasContent);
+
+// True when at least one element has real content — i.e. there is something
+// worth exporting. Used to block exporting a BOQ that's still just the seed.
+export const hasExportableBoq = (elements: BoqElementData[]): boolean =>
+  elements.some(elementHasContent);
+
 export const buildBoqPayload = ({
   projectId,
   title,
@@ -74,10 +94,12 @@ export const buildBoqPayload = ({
     contingency,
     vat_rate: vatRate,
   },
-  elements: elements.map((element, elementIndex) => ({
+  // Drop empty (seed) elements so they don't print as a blank "ELEMENT NO.1".
+  // Re-index after filtering so the remaining elements stay 1..N.
+  elements: elements.filter(elementHasContent).map((element, elementIndex) => ({
     id: elementIndex + 1,
     header: element.title.toUpperCase(),
-    items: element.items.map((item, itemIndex) => {
+    items: element.items.filter(itemHasContent).map((item, itemIndex) => {
       const units = UNIT_PAYLOAD[item.unit] ?? UNIT_PAYLOAD.m3;
       return {
         id: itemLabelFromIndex(itemIndex),
