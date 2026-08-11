@@ -57,15 +57,17 @@ const FormulaInput = forwardRef<FormulaInputHandle, FormulaInputProps>(({
 
   const { isValid, error } = validateFormula(value);
 
-  // When measuring, auto-focus the input the moment a measured value
-  // shows up so the user immediately sees the caret and can Add/Deduct
-  // or edit right away.
-  const hadValueRef = useRef(false);
+  // When measuring, return the caret to the input whenever the measured value
+  // changes. Every canvas click blurs the input (native browser behaviour), so
+  // area (many clicks) would otherwise lose the caret entirely. Re-focusing on
+  // any value change — not just the first — keeps the caret in the input after
+  // each measurement lands, for both the linear and area tools.
+  const prevValueRef = useRef("");
   useEffect(() => {
-    if (isMeasuring && value && !hadValueRef.current) {
+    if (isMeasuring && value && value !== prevValueRef.current) {
       inputRef.current?.focus();
     }
-    hadValueRef.current = Boolean(value);
+    prevValueRef.current = value;
   }, [value, isMeasuring]);
 
   // Handle clicks outside the component to close the toolbar

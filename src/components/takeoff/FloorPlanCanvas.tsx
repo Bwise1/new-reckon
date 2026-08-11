@@ -34,7 +34,6 @@ import {
 } from "@/utils/takeoffMeasurement";
 import { measurementBelongsToPlan } from "@/utils/planDocument";
 import { useConfirm } from "@/contexts/ConfirmProvider";
-import { itemLabelFromIndex } from "@/utils/boqCalculations";
 
 const MIN_DISTANCE = 0.001; // Minimum valid distance in image pixels
 const MIN_LINEAR_EDIT_DISTANCE = 2; // Prevent collapsing line while editing
@@ -101,7 +100,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     canUndo,
     canRedo,
     boqTargeting,
-    boqElements,
     exitBoqTargeting,
     cancelBoqTargeting,
   } = useTakeoffStore(
@@ -136,7 +134,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       canUndo: s.canUndo,
       canRedo: s.canRedo,
       boqTargeting: s.boqTargeting,
-      boqElements: s.boqElements,
       exitBoqTargeting: s.exitBoqTargeting,
       cancelBoqTargeting: s.cancelBoqTargeting,
     }))
@@ -517,10 +514,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     (e: Konva.KonvaEventObject<MouseEvent>) => {
     if (isPanningMode) return;
 
-    // Click-away to finish: if a measuring session is open but NO drawing tool
-    // is active (and we're not calibrating), a click on the canvas ends the
-    // session — the same as clicking Done. While a tool IS active, clicks place
-    // measurement points as normal, so measuring is never interrupted.
+    // Click-away to dismiss. A measuring session ends when the user clicks
+    // Click-away to dismiss: only when NO drawing tool is active. While a tool
+    // is active, every canvas click places a measurement point (that's how you
+    // draw), so we must never treat it as a dismiss — otherwise the first click
+    // of a new measurement would cancel the session instead of starting it.
     if (boqTargeting && !activeTool && !calibrationMode && !isSelectMode) {
       exitBoqTargeting();
       return;
@@ -3182,35 +3180,9 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         </div>
       )}
 
-      {boqTargeting && (() => {
-        // Resolve human-readable "Element X · Item Y" for the pill.
-        const elementIndex = boqElements.findIndex((el) => el.id === boqTargeting.elementId);
-        const element = boqElements[elementIndex];
-        const itemIndex = element
-          ? element.items.findIndex((it) => it.id === boqTargeting.itemId)
-          : -1;
-        const elementLabel = elementIndex >= 0 ? `Element ${elementIndex + 1}` : 'Element';
-        // Match the sidebar's item lettering (I/O skipped, see boqCalculations).
-        const itemLetter =
-          itemIndex >= 0
-            ? itemLabelFromIndex(itemIndex)
-            : '?';
-        const unitLabel =
-          boqTargeting.unit === 'm2'
-            ? 'm²'
-            : boqTargeting.unit === 'm3'
-              ? 'm³'
-              : boqTargeting.unit;
-        return (
-          // Indicator only — the toolbar "Done" button (or Esc) finishes
-          // measuring; the separate Exit button here was redundant with it.
-          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-[#f97316] text-white px-3 py-1.5 shadow-lg text-xs font-semibold">
-            <span>Measuring for {elementLabel} · Item {itemLetter} ({unitLabel})</span>
-            <span className="ml-1 text-[11px] font-normal text-white/80">— click Done when finished</span>
-          </div>
-        );
-      })()}
-
+      {/* No "measuring mode" banner: measurements finish on double-click and
+          the toolbox dismisses on click-outside, so there's no lingering mode
+          to advertise. */}
 
       {activePlanId && !hasLoadedPlan && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gray-200/80 z-5">

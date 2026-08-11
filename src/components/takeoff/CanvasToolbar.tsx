@@ -14,6 +14,7 @@ interface CanvasToolbarProps {
   selectedMeasurementId?: string | null;
   onToggleCalibration: () => void;
   onSelectTool: (type: TakeoffMode) => void;
+  /** Put the active tool down (clicking the active tool button, or Esc). */
   onFinishTool: () => void;
   onColorChange: (color: string) => void;
   onRealWidthChange: (width: number) => void;
@@ -145,7 +146,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               {index > 0 && <div className="w-px h-4 bg-gray-200" />}
               <button
                 type="button"
-                onClick={() => onSelectTool(tool.type)}
+                onClick={() => (isActive ? onFinishTool() : onSelectTool(tool.type))}
                 title={tooltip}
                 aria-pressed={isActive}
                 className={`flex items-center justify-center w-8 h-6 rounded text-sm font-bold transition cursor-pointer outline-none ${
@@ -157,15 +158,9 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             </React.Fragment>
           );
         })}
-        {activeTool && (
-          <button
-            type="button"
-            onClick={onFinishTool}
-            className="ml-1 px-2 h-6 text-xs font-semibold rounded bg-gray-800 text-white hover:bg-gray-700 transition cursor-pointer"
-          >
-            Done
-          </button>
-        )}
+        {/* No "Done" button: a measurement finishes on double-click (or by
+            clicking near the first vertex), and clicking outside puts the tool
+            down and dismisses the toolbox. */}
       </div>
 
       {/* Color dropdown */}
