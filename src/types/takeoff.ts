@@ -26,6 +26,12 @@ export interface Measurement {
   strokeWidth?: number;
   /** When true, the markup is hidden from the canvas render. */
   hidden?: boolean;
+  /** User-given name for this measurement (e.g. "Kitchen floor"). When set,
+   *  it's shown instead of the auto "Area N" label. */
+  name?: string;
+  /** Stable per-type sequence number assigned at creation and never reused,
+   *  so the auto label ("Area 3") stays fixed even after deletions. */
+  seq?: number;
   /** Bound BOQ Element id, if this measurement feeds a specific line item. */
   boqElementId?: string;
   /** Bound BOQ Item id (per-Element card). */

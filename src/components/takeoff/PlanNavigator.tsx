@@ -3,7 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, Eye, EyeOff, FileText, Link2, Trash2 } from 'lucide-react';
 import ReckonLogo from '@/assets/images/logo.svg';
 import type { PlanDiscipline, TakeoffItem, TakeoffMode, ProjectPlan } from '@/types/takeoff';
-import { getMeasurementColor, getMeasurementType } from '@/utils/takeoffMeasurement';
+import {
+  getMeasurementColor,
+  getMeasurementType,
+  measurementLabel,
+} from '@/utils/takeoffMeasurement';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { planService } from '@/services/plan.service';
 import { useConfirm } from '@/contexts/ConfirmProvider';
@@ -58,6 +62,10 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
   const uploadRef = useRef<HTMLInputElement>(null);
   const setPlanDiscipline = useTakeoffStore((s) => s.setPlanDiscipline);
   const toggleMeasurementHidden = useTakeoffStore((s) => s.toggleMeasurementHidden);
+  const renameMeasurement = useTakeoffStore((s) => s.renameMeasurement);
+  // Which measurement row is being renamed inline, and its draft text.
+  const [renaming, setRenaming] = useState<{ itemId: string; measurementId: string } | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
   const removePlan = useTakeoffStore((s) => s.removePlan);
   const boqElements = useTakeoffStore((s) => s.boqElements);
   const bindMeasurementToItem = useTakeoffStore((s) => s.bindMeasurementToItem);
@@ -150,6 +158,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
           color: string;
           quantity: number;
           hidden: boolean;
+          label: string;
           boqElementId?: string;
           boqItemId?: string;
         }[];
@@ -165,13 +174,15 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
             ? UNCATEGORIZED_LABEL
             : DISCIPLINE_LABEL[key as PlanDiscipline];
         if (!groups.has(key)) groups.set(key, { label, entries: [] });
+        const mType = getMeasurementType(measurement, item);
         groups.get(key)!.entries.push({
           itemId: item.id,
           measurementId: measurement.id,
-          type: getMeasurementType(measurement, item),
+          type: mType,
           color: getMeasurementColor(measurement, item),
           quantity: measurement.quantity,
           hidden: Boolean(measurement.hidden),
+          label: measurementLabel(measurement, mType),
           boqElementId: measurement.boqElementId,
           boqItemId: measurement.boqItemId,
         });
@@ -406,15 +417,54 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                                 <Eye className="w-3.5 h-3.5" />
                               )}
                             </button>
-                            <span
-                              className={`flex-1 text-[12px] truncate ${
-                                entry.hidden ? 'text-gray-500' : 'text-gray-200'
-                              }`}
-                            >
-                              {value}
-                              {base}
-                              {sup && <sup className="text-[9px]">{sup}</sup>}
-                            </span>
+                            {renaming?.measurementId === entry.measurementId ? (
+                              <input
+                                autoFocus
+                                value={renameDraft}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => setRenameDraft(e.target.value)}
+                                onBlur={() => {
+                                  renameMeasurement(entry.itemId, entry.measurementId, renameDraft);
+                                  setRenaming(null);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    renameMeasurement(entry.itemId, entry.measurementId, renameDraft);
+                                    setRenaming(null);
+                                  } else if (e.key === 'Escape') {
+                                    setRenaming(null);
+                                  }
+                                }}
+                                placeholder={`${entry.label}`}
+                                className="flex-1 min-w-0 text-[11px] bg-white/10 border border-white/20 rounded px-1 py-0.5 text-white outline-none"
+                              />
+                            ) : (
+                              <span
+                                className={`flex-1 min-w-0 flex flex-col leading-tight ${
+                                  entry.hidden ? 'text-gray-500' : 'text-gray-200'
+                                }`}
+                                title="Double-click to rename"
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                  setRenameDraft(entry.label);
+                                  setRenaming({
+                                    itemId: entry.itemId,
+                                    measurementId: entry.measurementId,
+                                  });
+                                }}
+                              >
+                                {/* Name on top, full measured value below so it
+                                    is never truncated. */}
+                                <span className="text-[11px] text-gray-400 truncate">
+                                  {entry.label}
+                                </span>
+                                <span className="text-[12px] font-medium">
+                                  {value}
+                                  {base}
+                                  {sup && <sup className="text-[8px]">{sup}</sup>}
+                                </span>
+                              </span>
+                            )}
                             <span
                               className="w-4 h-4 rounded-sm shrink-0 flex items-center justify-center text-[9px] font-bold text-white"
                               style={{ backgroundColor: entry.color }}

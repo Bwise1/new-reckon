@@ -69,6 +69,10 @@ export interface ApiMeasurement {
     lastModified?: string;
     confidence?: number;
     strokeWidth?: number;
+    /** User-given measurement name (e.g. "Kitchen floor"). */
+    name?: string;
+    /** Stable per-type sequence number for the auto "Area 3" label. */
+    seq?: number;
   } | null;
   created_at?: string;
   updated_at?: string;
