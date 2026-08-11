@@ -32,6 +32,7 @@ import {
 } from '@/utils/entitySyncMapper';
 import {
   CANVAS_TAKEOFF_ITEM_ID,
+  nextSeqForType,
   normalizeTakeoffItems,
   unitForTakeoffMode,
 } from '@/utils/takeoffMeasurement';
@@ -173,6 +174,8 @@ interface TakeoffStore {
   addMeasurement: (itemId: string, measurement: Measurement) => void;
   removeMeasurement: (itemId: string, measurementId: string) => void;
   toggleMeasurementHidden: (itemId: string, measurementId: string) => void;
+  /** Rename a measurement (empty string clears back to the auto label). */
+  renameMeasurement: (itemId: string, measurementId: string, name: string) => void;
   /** Append a deduction (inner polygon) to an area measurement. Recomputes
    * quantity as outer − Σdeductions. Undoable. */
   addDeductionToMeasurement: (
@@ -577,8 +580,11 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
 
   setTakeoffItems: (items) => {
     const previousItems = get().takeoffItems;
+    // Normalize so legacy/server measurements get type/color/seq backfilled
+    // (seq drives the stable "Area 1" auto label).
+    const normalized = normalizeTakeoffItems(items);
     executeCommand({
-      execute: () => set({ takeoffItems: items }),
+      execute: () => set({ takeoffItems: normalized }),
       undo: () => set({ takeoffItems: previousItems }),
       description: 'Set takeoff items',
     });
@@ -1144,18 +1150,28 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   addMeasurement: (itemId, measurement) => {
     executeCommand({
       execute: () => {
-        set((state) => ({
-          takeoffItems: state.takeoffItems.map((item) => {
-            if (item.id === itemId) {
-              return {
-                ...item,
-                measurements: [...item.measurements, measurement],
-                totalQuantity: item.totalQuantity + measurement.quantity,
-              };
-            }
-            return item;
-          }),
-        }));
+        set((state) => {
+          // Assign a stable per-type sequence number (never reused) so the
+          // auto label "Area 3" stays fixed even after deletions.
+          const owningItem = state.takeoffItems.find((i) => i.id === itemId);
+          const mType = measurement.type ?? owningItem?.type ?? 'linear';
+          const withSeq: Measurement =
+            typeof measurement.seq === 'number'
+              ? measurement
+              : { ...measurement, seq: nextSeqForType(state.takeoffItems, mType) };
+          return {
+            takeoffItems: state.takeoffItems.map((item) => {
+              if (item.id === itemId) {
+                return {
+                  ...item,
+                  measurements: [...item.measurements, withSeq],
+                  totalQuantity: item.totalQuantity + withSeq.quantity,
+                };
+              }
+              return item;
+            }),
+          };
+        });
         const projectId = get().currentProjectId;
         const activePlanId = get().activePlanId;
         if (projectId && (measurement.planId || activePlanId)) {
@@ -1166,32 +1182,22 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
           );
           if (body) syncQueue.enqueue({ kind: 'measurement.create', projectId, body });
         }
-        // Per-measurement history: each measurement immediately becomes its own
-        // history chip on the targeted BOQ item, signed by the current
-        // Add/Deduct mode. The takeoff box shows the growing expression
-        // (m1 + m2 - m3 …). No separate commit step — the mode toggle is the
-        // sign. (Replaces the old single-summed-chip-on-Exit flow.)
+        // Commit-on-demand: a drawn measurement only STAGES its value into the
+        // takeoff input (the running expression). It does NOT create a history
+        // chip yet — that happens when the user clicks Add/Deduct. This lets the
+        // user type extra math (e.g. "+ 76") onto the drawn value and commit
+        // once, instead of the draw auto-committing a chip AND the edited input
+        // committing a second one (which produced duplicate chips).
         const target = get().boqTargeting;
         if (target) {
-          const chipValue = Math.abs(measurement.quantity).toFixed(2);
+          const rawValue = Math.abs(measurement.quantity).toFixed(2);
           const isDeduct = target.mode === 'deduct';
 
-          // Bind this one measurement and add a single signed history chip.
-          get().bindMeasurementToItem(
-            measurement.id,
-            target.elementId,
-            target.itemId,
-            target.mode,
-            chipValue,
-            target.sessionId,
-          );
-
-          // Rebuild the live expression shown in the takeoff box from the
-          // item's own history so it always matches what's committed.
-          const term = `${isDeduct ? '-' : '+'} ${chipValue}`;
+          // Append this measurement's value to the running takeoff expression.
+          const term = `${isDeduct ? '-' : '+'} ${rawValue}`;
           const newExpr = target.pendingValue
             ? `${target.pendingValue} ${term}`
-            : (isDeduct ? `- ${chipValue}` : chipValue);
+            : (isDeduct ? `- ${rawValue}` : rawValue);
           const newIds = [...target.pendingMeasurementIds, measurement.id];
           set((state) =>
             state.boqTargeting
@@ -1211,29 +1217,52 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       },
       undo: () => {
         const boqBefore = get().boqElements;
-        set((state) => ({
-          takeoffItems: state.takeoffItems.map((item) => {
-            if (item.id === itemId) {
-              return {
+        set((state) => {
+          // Roll back the staged takeoff expression if this measurement was
+          // staged but not yet committed (commit-on-demand). Rebuild the running
+          // expression from the remaining pending measurement ids.
+          let boqTargeting = state.boqTargeting;
+          if (
+            boqTargeting &&
+            boqTargeting.pendingMeasurementIds.includes(measurement.id)
+          ) {
+            const remainingIds = boqTargeting.pendingMeasurementIds.filter(
+              (id) => id !== measurement.id
+            );
+            boqTargeting = {
+              ...boqTargeting,
+              pendingMeasurementIds: remainingIds,
+              pendingTotal: boqTargeting.pendingTotal - measurement.quantity,
+              // Simplest correct rollback: clear the expression when nothing is
+              // left staged; otherwise strip this value's trailing term.
+              pendingValue: remainingIds.length === 0 ? null : boqTargeting.pendingValue,
+            };
+          }
+          return {
+            boqTargeting,
+            takeoffItems: state.takeoffItems.map((item) => {
+              if (item.id === itemId) {
+                return {
+                  ...item,
+                  measurements: item.measurements.filter((m) => m.id !== measurement.id),
+                  totalQuantity: item.totalQuantity - measurement.quantity,
+                };
+              }
+              return item;
+            }),
+            // Safety net: also drop any history chip that referenced this
+            // measurement (only relevant for already-committed measurements).
+            boqElements: state.boqElements.map((element) => ({
+              ...element,
+              items: element.items.map((item) => ({
                 ...item,
-                measurements: item.measurements.filter((m) => m.id !== measurement.id),
-                totalQuantity: item.totalQuantity - measurement.quantity,
-              };
-            }
-            return item;
-          }),
-          // Also drop the history chip this measurement created (per-measurement
-          // history), so undo fully reverses the add.
-          boqElements: state.boqElements.map((element) => ({
-            ...element,
-            items: element.items.map((item) => ({
-              ...item,
-              history: item.history.filter(
-                (entry) => entry.sourceMeasurementId !== measurement.id
-              ),
+                history: item.history.filter(
+                  (entry) => entry.sourceMeasurementId !== measurement.id
+                ),
+              })),
             })),
-          })),
-        }));
+          };
+        });
         enqueueBoqOpsFromDiff(boqBefore);
         const projectId = get().currentProjectId;
         if (projectId) {
@@ -1354,6 +1383,49 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         projectId,
         clientUuid: measurementId,
         patch: { hidden: nextHidden },
+      });
+    }
+  },
+
+  renameMeasurement: (itemId, measurementId, name) => {
+    const trimmed = name.trim();
+    const nextName = trimmed === '' ? undefined : trimmed;
+    let found = false;
+    set((state) => ({
+      takeoffItems: state.takeoffItems.map((item) => {
+        if (item.id !== itemId) return item;
+        return {
+          ...item,
+          measurements: item.measurements.map((m) => {
+            if (m.id !== measurementId) return m;
+            found = true;
+            return { ...m, name: nextName };
+          }),
+        };
+      }),
+    }));
+    if (!found) return;
+    get().triggerAutoSave();
+    const projectId = get().currentProjectId;
+    if (projectId) {
+      // name lives in the metadata blob; send it there.
+      const m = get()
+        .takeoffItems.find((i) => i.id === itemId)
+        ?.measurements.find((mm) => mm.id === measurementId);
+      syncQueue.enqueue({
+        kind: 'measurement.update',
+        projectId,
+        clientUuid: measurementId,
+        patch: {
+          metadata: {
+            createdAt: m?.metadata?.createdAt,
+            lastModified: new Date().toISOString(),
+            confidence: m?.metadata?.confidence,
+            strokeWidth: m?.strokeWidth,
+            name: nextName,
+            seq: m?.seq,
+          },
+        },
       });
     }
   },

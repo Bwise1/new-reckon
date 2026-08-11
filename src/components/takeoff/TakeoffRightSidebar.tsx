@@ -239,6 +239,22 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                       pendingCommit?.itemId === card.id
                         ? pendingCommit
                         : null;
+                    // Commit bundle for Add/Deduct. Commit-on-demand: while
+                    // actively measuring this card, the drawn measurements are
+                    // staged in boqTargeting (no chip yet) — expose them as the
+                    // bundle so Add/Deduct binds them into ONE chip. Otherwise
+                    // fall back to the stashed post-Exit pendingCommit.
+                    const commitBundleForThis =
+                      isTargetingThis && boqTargeting
+                        ? {
+                            elementId: boqTargeting.elementId,
+                            itemId: boqTargeting.itemId,
+                            value: boqTargeting.pendingValue ?? '',
+                            total: boqTargeting.pendingTotal,
+                            measurementIds: boqTargeting.pendingMeasurementIds,
+                            sessionId: boqTargeting.sessionId,
+                          }
+                        : pendingCommitForThis;
                     // Live-updating value while measuring; stashed value after Exit.
                     const displayPendingValue = isTargetingThis
                       ? boqTargeting?.pendingValue ?? null
@@ -253,18 +269,24 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                       }
                       isTargeting={isTargetingThis}
                       pendingMeasuredValue={displayPendingValue}
-                      pendingCommitBundle={pendingCommitForThis}
-                      onSessionCommit={(mode) => {
-                        if (!pendingCommitForThis) return;
+                      pendingCommitBundle={commitBundleForThis}
+                      onSessionCommit={(mode, expression) => {
+                        if (!commitBundleForThis) return;
+                        // Bind the staged measurements as one chip, using the
+                        // possibly-edited expression (e.g. "13733.91 + 76") as
+                        // the chip value so typed math is preserved.
                         bindMeasurementToItem(
-                          pendingCommitForThis.measurementIds,
-                          pendingCommitForThis.elementId,
-                          pendingCommitForThis.itemId,
+                          commitBundleForThis.measurementIds,
+                          commitBundleForThis.elementId,
+                          commitBundleForThis.itemId,
                           mode,
-                          pendingCommitForThis.value,
-                          pendingCommitForThis.sessionId,
+                          expression ?? commitBundleForThis.value,
+                          commitBundleForThis.sessionId,
                         );
                         clearPendingCommit();
+                        // Clear the live session too so the input resets and no
+                        // second chip can be made from the same measurements.
+                        setBoqTargetingPending(null, []);
                       }}
                       onClearPendingMeasured={() => {
                         // Clear both the live-measuring pending value (if any)

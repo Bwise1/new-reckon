@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef } from "react";
-import { Copy, Trash2, X } from "lucide-react";
+import { Copy, RotateCcw, Trash2, X } from "lucide-react";
 // UnitSelector (the 5-button row) is commented out below in favor of the
 // editable unit dropdown beside the Qty field. Kept imported-out for easy revert.
 // import UnitSelector from "./UnitSelector";
@@ -53,9 +53,10 @@ interface EstimationCardProps {
     sessionId: string;
   } | null;
   /** Commit the pending measuring session as one history chip with all
-   * measurements bound. Called instead of the local pushHistory path
-   * when the takeoff input still holds the pending value. */
-  onSessionCommit?: (mode: "add" | "deduct") => void;
+   * measurements bound. `expression` is the (possibly edited) takeoff value
+   * to store on the chip. Called instead of the local pushHistory path when
+   * the takeoff input holds a staged, drawn session. */
+  onSessionCommit?: (mode: "add" | "deduct", expression: string) => void;
   /** Clears the staged measured value (called after commit or Esc). */
   onClearPendingMeasured?: () => void;
   className?: string;
@@ -138,18 +139,16 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
   }, [isTargeting, pendingCommitBundle]);
 
   const handleCommitTakeoff = (expression: string, mode: "add" | "deduct") => {
-    // If a measuring session is pending commit AND the user hasn't edited
-    // the value, commit the whole session as one chip (binds all drawn
-    // measurements to this BOQ line).
-    if (
-      pendingCommitBundle &&
-      expression === pendingCommitBundle.value &&
-      onSessionCommit
-    ) {
-      onSessionCommit(mode);
+    // If there's a staged measuring session on this card, commit it as ONE
+    // chip that BINDS the drawn measurements — even if the user edited the
+    // expression (e.g. drew 13733.91 then typed "+ 76"). The edited expression
+    // becomes the chip value. This prevents the old duplicate-chip bug where
+    // the draw auto-committed one chip and the edit committed a second.
+    if (pendingCommitBundle && onSessionCommit) {
+      onSessionCommit(mode, expression);
       return;
     }
-    // Manual commit — the user typed a value or edited the session total.
+    // Purely manual commit — no drawn measurement staged, user typed a value.
     const entry: HistoryItem = {
       id: generateClientId(),
       value: expression,
@@ -163,11 +162,13 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
     pushHistory(history.filter((item) => item.id !== itemId));
   };
 
-  // Remove every entry from one measuring session at once — a merged chip
-  // has no single "value" to attribute to one line, so its "X" clears the
-  // whole group.
-  const removeHistoryGroup = (groupId: string) => {
-    pushHistory(history.filter((item) => item.groupId !== groupId));
+  // Remove every entry from one merged chip at once. We delete by the exact
+  // member ids rather than by groupId, because legacy grouped entries (bound
+  // measurements with no groupId) are bucketed under a synthetic key that
+  // never matches item.groupId — so a groupId filter deleted nothing.
+  const removeHistoryGroup = (itemIds: string[]) => {
+    const idSet = new Set(itemIds);
+    pushHistory(history.filter((item) => !idSet.has(item.id)));
   };
 
   // Entries sharing a groupId (one continuous measuring session) collapse
@@ -284,17 +285,19 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
               {displayRows.map((row, idx) => {
                 const isDeduct =
                   row.kind === "single" ? !!row.item.isDeduct : row.isDeduct;
+                // Show the expression that was entered, not the collapsed
+                // total. A grouped chip (one measuring session with several
+                // measurements) joins each entry's raw value with " + " so the
+                // user sees e.g. "472.24 + 245.63" rather than "717.87".
                 const displayValue =
                   row.kind === "single"
                     ? row.item.value
-                    : formatQtyDisplay(
-                        Math.abs(computeQtyFromHistory(row.items))
-                      );
+                    : row.items.map((it) => it.value).join(" + ");
                 const key = row.kind === "single" ? row.item.id : row.groupId;
                 const onRemove =
                   row.kind === "single"
                     ? () => removeHistoryItem(row.item.id)
-                    : () => removeHistoryGroup(row.groupId);
+                    : () => removeHistoryGroup(row.items.map((it) => it.id));
                 return (
                   <React.Fragment key={key}>
                     {idx > 0 && (
@@ -395,6 +398,20 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
             </button>
           </div>
           <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                // Reset the item's takeoff: clear all history chips and qty
+                // (keeps the item, its header, description, unit and rate).
+                pushHistory([]);
+                onClearPendingMeasured?.();
+              }}
+              className="p-1.5 text-gray-400 hover:text-amber-600 transition-colors cursor-pointer"
+              title="Reset takeoff (clear history)"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
             <button
               type="button"
               onClick={(e) => {
