@@ -13,6 +13,8 @@ const units: { label: React.ReactNode; value: UnitType }[] = [
   { label: <span>m<sup>3</sup></span>, value: "m3" },
   { label: "nrs", value: "nrs" },
   { label: "item", value: "item" },
+  { label: "kg", value: "kg" },
+  { label: "tons", value: "tons" },
 ];
 
 const UnitSelector: React.FC<UnitSelectorProps> = ({
@@ -22,15 +24,15 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({
 }) => {
   return (
     <div className={`flex border border-gray-200 rounded-md overflow-hidden bg-white w-full ${className}`}>
-      {units.map((unit) => (
+      {units.map((unit, i) => (
         <button
           key={unit.value}
           onClick={() => onChange(unit.value)}
-          className={`flex-1 py-1.5 px-3 text-sm font-medium transition-all duration-200 cursor-pointer ${
+          className={`flex-1 py-1.5 px-2 text-sm font-medium transition-all duration-200 cursor-pointer ${
             selectedUnit === unit.value
               ? "bg-[#289693] text-white"
               : "text-gray-600 hover:bg-gray-50 bg-white"
-          } ${unit.value !== "item" ? "border-r border-gray-200" : ""}`}
+          } ${i !== units.length - 1 ? "border-r border-gray-200" : ""}`}
         >
           {unit.label}
         </button>

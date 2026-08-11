@@ -1,9 +1,6 @@
 import React, { useMemo, useState, useRef } from "react";
 import { Copy, RotateCcw, Trash2, X } from "lucide-react";
-// UnitSelector (the 5-button row) is commented out below in favor of the
-// editable unit dropdown beside the Qty field. Kept imported-out for easy revert.
-// import UnitSelector from "./UnitSelector";
-import UnitCombobox from "./UnitCombobox";
+import UnitSelector from "./UnitSelector";
 import FormulaInput, { type FormulaInputHandle } from "./FormulaInput";
 import DescriptionField from "./DescriptionField";
 import HeaderField from "./HeaderField";
@@ -243,8 +240,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
       } ${className}`}
     >
       <div onClick={(e) => e.stopPropagation()} className="space-y-3 pt-2">
-        {/* 5-button unit row replaced by the editable dropdown beside Qty below. */}
-        {/* <UnitSelector selectedUnit={unit} onChange={updateUnit} className="mt-3" /> */}
+        <UnitSelector selectedUnit={unit} onChange={updateUnit} className="mt-3" />
 
         <HeaderField
           value={header}
@@ -335,18 +331,20 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 min-w-0">
-          <div className="min-w-0 flex items-center gap-2 rounded-lg border border-[#D9D9D9] bg-white px-3 py-3 overflow-hidden">
-            <span className="text-[13px] text-gray-400 shrink-0">Qty</span>
-            <span className="flex-1 min-w-0 text-right text-[15px] font-bold text-[#003566] tabular-nums truncate">
+        <div className="grid grid-cols-2 gap-2 min-w-0">
+          <div className="min-w-0 flex items-center gap-1.5 rounded-lg border border-[#D9D9D9] bg-white px-2.5 py-2 overflow-hidden">
+            <span className="text-[11px] text-gray-400 shrink-0">Qty</span>
+            <span className="flex-1 min-w-0 text-right text-[13px] font-bold text-[#003566] tabular-nums truncate">
               {qty}
             </span>
-            <span className="text-gray-300 shrink-0">|</span>
-            <UnitCombobox value={unit} onChange={updateUnit} className="shrink-0" />
+            <span className="text-gray-300 shrink-0 text-[11px]">|</span>
+            <span className="text-[11px] font-medium text-gray-500 shrink-0">
+              {unit === 'm2' ? 'm²' : unit === 'm3' ? 'm³' : unit}
+            </span>
           </div>
-          <div className="min-w-0 flex items-center gap-1 rounded-lg border border-[#D9D9D9] bg-white px-3 py-3 overflow-hidden">
-            <span className="text-[13px] text-gray-400 shrink-0">Rate</span>
-            <span className="text-[15px] font-bold text-[#003566] shrink-0">₦</span>
+          <div className="min-w-0 flex items-center gap-1 rounded-lg border border-[#D9D9D9] bg-white px-2.5 py-2 overflow-hidden">
+            <span className="text-[11px] text-gray-400 shrink-0">Rate</span>
+            <span className="text-[13px] font-bold text-[#003566] shrink-0">₦</span>
             <input
               type="text"
               inputMode="decimal"
@@ -368,7 +366,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 syncToParent({ rate: formatted });
               }}
               placeholder="0.00"
-              className="flex-1 min-w-0 w-0 text-right text-[14px] font-bold text-[#003566] outline-none bg-transparent"
+              className="flex-1 min-w-0 w-0 text-right text-[13px] font-bold text-[#003566] outline-none bg-transparent"
             />
           </div>
         </div>
