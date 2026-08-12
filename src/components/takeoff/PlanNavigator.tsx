@@ -546,7 +546,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
             ref={uploadRef}
             type="file"
             className="hidden"
-            accept="application/pdf,image/jpeg,image/png"
+            accept="application/pdf,image/jpeg,image/png,.dxf,application/dxf,image/vnd.dxf"
             onChange={handleUploadChange}
           />
           <button

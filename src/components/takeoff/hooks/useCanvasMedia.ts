@@ -9,6 +9,8 @@ import { getPlanPdf, setPlanPdf } from "@/utils/planPdfCache";
 import { inferPlanMediaKind, loadPlanFromRemoteUrl } from "@/utils/planMediaLoader";
 import { extractPdfSegments, SegmentIndex } from "@/utils/pdfLineExtractor";
 import { getCanvasFitMode } from "@/utils/canvasPrefs";
+import { isDxfFile } from "@/utils/dxfRasterizer";
+import { rotateImageElement } from "@/utils/imageRotate";
 
 interface UseCanvasMediaParams {
     containerRef: React.RefObject<HTMLDivElement | null>;
@@ -72,6 +74,9 @@ export const useCanvasMedia = ({
     // Natural PDF dimensions (scale=1) for the currently displayed page — used so that
     // imageScale is always containerWidth/pdfNaturalWidth, independent of render quality.
     const naturalSizeRef = useRef<{ width: number; height: number } | null>(null);
+    // The unrotated source image for an image plan. Rotation is baked into a
+    // derived bitmap for display, so we keep the original to re-rotate from.
+    const baseImageRef = useRef<HTMLImageElement | null>(null);
     // Spatial index of PDF vector segments for the currently displayed page.
     // Populated after renderPdfPage; null for raster image plans.
     const pdfSegmentIndexRef = useRef<SegmentIndex | null>(null);
@@ -326,6 +331,31 @@ export const useCanvasMedia = ({
         ]
     );
 
+    // Clear the displayed plan the instant the active plan changes, so the
+    // previous plan's rendered bitmap never lingers on the canvas while the new
+    // plan loads (or if its load is skipped/errors). Without this, switching
+    // plans showed the previous plan's drawing under the new plan's header.
+    const shownPlanRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (shownPlanRef.current !== null && shownPlanRef.current !== activePlanId) {
+            // Clear the previous plan's rendered bitmap so it can't linger under
+            // the new plan while it loads.
+            setImage(null);
+            baseImageRef.current = null;
+            naturalSizeRef.current = null;
+            pdfSegmentIndexRef.current = null;
+            // Only drop pdfDoc when the new plan has its own PDF ready to swap in
+            // (a cache hit). Otherwise leave the old pdfDoc until the load/restore
+            // effect replaces it — nulling it on a cache miss would strand a
+            // multi-page PDF with no document (breaking page navigation and
+            // hiding the page panel).
+            if (activePlanId && getPlanPdf(activePlanId)) {
+                setPdfDoc(null);
+            }
+        }
+        shownPlanRef.current = activePlanId;
+    }, [activePlanId, setImage, setPdfDoc]);
+
     // Load plan file from Cloudinary when local cache / background is missing.
     useEffect(() => {
         if (!activePlanId) {
@@ -438,22 +468,34 @@ export const useCanvasMedia = ({
         img.crossOrigin = "anonymous";
         img.src = backgroundImage;
         img.onload = () => {
-            setImage(img);
+            baseImageRef.current = img;
             setPdfDoc(null);
-            fitImageToStage(img, activePlanId ? `${activePlanId}:1` : undefined);
-            setPlanLoadStatus("ready");
+            // Bake the active plan/page rotation into the displayed bitmap.
+            const rot = rotations[currentPage] ?? 0;
+            void rotateImageElement(img, rot).then((displayImg) => {
+                setImage(displayImg);
+                fitImageToStage(displayImg, activePlanId ? `${activePlanId}:1:${rot}` : undefined);
+                setPlanLoadStatus("ready");
+            });
         };
         img.onerror = () => {
             console.warn("Failed to display plan image from source:", backgroundImage);
             setPlanLoadStatus("error");
             setPlanLoadError("Failed to display plan image");
         };
+        // `rotations` intentionally omitted (same reason as the PDF restore
+        // effect above): initial load reads the rotation once; rotation CHANGES
+        // are handled solely by the [currentRotation] effect, so depending on
+        // `rotations` here would cause a duplicate, racing re-render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         activePlanMediaKind,
         backgroundImage,
         fitImageToStage,
         setImage,
         setPdfDoc,
+        activePlanId,
+        currentPage,
     ]);
 
     // Restore cached PDF when switching to a PDF plan.
@@ -478,6 +520,14 @@ export const useCanvasMedia = ({
                 setPlanLoadStatus("error");
                 setPlanLoadError("Failed to render plan page");
             });
+        // NOTE: `rotations` is intentionally NOT a dependency. This restore
+        // effect must only re-render on plan/page changes. If it also fired on
+        // rotation, it produced a second, racing re-render (the rotate-render of
+        // the old page could resolve after a page navigation, stranding a
+        // rotated bitmap on a page whose stored rotation is 0 — making it look
+        // like every page got rotated). The dedicated [currentRotation] effect
+        // in FloorPlanCanvas is the sole rotation-driven re-render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         activePlanId,
         activePlanMediaKind,
@@ -526,10 +576,12 @@ export const useCanvasMedia = ({
                 "image/jpeg",
                 "image/png",
             ]);
-            if (!ALLOWED_TYPES.has(file.type)) {
+            // DXF has no reliable MIME type, so accept it by extension too.
+            const fileIsDxf = isDxfFile(file);
+            if (!ALLOWED_TYPES.has(file.type) && !fileIsDxf) {
                 setPlanLoadStatus("error");
                 setPlanLoadError(
-                    "Only PDF, JPEG, and PNG files are supported. Convert other formats before uploading."
+                    "Only PDF, JPEG, PNG, and DXF files are supported. Convert other formats (incl. DWG → DXF) before uploading."
                 );
                 return;
             }
@@ -553,7 +605,37 @@ export const useCanvasMedia = ({
                 removePlan(planId);
             };
 
-            if (file.type === "application/pdf") {
+            if (fileIsDxf) {
+                // Rasterize the DXF to a PNG, then hand off exactly like an
+                // image plan (single page; user calibrates as usual).
+                try {
+                    const { rasterizeDxf } = await import("@/utils/dxfRasterizer");
+                    const text = await file.text();
+                    const { dataUrl } = await rasterizeDxf(text);
+                    setPdfDoc(null);
+                    setNumPages(1);
+                    setStoreNumPages(1);
+                    setCurrentPage(1);
+                    setBackgroundImage(dataUrl);
+                    const img = new window.Image();
+                    img.onerror = (error) => {
+                        failPlan("The DXF was parsed but its image could not be built.", error);
+                    };
+                    img.onload = () => {
+                        setImage(img);
+                        fitImageToStage(img, `${planId}:1`);
+                        setPlanLoadStatus("ready");
+                    };
+                    img.src = dataUrl;
+                    // Upload the original DXF so it re-loads on other devices.
+                    void uploadPlanToCloud(planId, file, 1);
+                } catch (error) {
+                    failPlan(
+                        "This DXF could not be opened. Only DXF (not DWG) is supported, and it must contain line geometry.",
+                        error
+                    );
+                }
+            } else if (file.type === "application/pdf") {
                 try {
                     const pdfjsLib = await import("pdfjs-dist");
                     const buffer = await file.arrayBuffer();
@@ -634,8 +716,18 @@ export const useCanvasMedia = ({
         const rotation = rotations[currentPage] ?? 0;
         if (pdfDoc) {
             void renderPdfPage(pdfDoc, currentPage, activePlanId ?? undefined, rotation);
+        } else if (baseImageRef.current) {
+            // Image plan: bake the new rotation into the displayed bitmap.
+            const base = baseImageRef.current;
+            void rotateImageElement(base, rotation).then((displayImg) => {
+                setImage(displayImg);
+                fitImageToStage(
+                    displayImg,
+                    activePlanId ? `${activePlanId}:${currentPage}:${rotation}` : undefined
+                );
+            });
         }
-    }, [pdfDoc, currentPage, activePlanId, renderPdfPage, rotations]);
+    }, [pdfDoc, currentPage, activePlanId, renderPdfPage, rotations, setImage, fitImageToStage]);
 
     const hasLoadedPlan = Boolean(image);
     const currentRotation = rotations[currentPage] ?? 0;

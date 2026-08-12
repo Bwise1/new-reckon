@@ -33,6 +33,21 @@ const hasPdfFilename = (filename?: string | null): boolean =>
 const hasImageFilename = (filename?: string | null): boolean =>
   Boolean(filename && /\.(png|jpe?g|gif|webp|bmp)$/i.test(filename));
 
+const isDxf = (mimeType?: string | null, url?: string, filename?: string | null): boolean => {
+  if (mimeType && /dxf/i.test(mimeType)) return true;
+  if (filename && /\.dxf$/i.test(filename)) return true;
+  return Boolean(url && /\.dxf($|\?|#)/i.test(url));
+};
+
+/** Fetch a remote DXF and rasterize it to a PNG object URL. */
+const loadDxfSourceFromUrl = async (url: string): Promise<string> => {
+  const blob = await fetchPlanBlobWithCache(url);
+  const text = await blob.text();
+  const { rasterizeDxf } = await import('@/utils/dxfRasterizer');
+  const { dataUrl } = await rasterizeDxf(text);
+  return dataUrl;
+};
+
 /** Best-effort media kind from plan metadata (before fetching the URL). */
 export const inferPlanMediaKind = (plan: {
   mimeType?: string | null;
@@ -68,6 +83,13 @@ export const loadPlanFromRemoteUrl = async (
   url: string,
   plan: { mimeType?: string | null; filename?: string | null; name?: string | null }
 ): Promise<{ kind: 'pdf' | 'image'; pdf?: pdfjsLib.PDFDocumentProxy; imageSrc?: string }> => {
+  // DXF: rasterize to a PNG and return it as an image so downstream handling
+  // (which only knows pdf/image) needs no change.
+  if (isDxf(plan.mimeType, url, plan.filename ?? plan.name)) {
+    const imageSrc = await loadDxfSourceFromUrl(url);
+    return { kind: 'image', imageSrc };
+  }
+
   const kind = inferPlanMediaKind({ ...plan, url });
 
   if (kind === 'pdf') {
