@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import ProjectDetail from './pages/ProjectDetail';
 import Settings from './pages/Settings';
 import { GuestRoute, ProtectedRoute, RootRedirect } from './components/auth/RouteGuards';
+import PWAUpdatePrompt from './components/PWAUpdatePrompt';
 import './App.css';
 
 function AppRoutes() {
@@ -38,6 +39,7 @@ function App() {
         <Router>
           <AppRoutes />
         </Router>
+        <PWAUpdatePrompt />
       </ConfirmProvider>
     </QueryProvider>
   );

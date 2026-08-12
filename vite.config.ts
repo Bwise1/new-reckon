@@ -16,7 +16,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' so a new deploy surfaces an "Update available" banner the
+      // user clicks when ready — rather than silently swapping the service
+      // worker (which left open tabs stale until a hard refresh).
+      registerType: 'prompt',
       // Precache the built app shell so the app boots with no connection.
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,woff2}'],
