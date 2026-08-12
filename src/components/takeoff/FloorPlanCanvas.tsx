@@ -1717,15 +1717,26 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       const viewH = containerRef.current?.offsetHeight ?? stageSize.height;
       const contentW = stageSize.width * stageScale;
       const contentH = stageSize.height * stageScale;
-      // Keep this much of the plan visible at any edge.
-      const margin = 80;
-      const minX = Math.min(margin, viewW) - contentW;
-      const maxX = viewW - Math.min(margin, viewW);
-      const minY = Math.min(margin, viewH) - contentH;
-      const maxY = viewH - Math.min(margin, viewH);
+      // Desktop-takeoff feel: the plan can pan freely across a large gray
+      // workspace and its edges can reach — and go past — the opposite viewport
+      // edges. Bounds are expressed so the content's bottom edge can travel all
+      // the way to the viewport top (and vice-versa), plus a slack margin on
+      // each side, while always keeping a small sliver on screen.
+      const slackX = viewW;
+      const slackY = viewH;
+      const keep = 60; // min sliver that must stay visible at an edge
+      // x: from "content fully panned left (right edge near view left)" to
+      // "content fully panned right (left edge near view right)", + slack.
+      const minX = Math.min(keep, viewW) - contentW - slackX;
+      const maxX = (viewW - Math.min(keep, viewW)) + slackX;
+      // y: allow the content's TOP to sit at the view BOTTOM (pos = viewH),
+      // and the content's BOTTOM to sit at the view TOP (pos = -contentH),
+      // each extended by slack. This lets the plan's bottom reach the bottom.
+      const minY = -contentH + Math.min(keep, viewH) - slackY;
+      const maxY = viewH - Math.min(keep, viewH) + slackY;
       return {
         x: clamp(pos.x, minX, maxX),
-        y: clamp(pos.y, minY, maxY),
+        y: clamp(pos.y, Math.min(minY, maxY), Math.max(minY, maxY)),
       };
     },
     [containerRef, stageSize.width, stageSize.height, stageScale]
@@ -3208,7 +3219,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       <CanvasOverlays
         stageScale={stageScale}
         setStageScale={setStageScale}
-        pdfDocLoaded={Boolean(pdfDoc)}
         numPages={numPages}
         currentPage={currentPage}
         currentScale={currentScale}

@@ -64,7 +64,8 @@ interface TakeoffStore {
   currentPage: number;
   numPages: number;
   backgroundImage: string | null;
-  /** Per-page rotation for the active plan (degrees: 0, 90, 180, 270). */
+  /** Per-page rotation for the active plan (degrees: 0, 90, 180, 270). Swapped
+   *  in/out per plan via planStates on selectPlan, keyed by page number. */
   rotations: Record<number, number>;
   plans: ProjectPlan[];
   activePlanId: string | null;
@@ -634,7 +635,9 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
               prev.points === next.points &&
               prev.quantity === next.quantity &&
               prev.color === next.color &&
-              prev.hidden === next.hidden
+              prev.hidden === next.hidden &&
+              prev.strokeWidth === next.strokeWidth &&
+              prev.name === next.name
             ) {
               continue;
             }
@@ -651,13 +654,16 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
                 quantity: next.quantity,
                 color: next.color,
                 hidden: Boolean(next.hidden),
-                metadata: next.metadata
-                  ? {
-                      createdAt: next.metadata.createdAt,
-                      lastModified: next.metadata.lastModified,
-                      confidence: next.metadata.confidence,
-                    }
-                  : null,
+                // strokeWidth/name live in the metadata blob — include them so a
+                // line-width (or rename) edit actually persists to the server.
+                metadata: {
+                  createdAt: next.metadata?.createdAt,
+                  lastModified: next.metadata?.lastModified,
+                  confidence: next.metadata?.confidence,
+                  strokeWidth: next.strokeWidth,
+                  name: next.name,
+                  seq: next.seq,
+                },
               },
             });
             if (prev.quantity !== next.quantity) {

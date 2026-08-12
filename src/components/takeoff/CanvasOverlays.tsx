@@ -17,7 +17,6 @@ import {
 interface CanvasOverlaysProps {
   stageScale: number;
   setStageScale: (scale: number) => void;
-  pdfDocLoaded: boolean;
   numPages: number;
   currentPage: number;
   currentScale: number | null;
@@ -38,7 +37,6 @@ interface CanvasOverlaysProps {
 const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
   stageScale,
   setStageScale,
-  pdfDocLoaded,
   numPages,
   currentPage,
   currentScale,
@@ -139,7 +137,10 @@ const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
         </button>
       </div>
 
-      {pdfDocLoaded && numPages > 0 && (
+      {/* Show whenever the plan has multiple pages. Keyed on numPages (the
+          stable page count) rather than pdfDocLoaded, which can flip false
+          transiently while a page re-renders and would hide the panel. */}
+      {numPages > 1 && (
         <div className="absolute bottom-6 left-6 flex items-center space-x-4 bg-white/80 backdrop-blur p-2 rounded-xl shadow-xl border border-white/50 z-20">
           <button
             type="button"
