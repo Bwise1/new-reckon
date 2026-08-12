@@ -210,14 +210,21 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                 className="w-full px-4 py-3 flex items-center justify-between shrink-0 hover:bg-gray-50/80 cursor-pointer"
               >
                 <span className="text-lg font-bold text-gray-900 flex items-center gap-1.5 min-w-0">
-                  <span className="text-gray-500 font-normal shrink-0">&gt;</span>
                   <input
                     type="text"
-                    value={element.title}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) =>
-                      updateBoqElement(element.id, { title: e.target.value })
+                    value={
+                      element.title
+                        ? element.title.charAt(0).toUpperCase() + element.title.slice(1)
+                        : element.title
                     }
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      // Store with the first letter capitalized (sentence case).
+                      const v = e.target.value;
+                      updateBoqElement(element.id, {
+                        title: v ? v.charAt(0).toUpperCase() + v.slice(1) : v,
+                      });
+                    }}
                     className="bg-transparent border-none outline-none font-bold text-lg text-gray-900 min-w-0 flex-1"
                   />
                 </span>
