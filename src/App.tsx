@@ -16,10 +16,7 @@ import './App.css';
 // real gate is the backend's separate admin auth — this is only bundle hygiene.
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 
-// Closed-beta switch (set at build time): hides self-signup. The backend
-// enforces the same rule via REGISTRATION_DISABLED, which is the real gate.
-export const REGISTRATION_DISABLED =
-  import.meta.env.VITE_REGISTRATION_DISABLED === 'true';
+import { REGISTRATION_DISABLED } from './config/beta';
 
 function AppRoutes() {
   return (

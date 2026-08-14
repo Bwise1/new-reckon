@@ -7,6 +7,7 @@ import AppleIcon from "@/assets/images/apple.png";
 import AuthLayout from "@/layouts/AuthLayout";
 import { useLogin } from "@/hooks/useAuth";
 import { validateEmail } from "@/utils/validation";
+import { REGISTRATION_DISABLED } from "@/config/beta";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -142,6 +143,13 @@ const Login = () => {
             {isPending ? "Logging in..." : "Log In"}
           </button>
         </div>
+
+        {REGISTRATION_DISABLED && (
+          <p className="text-center text-xs text-[#616161]">
+            Reckon is in private beta — accounts are by invitation only. Sign in
+            with the credentials from your invite email.
+          </p>
+        )}
       </form>
     </AuthLayout>
   );
