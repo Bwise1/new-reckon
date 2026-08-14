@@ -1742,11 +1742,17 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   // view. Symmetric — fixes the old asymmetry where up (pan) was unbounded but
   // down (scroll) was clamped. The Fit button recenters if needed.
   const clampStagePos = useCallback(
-    (pos: { x: number; y: number }) => {
+    (pos: { x: number; y: number }, scaleOverride?: number) => {
       const viewW = containerRef.current?.offsetWidth ?? stageSize.width;
       const viewH = containerRef.current?.offsetHeight ?? stageSize.height;
-      const contentW = stageSize.width * stageScale;
-      const contentH = stageSize.height * stageScale;
+      // Wheel/pinch zoom applies a BRAND-NEW scale in the same tick, so it
+      // passes that scale here. Clamping against the old React-state scale
+      // computed bounds for the previous zoom level and yanked the view back
+      // — which is why zoom buttons (which never move stagePos) felt fine
+      // while trackpad/pinch zoom snapped.
+      const effScale = scaleOverride ?? stageScale;
+      const contentW = stageSize.width * effScale;
+      const contentH = stageSize.height * effScale;
       // Desktop-takeoff feel: the plan can pan freely across a large gray
       // workspace and its edges can reach — and go past — the opposite viewport
       // edges. Bounds are expressed so the content's bottom edge can travel all
@@ -1788,8 +1794,15 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     const pointer = stage.getPointerPosition();
     if (!pointer) return;
 
-      const newScale =
-        e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
+    // Trackpad pinch arrives as a wheel event with ctrlKey set, and its
+    // deltaY carries the pinch magnitude — so scale proportionally instead of
+    // applying the fixed wheel step, which made pinch feel coarse/jumpy.
+    const isPinch = e.evt.ctrlKey;
+    const newScale = isPinch
+      ? oldScale * Math.exp(-e.evt.deltaY / 100)
+      : e.evt.deltaY < 0
+        ? oldScale * scaleBy
+        : oldScale / scaleBy;
     const clampedScale = Math.max(0.2, Math.min(20, newScale));
 
     // Zoom to cursor position
@@ -1804,7 +1817,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     };
 
     setStageScale(clampedScale);
-    setStagePos(clampStagePos(newPos));
+    // Clamp against the NEW scale, not the stale state one.
+    setStagePos(clampStagePos(newPos, clampedScale));
     },
     [stageScale, setStageScale, setStagePos, clampStagePos]
   );
