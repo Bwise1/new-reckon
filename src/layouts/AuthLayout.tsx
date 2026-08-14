@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ReckonLogo from '@/assets/images/logo.svg';
 import OnboardingBg from '@/assets/images/Onboardingpage.jpg';
+import { REGISTRATION_DISABLED } from '@/config/beta';
 
 interface AuthLayoutProps {
   children: ReactNode;
@@ -62,16 +63,21 @@ const AuthLayout = ({ children }: AuthLayoutProps) => {
                 Log In
               </button>
 
-              <button
-                className={`flex-1 text-base font-normal pb-4 transition-colors text-center ${
-                  isSignupPage
-                    ? "border-black border-b-2 text-black"
-                    : "text-[#B2B2B2] hover:text-black"
-                }`}
-                onClick={() => navigate('/signup')}
-              >
-                Create Account
-              </button>
+              {/* Create Account is hidden during the closed beta — accounts
+                  are admin-created. The /signup route also redirects, and the
+                  backend rejects registration outright. */}
+              {!REGISTRATION_DISABLED && (
+                <button
+                  className={`flex-1 text-base font-normal pb-4 transition-colors text-center ${
+                    isSignupPage
+                      ? "border-black border-b-2 text-black"
+                      : "text-[#B2B2B2] hover:text-black"
+                  }`}
+                  onClick={() => navigate('/signup')}
+                >
+                  Create Account
+                </button>
+              )}
             </div>
 
             {/* Auth Form Content */}
