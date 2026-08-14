@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
-
-const BASE_URL = import.meta.env.VITE_API_URL || 'https://api.reckonio.com/v1';
+import { apiClient } from '@/lib/api-client';
 
 /** Auto-captured client context — makes reports actionable without asking
  *  testers for any of it. */
@@ -46,15 +45,9 @@ export default function FeedbackWidget() {
     if (rating > 0) form.append('rating', String(rating));
     form.append('context', JSON.stringify(buildContext(location.pathname)));
     if (file) form.append('screenshot', file);
-    const res = await fetch(`${BASE_URL}/feedback`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      body: form,
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `Failed (${res.status})`);
-    }
+    // postForm goes through the shared client: X-Request-Source, the user
+    // bearer token, and multipart boundary handling all come for free.
+    await apiClient.postForm('/feedback', form);
   };
 
   const submit = async () => {
@@ -65,8 +58,10 @@ export default function FeedbackWidget() {
       try {
         await submitOnce();
       } catch (first) {
-        // One silent retry for flaky connections; rethrow the second failure.
-        if ((first as Error).message.includes('Failed (4')) throw first;
+        // One silent retry for flaky connections. A 4xx (validation, rate
+        // limit, auth) won't succeed on retry, so surface it immediately.
+        const status = (first as { status?: number }).status;
+        if (status && status >= 400 && status < 500) throw first;
         await submitOnce();
       }
       reset();

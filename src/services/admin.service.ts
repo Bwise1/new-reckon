@@ -1,38 +1,21 @@
-// Beta admin dashboard API. Uses the backend's EXISTING admin auth
-// (/v1/admin/login — separate admins table + JWT), stored under its own
-// localStorage key so it never mixes with the normal user session.
+import { apiClient } from '@/lib/api-client';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'https://api.reckonio.com/v1';
+// Beta admin dashboard API. Goes through the shared apiClient so every call
+// carries X-Request-Source (and the app's shared error handling). The admin
+// session uses the backend's separate admin auth (/v1/admin/login, admins
+// table), stored under its own key and passed explicitly per request — the
+// client's interceptor injects the USER token, which is not what we want here.
+
 const TOKEN_KEY = 'admin_token';
 
 export const getAdminToken = () => localStorage.getItem(TOKEN_KEY);
 export const clearAdminToken = () => localStorage.removeItem(TOKEN_KEY);
 
-async function adminFetch<T>(
-  path: string,
-  init: RequestInit = {}
-): Promise<T> {
+/** Per-request config that swaps in the admin bearer token. */
+const authCfg = () => {
   const token = getAdminToken();
-  const headers = new Headers(init.headers);
-  if (token) headers.set('Authorization', `Bearer ${token}`);
-  if (!(init.body instanceof FormData) && init.body) {
-    headers.set('Content-Type', 'application/json');
-  }
-  const res = await fetch(`${BASE_URL}${path}`, { ...init, headers });
-  if (res.status === 401 || res.status === 403) {
-    clearAdminToken();
-    throw new Error('Admin session expired — sign in again.');
-  }
-  if (!res.ok) {
-    let msg = `Request failed (${res.status})`;
-    try {
-      const body = await res.json();
-      msg = body.message || msg;
-    } catch { /* keep default */ }
-    throw new Error(msg);
-  }
-  return res.json() as Promise<T>;
-}
+  return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+};
 
 export interface AdminUserRow {
   id: number;
@@ -66,47 +49,47 @@ export interface FeedbackRow {
 
 export const adminService = {
   async login(email: string, password: string): Promise<void> {
-    const res = await fetch(`${BASE_URL}/admin/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.message || 'Login failed');
-    localStorage.setItem(TOKEN_KEY, body.data.token);
+    // No admin token yet — the interceptor's user token (if any) is
+    // irrelevant to this endpoint.
+    const res = await apiClient.post<{ data: { token: string } }>(
+      '/admin/login',
+      { email, password }
+    );
+    localStorage.setItem(TOKEN_KEY, res.data.token);
   },
 
   createTesters(emails: string[], quotaMb: number, sendEmails: boolean) {
-    return adminFetch<{ data: { results: TesterCreateResult[] } }>(
+    return apiClient.post<{ data: { results: TesterCreateResult[] } }>(
       '/admin/testers',
-      {
-        method: 'POST',
-        body: JSON.stringify({ emails, quotaMb, sendEmails }),
-      }
+      { emails, quotaMb, sendEmails },
+      authCfg()
     );
   },
 
   listUsers() {
-    return adminFetch<{ data: { users: AdminUserRow[] } }>('/admin/users');
+    return apiClient.get<{ data: { users: AdminUserRow[] } }>(
+      '/admin/users',
+      authCfg()
+    );
   },
 
   updateUser(id: number, patch: { quotaMb?: number; is_active?: boolean }) {
-    return adminFetch(`/admin/users/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(patch),
-    });
+    return apiClient.patch(`/admin/users/${id}`, patch, authCfg());
   },
 
   revokeAllTesters() {
-    return adminFetch<{ data: { revoked: number } }>('/admin/testers/revoke', {
-      method: 'POST',
-    });
+    return apiClient.post<{ data: { revoked: number } }>(
+      '/admin/testers/revoke',
+      {},
+      authCfg()
+    );
   },
 
   reactivateAllTesters() {
-    return adminFetch<{ data: { reactivated: number } }>(
+    return apiClient.post<{ data: { reactivated: number } }>(
       '/admin/testers/reactivate',
-      { method: 'POST' }
+      {},
+      authCfg()
     );
   },
 
@@ -114,25 +97,23 @@ export const adminService = {
     const q = new URLSearchParams(
       Object.entries(filters).filter(([, v]) => v) as [string, string][]
     ).toString();
-    return adminFetch<{ data: { feedback: FeedbackRow[] } }>(
-      `/admin/feedback${q ? `?${q}` : ''}`
+    return apiClient.get<{ data: { feedback: FeedbackRow[] } }>(
+      `/admin/feedback${q ? `?${q}` : ''}`,
+      authCfg()
     );
   },
 
   setFeedbackStatus(id: number, status: string) {
-    return adminFetch(`/admin/feedback/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status }),
-    });
+    return apiClient.patch(`/admin/feedback/${id}`, { status }, authCfg());
   },
 
   async downloadFeedbackCsv(): Promise<void> {
-    const token = getAdminToken();
-    const res = await fetch(`${BASE_URL}/admin/feedback.csv`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    // Through the shared client (so X-Request-Source is applied) with the
+    // admin token and a blob response type.
+    const blob = await apiClient.get<Blob>('/admin/feedback.csv', {
+      ...authCfg(),
+      responseType: 'blob',
     });
-    if (!res.ok) throw new Error('CSV export failed');
-    const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
