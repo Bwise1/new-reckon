@@ -46,6 +46,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
     exitBoqTargeting,
     setBoqTargetingMode,
     setBoqTargetingPending,
+    startNextBoqSession,
     clearPendingCommit,
     bindMeasurementToItem,
     setFocusedBoqCard,
@@ -64,6 +65,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
       exitBoqTargeting: s.exitBoqTargeting,
       setBoqTargetingMode: s.setBoqTargetingMode,
       setBoqTargetingPending: s.setBoqTargetingPending,
+      startNextBoqSession: s.startNextBoqSession,
       clearPendingCommit: s.clearPendingCommit,
       bindMeasurementToItem: s.bindMeasurementToItem,
       setFocusedBoqCard: s.setFocusedBoqCard,
@@ -292,9 +294,11 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                           commitBundleForThis.sessionId,
                         );
                         clearPendingCommit();
-                        // Clear the live session too so the input resets and no
-                        // second chip can be made from the same measurements.
-                        setBoqTargetingPending(null, []);
+                        // Roll onto a NEW session id: clears the staged value
+                        // and guarantees the next Add/Deduct is its own chip.
+                        // (Clearing alone kept the old sessionId, so later
+                        // commits merged into the first chip.)
+                        startNextBoqSession();
                       }}
                       onClearPendingMeasured={() => {
                         // Clear both the live-measuring pending value (if any)
