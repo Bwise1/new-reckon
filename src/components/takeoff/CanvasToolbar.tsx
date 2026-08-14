@@ -109,7 +109,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     <div className="shrink-0 px-3 bg-white border-b border-gray-200 flex items-center gap-2 z-10 h-14">
 
       {/* Calibrate */}
-      <div className="flex items-stretch rounded-lg overflow-hidden border border-gray-200 shadow-sm shrink-0 h-10">
+      <div data-tour="calibrate" className="flex items-stretch rounded-lg overflow-hidden border border-gray-200 shadow-sm shrink-0 h-10">
         <button
           type="button"
           onClick={onToggleCalibration}
@@ -129,7 +129,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
       </div>
 
       {/* Tools */}
-      <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 shadow-sm shrink-0 h-10">
+      <div data-tour="tools" className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 shadow-sm shrink-0 h-10">
         <span className="text-xs font-medium text-gray-400 mr-0.5">Tools</span>
         {MEASUREMENT_TOOLS.map((tool, index) => {
           const isActive = activeTool === tool.type || (tool.type === 'linear' && activeTool === 'polyline');

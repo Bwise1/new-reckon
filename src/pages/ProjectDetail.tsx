@@ -3,6 +3,7 @@ import { useRef, useCallback, useEffect, useState } from 'react';
 import PlanNavigator from '@/components/takeoff/PlanNavigator';
 import FloorPlanCanvas from '@/components/takeoff/FloorPlanCanvas';
 import TakeoffRightSidebar from '@/components/takeoff/TakeoffRightSidebar';
+import TakeoffTour from '@/components/tutorial/TakeoffTour';
 import { useShallow } from 'zustand/react/shallow';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useProject } from '@/hooks/useProjects';
@@ -274,6 +275,9 @@ const ProjectDetail = () => {
       </div>
 
       <TakeoffRightSidebar />
+
+      {/* First-run walkthrough + Help button to replay it. */}
+      <TakeoffTour />
     </div>
   );
 };

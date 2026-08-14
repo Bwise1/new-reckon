@@ -168,6 +168,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
 
         <button
           type="button"
+          data-tour="export"
           onClick={() => setExportModalMode("export")}
           disabled={busyAction || !isOnline}
           title={!isOnline ? "Export requires an internet connection" : undefined}
