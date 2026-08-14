@@ -554,6 +554,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
           />
           <button
             type="button"
+            data-tour="upload-plan"
             onClick={handleUploadClick}
             className="px-3 py-1.5 rounded-md bg-white text-black text-xs font-semibold hover:bg-gray-200 transition-colors cursor-pointer"
           >
