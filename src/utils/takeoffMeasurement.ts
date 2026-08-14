@@ -55,7 +55,8 @@ export const typeName = (type: TakeoffMode): string => {
     case 'area':
       return 'Area';
     case 'polyline':
-      return 'Perimeter';
+      // "Girth" — the QS term for the measured distance around (SMM/NRM usage).
+      return 'Girth';
     case 'count':
       return 'Count';
     case 'linear':

@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, Eye, EyeOff, FileText, Link2, Trash2 } from 'lucide-react';
+import { ChevronRight, Eye, EyeOff, FileText, Link2, Trash2 } from 'lucide-react';
 import ReckonLogo from '@/assets/images/logo.svg';
 import type { PlanDiscipline, TakeoffItem, TakeoffMode, ProjectPlan } from '@/types/takeoff';
 import {
@@ -200,7 +200,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
       case 'linear':
         return 'L';
       case 'polyline':
-        return 'P';
+        return 'G'; // Girth (QS term for perimeter)
       case 'area':
         return 'A';
       case 'count':
@@ -250,16 +250,16 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
   return (
     <aside className="w-[260px] min-w-[260px] max-w-[260px] shrink-0 h-full flex flex-col bg-[#0a0a0a] text-gray-200 border-r border-black/60">
       <div className="shrink-0 px-5 pt-5 pb-4 flex items-center gap-2">
+        {/* The logo doubles as "back to projects" — no separate back button. */}
         <button
           type="button"
           onClick={() => navigate('/dashboard')}
-          title="Back to dashboard"
-          aria-label="Back to dashboard"
-          className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+          title="Go to projects"
+          aria-label="Go to projects"
+          className="rounded-md hover:bg-white/10 transition-colors cursor-pointer p-0.5"
         >
-          <ArrowLeft className="h-5 w-5" />
+          <img src={ReckonLogo} alt="Reckon" className="h-9 w-9" />
         </button>
-        <img src={ReckonLogo} alt="Reckon" className="h-9 w-9" />
       </div>
 
       <div className="shrink-0 px-5 pb-4 border-b border-white/10">
@@ -432,6 +432,9 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                                     renameMeasurement(entry.itemId, entry.measurementId, renameDraft);
                                     setRenaming(null);
                                   } else if (e.key === 'Escape') {
+                                    // Own this Escape: cancel the rename only,
+                                    // don't let the canvas discard the session.
+                                    e.stopPropagation();
                                     setRenaming(null);
                                   }
                                 }}
