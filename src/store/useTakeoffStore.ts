@@ -123,6 +123,10 @@ interface TakeoffStore {
   setBoqTargetingMode: (mode: 'add' | 'deduct') => void;
   /** Populate the staging slot after a measurement commits. */
   setBoqTargetingPending: (value: string | null, measurementIds: string[]) => void;
+  /** Keep measuring on the same card but under a NEW session id, so the next
+   *  Add/Deduct commit becomes its own history chip rather than merging into
+   *  the previous one (chips group by sessionId). */
+  startNextBoqSession: () => void;
   /** Just write boqElementId/boqItemId onto a measurement and sync it.
    * Unlike bindMeasurementToItem, does NOT add a history entry — used
    * when the history entry was committed elsewhere (e.g. by the
@@ -1001,6 +1005,27 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
               ...state.boqTargeting,
               pendingValue: value,
               pendingMeasurementIds: measurementIds,
+            },
+          }
+        : state
+    );
+  },
+
+  startNextBoqSession: () => {
+    // After an Add/Deduct commit the session stays open so the user can keep
+    // measuring on the same card — but it MUST get a new sessionId. Chips are
+    // written with groupId = sessionId and the card merges chips sharing a
+    // groupId, so reusing the id made every later commit collapse into the
+    // first chip instead of appearing as its own entry.
+    set((state) =>
+      state.boqTargeting
+        ? {
+            boqTargeting: {
+              ...state.boqTargeting,
+              sessionId: generateClientId(),
+              pendingValue: null,
+              pendingMeasurementIds: [],
+              pendingTotal: 0,
             },
           }
         : state
