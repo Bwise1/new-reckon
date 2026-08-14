@@ -1,14 +1,9 @@
 {
   "rewrites": [
-    { "source": "/((?!sw\\.js|registerSW\\.js|workbox-.*|manifest\\.webmanifest).*)", "destination": "/index.html" }
-  ],
-  "headers": [
     {
-      "source": "/sw.js",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
-        { "key": "Service-Worker-Allowed", "value": "/" }
-      ]
-    }
+      "source": "/v1/:path*",
+      "destination": "https://hrm.reckonio.com/v1/:path*"
+    },
+    { "source": "/((?!v1/).*)", "destination": "/index.html" }
   ]
 }
