@@ -256,16 +256,9 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     });
   }, [takeoffItems, currentPage]);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (!activeTool) return;
-      setCurrentPoints([]);
-      onFinishTool();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeTool, onFinishTool, setCurrentPoints]);
+  // Escape is handled in one place — the staged handler in the main keydown
+  // listener (run → session → tool). A second window listener here used to
+  // double-handle it and immediately put the tool down, defeating the stages.
 
   // Handle window resize
   useEffect(() => {
@@ -719,7 +712,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           page: currentPage,
           type: "polyline",
           color: activeColor,
-          strokeWidth: 2,
+          // Apply the toolbar width at creation (same as the dbl-click finish)
+          // so a shape closed by joining the first vertex isn't stuck at the
+          // default and needing a select-and-edit afterwards.
+          strokeWidth:
+            currentScale != null ? Math.max(activeRealWidth * currentScale, 2) : 2,
           metadata: {
             createdAt: now,
             lastModified: now,
@@ -810,7 +807,9 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           page: currentPage,
           type: activeTool,
           color: activeColor,
-          strokeWidth: 2,
+          // Apply the toolbar width at creation (see polyline close above).
+          strokeWidth:
+            currentScale != null ? Math.max(activeRealWidth * currentScale, 2) : 2,
           metadata: {
             createdAt: now,
             lastModified: now,
@@ -1058,6 +1057,9 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         page: currentPage,
         type: activeTool,
         color: activeColor,
+        // Apply the toolbar width at creation (matches the other finish paths).
+        strokeWidth:
+          currentScale != null ? Math.max(activeRealWidth * currentScale, 2) : 2,
         metadata: {
           createdAt: now,
           lastModified: now,
@@ -1570,20 +1572,41 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           target.isContentEditable);
 
       if (e.key === "Escape") {
-        // When measuring: Escape discards the running total (measurements
-        // drawn on the plan stay but aren't bound to the BOQ line) and
-        // ends the session. This mirrors PlanSwift's Escape-to-cancel.
-        // The Exit button uses exitBoqTargeting which commits instead.
-        if (boqTargeting) {
-          cancelBoqTargeting();
+        // Escape works even while a text field has focus — the takeoff input
+        // auto-focuses during measuring, so gating on isTypingInField made
+        // Escape a no-op mid-session. Fields that own their Escape (rename
+        // input, unit combobox, calibration dialog) call stopPropagation.
+        // Staged Escape, most-local first:
+        // 1) Abandon the in-progress run / transient UI (points not yet a
+        //    shape, deduction draw, calibration, context menu).
+        const hasTransient =
+          currentPoints.length > 0 ||
+          deductionTarget !== null ||
+          areaContextMenu !== null ||
+          calibrationMode ||
+          pendingCalibration !== null;
+        if (hasTransient) {
+          setCurrentPoints([]);
+          setDeductionTarget(null);
+          setAreaContextMenu(null);
+          setCalibrationMode(false);
+          setCalibrationPoint1(null);
+          setPendingCalibration(null);
           return;
         }
-        setCurrentPoints([]);
-        setDeductionTarget(null);
-        setAreaContextMenu(null);
-        setCalibrationMode(false);
-        setCalibrationPoint1(null);
-        setPendingCalibration(null);
+        // 2) End the measuring session but KEEP the staged value (same stash
+        //    as click-away) — Escape must never wipe the measurements already
+        //    accumulated in the takeoff box. Removing entries is an explicit
+        //    act (chip ✕ / editing the input), not a keypress side effect.
+        if (boqTargeting) {
+          exitBoqTargeting();
+          return;
+        }
+        // 3) Put the active tool down.
+        if (activeTool) {
+          onFinishTool();
+        }
+        return;
       }
       if (isTypingInField) return;
       // Hold-space to pan. First keydown remembers current pan state and
@@ -1705,6 +1728,13 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     exitBoqTargeting,
     cancelBoqTargeting,
     isPanningMode,
+    // Staged-Escape reads: without these the stages act on stale state.
+    activeTool,
+    areaContextMenu,
+    calibrationMode,
+    deductionTarget,
+    onFinishTool,
+    pendingCalibration,
   ]);
 
   // Keep at least a margin of the plan on screen in every direction, so panning
@@ -1749,7 +1779,12 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     const scaleBy = 1.12;
     const stage = e.target.getStage();
     if (!stage) return;
-    const oldScale = stageScale;
+    // Anchor the zoom to the stage node's LIVE position/scale, not React
+    // state. State lags the node during/right after a drag (and across stale
+    // event closures) — computing from a stale stagePos made a just-panned
+    // view snap back on the next wheel tick.
+    const oldScale = stage.scaleX() || stageScale;
+    const oldPos = stage.position();
     const pointer = stage.getPointerPosition();
     if (!pointer) return;
 
@@ -1759,8 +1794,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
 
     // Zoom to cursor position
     const mousePointTo = {
-      x: (pointer.x - stagePos.x) / oldScale,
-      y: (pointer.y - stagePos.y) / oldScale,
+      x: (pointer.x - oldPos.x) / oldScale,
+      y: (pointer.y - oldPos.y) / oldScale,
     };
 
     const newPos = {
@@ -1771,7 +1806,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     setStageScale(clampedScale);
     setStagePos(clampStagePos(newPos));
     },
-    [stageScale, stagePos, setStageScale, setStagePos, clampStagePos]
+    [stageScale, setStageScale, setStagePos, clampStagePos]
   );
 
   // Compute the base ("nothing hovered") cursor for current mode.

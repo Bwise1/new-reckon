@@ -95,6 +95,7 @@ const UnitCombobox: React.FC<UnitComboboxProps> = ({ value, onChange, className 
             if (e.key === "Enter") {
               commit(query.trim() || filtered[0]?.value || value);
             } else if (e.key === "Escape") {
+              e.stopPropagation();
               setOpen(false);
               setQuery("");
             }

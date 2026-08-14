@@ -72,6 +72,7 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
                 submit();
               } else if (e.key === 'Escape') {
                 e.preventDefault();
+                e.stopPropagation();
                 onCancel();
               }
             }}

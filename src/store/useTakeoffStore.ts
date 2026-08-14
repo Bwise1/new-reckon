@@ -948,10 +948,32 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   },
 
   exitBoqTargeting: () => {
-    // Measurements now commit to history immediately as they're drawn (each its
-    // own chip), so ending the session just clears targeting — there is nothing
-    // left to commit. No pendingCommit is stashed anymore.
-    set({ boqTargeting: null, pendingCommit: null });
+    // Commit-on-demand: drawn measurements are STAGED in boqTargeting (no chip
+    // yet), so ending the session must stash them into pendingCommit — the
+    // takeoff input keeps showing the value and Add/Deduct can commit it
+    // later. Discarding here (the old auto-commit-era behavior) silently lost
+    // the staged expression on click-away.
+    set((state) => {
+      const t = state.boqTargeting;
+      if (t && t.pendingMeasurementIds.length > 0 && t.pendingValue) {
+        return {
+          boqTargeting: null,
+          pendingCommit: {
+            elementId: t.elementId,
+            itemId: t.itemId,
+            value: t.pendingValue,
+            total: t.pendingTotal,
+            measurementIds: t.pendingMeasurementIds,
+            sessionId: t.sessionId,
+          },
+        };
+      }
+      // No staged session content — end targeting but LEAVE any existing
+      // pendingCommit stash alone. Nulling it here wiped the takeoff box when
+      // Escape (or putting the tool down) fired after a session had already
+      // ended. The stash is cleared only by commit or an explicit discard.
+      return { boqTargeting: null };
+    });
   },
 
   cancelBoqTargeting: () => {
