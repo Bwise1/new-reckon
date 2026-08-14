@@ -82,17 +82,35 @@ const FormulaInput = forwardRef<FormulaInputHandle, FormulaInputProps>(({
   }, []);
 
   const handleSymbolClick = (symbol: string) => {
+    const input = inputRef.current;
+    // Insert at the caret, not the end. Fall back to the end when the input
+    // isn't focused / has no selection.
+    const start = input?.selectionStart ?? value.length;
+    const end = input?.selectionEnd ?? value.length;
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+
     let nextSymbol = symbol;
-
     if (symbol === "()") {
-      nextSymbol = getSmartBracket(value);
+      // Smart-bracket decision uses the text BEFORE the caret.
+      nextSymbol = getSmartBracket(before);
     }
 
-    if (isValidSequence(value, nextSymbol)) {
-      onChange(value + nextSymbol);
+    // Validity is judged against the text immediately before the caret, since
+    // that's where the symbol lands.
+    if (isValidSequence(before, nextSymbol)) {
+      const next = before + nextSymbol + after;
+      onChange(next);
+      // Restore the caret just after the inserted symbol.
+      const caret = start + nextSymbol.length;
+      requestAnimationFrame(() => {
+        input?.focus();
+        input?.setSelectionRange(caret, caret);
+      });
+      return;
     }
 
-    inputRef.current?.focus();
+    input?.focus();
   };
 
   const commitExpression = (commitMode?: "add" | "deduct") => {

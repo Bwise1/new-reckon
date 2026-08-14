@@ -44,6 +44,9 @@ const FormulaToolbar = ({
         <button
           key={symbol}
           type="button"
+          // Keep the formula input focused so the caret position is preserved
+          // and the symbol inserts at the caret rather than the end.
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => onSymbolClick?.(symbol)}
             className="flex items-center justify-center w-8 h-8 shrink-0 bg-white text-[#3d3d3d] font-bold text-xs rounded-md hover:bg-gray-100 active:scale-90 transition-transform shadow-sm cursor-pointer"
         >
