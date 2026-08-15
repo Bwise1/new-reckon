@@ -35,10 +35,17 @@ export default function FeedbackWidget() {
   // everywhere else (dashboard, settings), where the corner is empty.
   const [clearsSidebar, setClearsSidebar] = useState(false);
   useEffect(() => {
-    // Re-checked per route: the sidebar mounts with the takeoff page, so this
-    // runs after that render rather than only once at startup.
-    setClearsSidebar(!!document.querySelector('[data-boq-sidebar]'));
-  }, [location.pathname]);
+    const check = () =>
+      setClearsSidebar(!!document.querySelector('[data-boq-sidebar]'));
+    check();
+    // This widget is a sibling of the router outlet, so on a route change it
+    // re-renders BEFORE the takeoff page mounts — checking only on pathname
+    // ran while the sidebar didn't exist yet and the pill never moved. Watch
+    // the tree instead so it reacts whenever the sidebar appears or goes away.
+    const observer = new MutationObserver(check);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
 
   // Only show for logged-in users; hide on the admin page.
   if (!localStorage.getItem('token')) return null;
