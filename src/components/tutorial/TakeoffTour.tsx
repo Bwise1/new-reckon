@@ -55,12 +55,16 @@ export default function TakeoffTour() {
 
   return (
     <>
+      {/* Offset past the 380px BOQ sidebar AND the canvas zoom controls:
+          anchored near the right edge, this sat on top of each card's
+          duplicate/delete row. Sits left of the Feedback pill, which clears
+          the same column. */}
       <button
         type="button"
         onClick={() => setRunning(true)}
         title="Replay the tutorial"
         aria-label="Replay the tutorial"
-        className="fixed bottom-4 right-32 z-[8999] flex items-center gap-1.5 rounded-full bg-white px-3 py-2 text-sm font-semibold text-[#003566] shadow-lg border border-gray-200 hover:bg-gray-50 cursor-pointer"
+        className="fixed bottom-4 right-[610px] z-[8999] flex items-center gap-1.5 rounded-full bg-white px-3 py-2 text-sm font-semibold text-[#003566] shadow-lg border border-gray-200 hover:bg-gray-50 cursor-pointer"
       >
         <HelpCircle className="h-4 w-4" />
         Help
