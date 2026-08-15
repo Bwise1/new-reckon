@@ -154,6 +154,9 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
 
   return (
     <div
+      // Marks the column that app-wide fixed overlays (the Feedback pill) must
+      // clear so they don't cover each card's duplicate/delete row.
+      data-boq-sidebar=""
       className={`w-[380px] min-w-[380px] max-w-[380px] shrink-0 h-full flex flex-col bg-white border-l border-gray-200 overflow-hidden ${className}`}
     >
       <div className="shrink-0 px-4 py-3 border-b border-gray-100 flex items-center gap-3">

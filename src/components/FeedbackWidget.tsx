@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { apiClient } from '@/lib/api-client';
 
@@ -27,6 +27,18 @@ export default function FeedbackWidget() {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
+
+  // This button is app-wide, but the takeoff view puts a 380px BOQ sidebar in
+  // the bottom-right corner — anchored there, the pill covered each card's
+  // duplicate/delete row. Shift clear of both that column and the canvas zoom
+  // controls when the sidebar is mounted; keep the normal corner placement
+  // everywhere else (dashboard, settings), where the corner is empty.
+  const [clearsSidebar, setClearsSidebar] = useState(false);
+  useEffect(() => {
+    // Re-checked per route: the sidebar mounts with the takeoff page, so this
+    // runs after that render rather than only once at startup.
+    setClearsSidebar(!!document.querySelector('[data-boq-sidebar]'));
+  }, [location.pathname]);
 
   // Only show for logged-in users; hide on the admin page.
   if (!localStorage.getItem('token')) return null;
@@ -81,7 +93,9 @@ export default function FeedbackWidget() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-4 right-4 z-[9000] rounded-full bg-[#003566] px-4 py-2.5 text-sm font-semibold text-white shadow-xl hover:bg-[#002847] cursor-pointer"
+        className={`fixed bottom-4 ${
+          clearsSidebar ? 'right-[506px]' : 'right-4'
+        } z-[9000] rounded-full bg-[#003566] px-4 py-2.5 text-sm font-semibold text-white shadow-xl hover:bg-[#002847] cursor-pointer`}
       >
         Feedback
       </button>
