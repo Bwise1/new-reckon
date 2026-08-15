@@ -509,6 +509,12 @@ export const useCanvasMedia = ({
         if (!cachedPdf) return;
 
         setPdfDoc(cachedPdf);
+        // Republish the page count. The cloud-load path sets this, but a cache
+        // hit skipped it — so re-opening a project (which restores from cache)
+        // left numPages at 0 and the page-navigation panel, gated on
+        // numPages > 1, vanished for multi-page plans.
+        setNumPages(cachedPdf.numPages);
+        setStoreNumPages(cachedPdf.numPages);
         setPlanLoadStatus("loading");
         void renderPdfPage(cachedPdf, currentPage, activePlanId, rotations[currentPage] ?? 0)
             .then(() => {
@@ -535,6 +541,8 @@ export const useCanvasMedia = ({
         currentPage,
         renderPdfPage,
         setPdfDoc,
+        setNumPages,
+        setStoreNumPages,
     ]);
 
     // Keep base image sizing in sync with container changes without resetting user zoom/pan.
