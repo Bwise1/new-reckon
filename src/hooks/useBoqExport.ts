@@ -5,6 +5,7 @@ import { useProject } from '@/hooks/useProjects';
 import { openAuthenticatedDownload } from '@/lib/api-client';
 import { buildBoqPayload, boqService, hasExportableBoq } from '@/services/boq.service';
 import type { ExportFormat } from '@/components/takeoff/BoqExportModal';
+import { trackEvent } from '@/lib/analytics';
 
 export function useBoqExport() {
   const { id: projectId } = useParams<{ id: string }>();
@@ -84,6 +85,8 @@ export function useBoqExport() {
         : await boqService.exportPdf(payload, exportId);
       await openDownload(exported.data.downloadUrl);
       setStatusMessage('Export completed.');
+      // Beta signal: a tester reached the end of the core flow and exported.
+      trackEvent('boq', 'export', format);
     } catch (error) {
       setStatusMessage((error as Error).message || 'Export failed.');
     } finally {

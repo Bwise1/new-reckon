@@ -11,6 +11,7 @@ import { extractPdfSegments, SegmentIndex } from "@/utils/pdfLineExtractor";
 import { getCanvasFitMode } from "@/utils/canvasPrefs";
 import { isDxfFile } from "@/utils/dxfRasterizer";
 import { rotateImageElement } from "@/utils/imageRotate";
+import { trackEvent } from "@/lib/analytics";
 
 interface UseCanvasMediaParams {
     containerRef: React.RefObject<HTMLDivElement | null>;
@@ -268,6 +269,9 @@ export const useCanvasMedia = ({
                     ),
                 }));
                 triggerAutoSave();
+                // Beta signal: a tester got a plan into the app (the first real
+                // step of the flow). mimeType tells us PDF vs image uptake.
+                trackEvent("plan", "uploaded", uploaded.mime_type ?? file.type);
             } catch (error) {
                 // Do NOT remove the plan on failure — the user's local render is still valid
                 // and losing it silently is worse than a stuck "unsynced" state. Surface the
