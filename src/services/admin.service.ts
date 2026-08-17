@@ -24,6 +24,9 @@ export interface AdminUserRow {
   is_tester: 0 | 1;
   storage_quota_bytes: number;
   used_bytes: number;
+  /** Null until the tester's first login (or before the tracking migration). */
+  last_login_at: string | null;
+  login_count: number;
   createdAt: string;
 }
 

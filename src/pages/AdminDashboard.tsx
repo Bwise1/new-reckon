@@ -231,7 +231,7 @@ function TestersTab() {
           <thead>
             <tr className="border-b text-xs uppercase text-gray-500">
               <th className="py-2">Email</th><th>Tester</th><th>Active</th>
-              <th>Used / Quota (MB)</th><th>Actions</th>
+              <th>Used / Quota (MB)</th><th>Last login</th><th>Logins</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -241,6 +241,12 @@ function TestersTab() {
                 <td>{u.is_tester ? 'yes' : ''}</td>
                 <td>{u.is_active ? '✓' : <span className="text-red-600">revoked</span>}</td>
                 <td>{mb(u.used_bytes)} / {u.storage_quota_bytes === 0 ? '∞' : mb(u.storage_quota_bytes)}</td>
+                <td className="whitespace-nowrap">
+                  {u.last_login_at
+                    ? new Date(u.last_login_at).toLocaleString()
+                    : <span className="text-gray-400">never</span>}
+                </td>
+                <td>{u.login_count ?? 0}</td>
                 <td className="space-x-2">
                   <button type="button" onClick={() => editQuota(u)} className="text-[#289693] hover:underline cursor-pointer">quota</button>
                   <button type="button" onClick={() => toggleActive(u)} className="text-[#289693] hover:underline cursor-pointer">
