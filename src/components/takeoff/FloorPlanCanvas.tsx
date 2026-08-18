@@ -204,6 +204,18 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     return () => window.clearTimeout(timer);
   }, [uncalibratedWarning]);
 
+  // Pan and measuring are mutually exclusive: picking any measuring tool
+  // (from the toolbar, a BOQ card, or a shortcut) turns pan OFF. Keyed on the
+  // tool BECOMING active so it doesn't fight hold-space-to-pan, which sets pan
+  // transiently while a tool stays selected and restores it on key-up — that
+  // path must keep working, so we only react to activeTool going truthy.
+  const prevActiveToolRef = useRef(activeTool);
+  useEffect(() => {
+    const became = !prevActiveToolRef.current && !!activeTool;
+    prevActiveToolRef.current = activeTool;
+    if (became && isPanningMode) setIsPanningMode(false);
+  }, [activeTool, isPanningMode, setIsPanningMode]);
+
   const confirm = useConfirm();
   const snapSettings = useMemo(
     () => ({
@@ -1647,7 +1659,19 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         }
       }
       if (e.key.toLowerCase() === "m") {
-        setIsPanningMode((p) => !p);
+        // Match the pan button: turning pan ON disables any active measuring
+        // tool (and select/calibration), so pan and measuring are never both
+        // armed. Turning pan OFF leaves the tools cleared.
+        setIsPanningMode((p) => {
+          const next = !p;
+          if (next) {
+            setIsSelectMode(false);
+            setCalibrationMode(false);
+            setActiveTool(null);
+            setCurrentPoints([]);
+          }
+          return next;
+        });
       }
       if (e.key.toLowerCase() === "v") {
         setIsSelectMode((p) => !p);
