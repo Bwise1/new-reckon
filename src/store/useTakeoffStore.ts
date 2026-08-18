@@ -356,6 +356,42 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
    * store BOQ (relative to `before`), and enqueue them. Called at the end of
    * every BOQ mutation. See docs/sync-rebuild.md and entitySyncMapper.
    */
+  /**
+   * Refresh the live takeoff input after a session measurement's quantity
+   * changes outside addMeasurement (deduction added/removed, count updated).
+   * pendingValue is a snapshot taken when the measurement was drawn, so
+   * without this the input keeps showing the stale figure. Recomputes the
+   * session total from current quantities — which also makes undo
+   * self-correcting: rerun after restore and it lands on the old total.
+   */
+  const refreshPendingSessionTotal = (measurementId: string) => {
+    const target = get().boqTargeting;
+    if (!target || !target.pendingMeasurementIds.includes(measurementId)) return;
+    let newTotal = 0;
+    const allItems = get().takeoffItems;
+    for (const mid of target.pendingMeasurementIds) {
+      for (const ti of allItems) {
+        const m = ti.measurements.find((mm) => mm.id === mid);
+        if (m) {
+          newTotal += Math.abs(m.quantity);
+          break;
+        }
+      }
+    }
+    if (newTotal === target.pendingTotal) return;
+    set((state) =>
+      state.boqTargeting
+        ? {
+            boqTargeting: {
+              ...state.boqTargeting,
+              pendingTotal: newTotal,
+              pendingValue: newTotal.toFixed(2),
+            },
+          }
+        : state
+    );
+  };
+
   const enqueueBoqOpsFromDiff = (before: BoqElementData[]) => {
     const projectId = get().currentProjectId;
     if (!projectId) return;
@@ -1539,7 +1575,10 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     };
 
     executeCommand({
-      execute: () => applyDeductions(nextDeductions, nextQuantity),
+      execute: () => {
+        applyDeductions(nextDeductions, nextQuantity);
+        refreshPendingSessionTotal(measurementId);
+      },
       undo: () => {
         set((current) => ({
           takeoffItems: current.takeoffItems.map((ti) => {
@@ -1569,6 +1608,9 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
             },
           });
         }
+        // Quantities are restored above; recomputing lands the takeoff input
+        // back on the pre-deduction total.
+        refreshPendingSessionTotal(measurementId);
       },
       description: 'Add deduction',
     });
@@ -1624,6 +1666,9 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         }));
         get().triggerAutoSave();
         enqueueDeductionsSync(nextDeductions, nextQuantity);
+        // Removing a deduction raises the quantity back; keep the live
+        // takeoff input in step (same refresh as adding a deduction).
+        refreshPendingSessionTotal(measurementId);
       },
       undo: () => {
         set((current) => ({
@@ -1643,6 +1688,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         }));
         get().triggerAutoSave();
         enqueueDeductionsSync(prevDeductions, previousQuantity);
+        refreshPendingSessionTotal(measurementId);
       },
       description: 'Remove deduction',
     });
