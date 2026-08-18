@@ -1498,39 +1498,8 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       pageScale && pageScale > 0 ? pixelArea / (pageScale * pageScale) : pixelArea;
     const quantityDelta = nextQuantity - previousQuantity;
 
-    // A BOQ history chip that MIRRORS this measurement (sourceMeasurementId set)
-    // and whose value is still the plain drawn number — not a hand-edited
-    // expression or a grouped session — should follow the measurement's
-    // quantity when a deduction changes it. Otherwise the takeoff box keeps
-    // showing the pre-deduction figure while history updates (the reported bug).
-    // Edited/grouped chips are left alone: their value is no longer a simple
-    // mirror, so overwriting it would corrupt user input.
-    const mirrorsQuantity = (value: string, qty: number) => {
-      const trimmed = value.trim();
-      if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return false; // not a plain number
-      return Math.abs(parseFloat(trimmed) - qty) < 0.005; // matches to 2dp
-    };
-    // expectedCurrent = the quantity the chip should currently be showing;
-    // newQty = what to rewrite it to. Parameterized so undo is symmetric with
-    // execute (execute: old→new, undo: new→old).
-    const rewriteLinkedHistory = (elements: BoqElementData[], expectedCurrent: number, newQty: number) =>
-      elements.map((el) => ({
-        ...el,
-        items: el.items.map((it) => ({
-          ...it,
-          history: it.history.map((h) =>
-            h.sourceMeasurementId === measurementId &&
-            !h.groupId &&
-            mirrorsQuantity(h.value, expectedCurrent)
-              ? { ...h, value: newQty.toFixed(2) }
-              : h
-          ),
-        })),
-      }));
-
     const applyDeductions = (deductions: Point[][], quantity: number) => {
       set((current) => ({
-        boqElements: rewriteLinkedHistory(current.boqElements, previousQuantity, quantity),
         takeoffItems: current.takeoffItems.map((ti) => {
           if (ti.id !== itemId) return ti;
           const nextMeasurements = ti.measurements.map((m) =>
@@ -1573,7 +1542,6 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       execute: () => applyDeductions(nextDeductions, nextQuantity),
       undo: () => {
         set((current) => ({
-          boqElements: rewriteLinkedHistory(current.boqElements, nextQuantity, previousQuantity),
           takeoffItems: current.takeoffItems.map((ti) => {
             if (ti.id !== itemId) return ti;
             const nextMeasurements = ti.measurements.map((m) =>
@@ -2018,7 +1986,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     if (!element) return;
 
     // Deleting the LAST item in an element removes the whole (now-empty)
-    // element — but never the final element, so the BOQ always has at least
+    // element — but never the final element, so the BOQ always keeps at least
     // one element with one item to work in.
     const isLastItemInElement = element.items.length <= 1;
     const isLastElement = state.boqElements.length <= 1;
@@ -2029,22 +1997,16 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       items: [...el.items],
     }));
 
-    const apply = (current: { boqElements: BoqElementData[] }) => {
-      if (isLastItemInElement) {
-        // Drop the element entirely.
-        return {
-          boqElements: current.boqElements.filter((el) => el.id !== elementId),
-        };
-      }
-      // Otherwise just remove the one item.
-      return {
-        boqElements: current.boqElements.map((el) =>
-          el.id === elementId
-            ? { ...el, items: el.items.filter((i) => i.id !== itemId) }
-            : el
-        ),
-      };
-    };
+    const apply = (current: { boqElements: BoqElementData[] }) =>
+      isLastItemInElement
+        ? { boqElements: current.boqElements.filter((el) => el.id !== elementId) }
+        : {
+            boqElements: current.boqElements.map((el) =>
+              el.id === elementId
+                ? { ...el, items: el.items.filter((i) => i.id !== itemId) }
+                : el
+            ),
+          };
 
     executeCommand({
       execute: () => {
