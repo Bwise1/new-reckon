@@ -204,17 +204,20 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     return () => window.clearTimeout(timer);
   }, [uncalibratedWarning]);
 
-  // Pan and measuring are mutually exclusive: picking any measuring tool
-  // (from the toolbar, a BOQ card, or a shortcut) turns pan OFF. Keyed on the
-  // tool BECOMING active so it doesn't fight hold-space-to-pan, which sets pan
-  // transiently while a tool stays selected and restores it on key-up — that
-  // path must keep working, so we only react to activeTool going truthy.
+  // Pan/select and measuring are mutually exclusive: picking any measuring
+  // tool (from the toolbar, a BOQ card, or a shortcut) turns pan AND select
+  // OFF. Keyed on the tool BECOMING active so it doesn't fight
+  // hold-space-to-pan, which sets pan transiently while a tool stays selected
+  // and restores it on key-up — that path must keep working, so we only react
+  // to activeTool going truthy.
   const prevActiveToolRef = useRef(activeTool);
   useEffect(() => {
     const became = !prevActiveToolRef.current && !!activeTool;
     prevActiveToolRef.current = activeTool;
-    if (became && isPanningMode) setIsPanningMode(false);
-  }, [activeTool, isPanningMode, setIsPanningMode]);
+    if (!became) return;
+    if (isPanningMode) setIsPanningMode(false);
+    if (isSelectMode) setIsSelectMode(false);
+  }, [activeTool, isPanningMode, setIsPanningMode, isSelectMode, setIsSelectMode]);
 
   const confirm = useConfirm();
   const snapSettings = useMemo(
@@ -1674,7 +1677,19 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         });
       }
       if (e.key.toLowerCase() === "v") {
-        setIsSelectMode((p) => !p);
+        // Mirror the select button: turning select ON disables any active
+        // measuring tool (and pan/calibration), so select and measuring are
+        // never both armed.
+        setIsSelectMode((p) => {
+          const next = !p;
+          if (next) {
+            setIsPanningMode(false);
+            setCalibrationMode(false);
+            setActiveTool(null);
+            setCurrentPoints([]);
+          }
+          return next;
+        });
       }
       if (e.key.toLowerCase() === "f") {
         e.preventDefault();
@@ -2048,6 +2063,12 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                     return (
                       <Group
                         key={m.id}
+                        // While a deduction is being drawn, no measurement may
+                        // intercept pointer events, or hovering fires the "view
+                        // value" state and its hit region swallows the first draw
+                        // click (forcing a second). Falling through to the stage
+                        // draw handler makes the deduction draw on the first click.
+                        listening={!deductionTarget}
                         draggable={isSelectMode}
                         onDragStart={(e) => {
                           if (e.target !== e.currentTarget) return;
@@ -2330,6 +2351,12 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                     return (
                       <Group
                         key={m.id}
+                        // While a deduction is being drawn, no measurement may
+                        // intercept pointer events, or hovering fires the "view
+                        // value" state and its hit region swallows the first draw
+                        // click (forcing a second). Falling through to the stage
+                        // draw handler makes the deduction draw on the first click.
+                        listening={!deductionTarget}
                         draggable={isSelectMode}
                         onDragStart={(e) => {
                           if (e.target !== e.currentTarget) return;
@@ -2499,6 +2526,12 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                     return (
                       <Group
                         key={m.id}
+                        // While a deduction is being drawn, no measurement may
+                        // intercept pointer events, or hovering fires the "view
+                        // value" state and its hit region swallows the first draw
+                        // click (forcing a second). Falling through to the stage
+                        // draw handler makes the deduction draw on the first click.
+                        listening={!deductionTarget}
                         draggable={isSelectMode}
                         onDragStart={(e) => {
                           if (e.target !== e.currentTarget) return;
@@ -2743,6 +2776,12 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                           fill={mColor}
                           stroke="white"
                           strokeWidth={(isSelected || isHovered ? 3 : 2) * strokeScale}
+                        // While a deduction is being drawn, no measurement may
+                        // intercept pointer events, or hovering fires the "view
+                        // value" state and its hit region swallows the first draw
+                        // click (forcing a second). Falling through to the stage
+                        // draw handler makes the deduction draw on the first click.
+                          listening={!deductionTarget}
                           draggable={isSelectMode}
                           onDragStart={(e) => {
                             setIsDraggingObject(true);
