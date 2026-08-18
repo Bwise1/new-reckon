@@ -1983,20 +1983,34 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   deleteElementItem: (elementId, itemId) => {
     const state = get();
     const element = state.boqElements.find((e) => e.id === elementId);
-    if (!element || element.items.length <= 1) return;
+    if (!element) return;
+
+    // Deleting the LAST item in an element removes the whole (now-empty)
+    // element — but never the final element, so the BOQ always keeps at least
+    // one element with one item to work in.
+    const isLastItemInElement = element.items.length <= 1;
+    const isLastElement = state.boqElements.length <= 1;
+    if (isLastItemInElement && isLastElement) return;
+
     const previousElements = state.boqElements.map((el) => ({
       ...el,
       items: [...el.items],
     }));
+
+    const apply = (current: { boqElements: BoqElementData[] }) =>
+      isLastItemInElement
+        ? { boqElements: current.boqElements.filter((el) => el.id !== elementId) }
+        : {
+            boqElements: current.boqElements.map((el) =>
+              el.id === elementId
+                ? { ...el, items: el.items.filter((i) => i.id !== itemId) }
+                : el
+            ),
+          };
+
     executeCommand({
       execute: () => {
-        set((current) => ({
-          boqElements: current.boqElements.map((el) =>
-            el.id === elementId
-              ? { ...el, items: el.items.filter((i) => i.id !== itemId) }
-              : el
-          ),
-        }));
+        set(apply);
         enqueueBoqOpsFromDiff(previousElements);
       },
       undo: () => {
@@ -2004,7 +2018,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         set({ boqElements: previousElements });
         enqueueBoqOpsFromDiff(before);
       },
-      description: 'Delete item',
+      description: isLastItemInElement ? 'Delete element' : 'Delete item',
     });
   },
 

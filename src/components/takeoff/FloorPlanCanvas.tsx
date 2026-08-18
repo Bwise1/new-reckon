@@ -213,8 +213,10 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   useEffect(() => {
     const became = !prevActiveToolRef.current && !!activeTool;
     prevActiveToolRef.current = activeTool;
-    if (became && isPanningMode) setIsPanningMode(false);
-  }, [activeTool, isPanningMode, setIsPanningMode]);
+    if (!became) return;
+    if (isPanningMode) setIsPanningMode(false);
+    if (isSelectMode) setIsSelectMode(false);
+  }, [activeTool, isPanningMode, setIsPanningMode, isSelectMode, setIsSelectMode]);
 
   const confirm = useConfirm();
   const snapSettings = useMemo(
@@ -1674,7 +1676,19 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         });
       }
       if (e.key.toLowerCase() === "v") {
-        setIsSelectMode((p) => !p);
+        // Mirror the select button: turning select ON disables any active
+        // measuring tool (and pan/calibration), so select and measuring are
+        // never both armed.
+        setIsSelectMode((p) => {
+          const next = !p;
+          if (next) {
+            setIsPanningMode(false);
+            setCalibrationMode(false);
+            setActiveTool(null);
+            setCurrentPoints([]);
+          }
+          return next;
+        });
       }
       if (e.key.toLowerCase() === "f") {
         e.preventDefault();
