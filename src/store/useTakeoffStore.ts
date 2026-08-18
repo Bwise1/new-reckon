@@ -365,31 +365,62 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
    * self-correcting: rerun after restore and it lands on the old total.
    */
   const refreshPendingSessionTotal = (measurementId: string) => {
-    const target = get().boqTargeting;
-    if (!target || !target.pendingMeasurementIds.includes(measurementId)) return;
-    let newTotal = 0;
-    const allItems = get().takeoffItems;
-    for (const mid of target.pendingMeasurementIds) {
-      for (const ti of allItems) {
-        const m = ti.measurements.find((mm) => mm.id === mid);
-        if (m) {
-          newTotal += Math.abs(m.quantity);
-          break;
+    const sumFor = (ids: string[]) => {
+      let total = 0;
+      const allItems = get().takeoffItems;
+      for (const mid of ids) {
+        for (const ti of allItems) {
+          const m = ti.measurements.find((mm) => mm.id === mid);
+          if (m) {
+            total += Math.abs(m.quantity);
+            break;
+          }
         }
       }
+      return total;
+    };
+
+    // Live session: the input shows boqTargeting.pendingValue.
+    const target = get().boqTargeting;
+    if (target && target.pendingMeasurementIds.includes(measurementId)) {
+      const newTotal = sumFor(target.pendingMeasurementIds);
+      if (newTotal !== target.pendingTotal) {
+        set((state) =>
+          state.boqTargeting
+            ? {
+                boqTargeting: {
+                  ...state.boqTargeting,
+                  pendingTotal: newTotal,
+                  pendingValue: newTotal.toFixed(2),
+                },
+              }
+            : state
+        );
+      }
     }
-    if (newTotal === target.pendingTotal) return;
-    set((state) =>
-      state.boqTargeting
-        ? {
-            boqTargeting: {
-              ...state.boqTargeting,
-              pendingTotal: newTotal,
-              pendingValue: newTotal.toFixed(2),
-            },
-          }
-        : state
-    );
+
+    // Stashed session: after Exit/Escape the staged value lives in
+    // pendingCommit.value and the input shows THAT (see EstimationCard's
+    // pendingMeasuredValue). Deducting from an area in this state is common —
+    // finish measuring, then punch holes — so refresh it too, or the input
+    // keeps the pre-deduction figure even though the measurement changed.
+    const stashed = get().pendingCommit;
+    if (stashed && stashed.measurementIds.includes(measurementId)) {
+      const newTotal = sumFor(stashed.measurementIds);
+      if (newTotal !== stashed.total) {
+        set((state) =>
+          state.pendingCommit
+            ? {
+                pendingCommit: {
+                  ...state.pendingCommit,
+                  total: newTotal,
+                  value: newTotal.toFixed(2),
+                },
+              }
+            : state
+        );
+      }
+    }
   };
 
   const enqueueBoqOpsFromDiff = (before: BoqElementData[]) => {
