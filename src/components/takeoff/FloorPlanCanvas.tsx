@@ -1962,7 +1962,25 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         selectedMeasurementId={selectedMeasurement?.measurementId ?? null}
         onSelectTool={onSelectTool}
         onFinishTool={onFinishTool}
-        onColorChange={onColorChange}
+        onColorChange={(color) => {
+          // Mirror the width control: with a measurement selected, recolor
+          // THAT measurement (per-measurement color overrides the item color
+          // — getMeasurementColor reads m.color ?? item.color, and the sync
+          // diff already ships color changes). With nothing selected, keep
+          // the old behaviour: set the default color for new measurements.
+          if (selectedMeasurement) {
+            const item = takeoffItems.find((i) => i.id === selectedMeasurement.itemId);
+            const m = item?.measurements.find((mm) => mm.id === selectedMeasurement.measurementId);
+            if (item && m) {
+              const updatedMeasurements = item.measurements.map((measurement) =>
+                measurement.id === m.id ? { ...measurement, color } : measurement
+              );
+              updateTakeoffItem(item.id, { measurements: updatedMeasurements });
+              return;
+            }
+          }
+          onColorChange(color);
+        }}
         onRealWidthChange={(w) => {
           if (selectedMeasurement && currentScale && currentScale > 0) {
             const item = takeoffItems.find((i) => i.id === selectedMeasurement.itemId);
@@ -3441,7 +3459,13 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                     measurementId: areaContextMenu.measurementId,
                   });
                   setCurrentPoints([]);
-                  onSelectTool("area");
+                  // Set the tool directly — NOT via onSelectTool, which is a
+                  // TOGGLE. When the user is already measuring with the area
+                  // tool (the normal case for a deduction), the toggle turned
+                  // the tool OFF, so the first Deduct click deactivated
+                  // measuring and a second right-click → Deduct was needed to
+                  // toggle it back on. setActiveTool is idempotent.
+                  setActiveTool("area");
                   setAreaContextMenu(null);
                 }}
                 className="w-full text-left px-3 py-1.5 hover:bg-gray-100 cursor-pointer"
