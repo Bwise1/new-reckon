@@ -211,11 +211,18 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   // path must keep working, so we only react to activeTool going truthy.
   const prevActiveToolRef = useRef(activeTool);
   useEffect(() => {
-    const became = !prevActiveToolRef.current && !!activeTool;
+    const prev = prevActiveToolRef.current;
     prevActiveToolRef.current = activeTool;
-    if (!became) return;
-    if (isPanningMode) setIsPanningMode(false);
-    if (isSelectMode) setIsSelectMode(false);
+    if (!prev && activeTool) {
+      // Tool picked up: pan/select go down (mutual exclusivity).
+      if (isPanningMode) setIsPanningMode(false);
+      if (isSelectMode) setIsSelectMode(false);
+    } else if (prev && !activeTool) {
+      // Tool put down (Done, Escape, or switching BOQ cards mid-draw):
+      // discard any unfinished in-progress points so they can't ghost into
+      // the next measurement when a tool is picked up again.
+      setCurrentPoints([]);
+    }
   }, [activeTool, isPanningMode, setIsPanningMode, isSelectMode, setIsSelectMode]);
 
   const confirm = useConfirm();
