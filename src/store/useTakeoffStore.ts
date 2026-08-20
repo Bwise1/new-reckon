@@ -21,7 +21,7 @@ import {
 import { inferPlanMediaKind } from '@/utils/planMediaLoader';
 import { clearAllPlanPdfs, clearPlanPdf } from '@/utils/planPdfCache';
 import { MARKUP_COLORS } from '@/constants/takeoffDesign';
-import { createEmptyBoqElement, createEmptyBoqItem } from '@/utils/boqCalculations';
+import { createEmptyBoqElement, createEmptyBoqItem, renumberAutoElements } from '@/utils/boqCalculations';
 import { loadProjectFromStorage, autoSaveProject } from '@/utils/persistence';
 import { generateClientId } from '@/utils/id';
 import { syncQueue } from '@/services/syncQueue';
@@ -2076,7 +2076,14 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
 
     const apply = (current: { boqElements: BoqElementData[] }) =>
       isLastItemInElement
-        ? { boqElements: current.boqElements.filter((el) => el.id !== elementId) }
+        ? {
+            // Removing an element shifts the ones after it up, so auto-titled
+            // elements are renumbered to match their new position. User-named
+            // elements ("DPM Works") keep their names.
+            boqElements: renumberAutoElements(
+              current.boqElements.filter((el) => el.id !== elementId)
+            ),
+          }
         : {
             boqElements: current.boqElements.map((el) =>
               el.id === elementId
