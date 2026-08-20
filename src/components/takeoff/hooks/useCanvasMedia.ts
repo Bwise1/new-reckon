@@ -101,6 +101,20 @@ export const useCanvasMedia = ({
     const renderedScaleRef = useRef<{ key: string; scale: number } | null>(null);
     // Object URL backing the current PDF bitmap; revoked when replaced.
     const pdfObjectUrlRef = useRef<string | null>(null);
+    // The FROZEN display footprint scale for the current page. Stored
+    // measurement coordinates live in bitmap-pixel space at the scale the
+    // page was first rendered at (verified against production data: an A3
+    // plan's points span ~4x its natural pt size). The drawn footprint must
+    // therefore NEVER change for a given page — quality re-renders draw
+    // sharper pixels INTO this fixed box, they do not resize it.
+    const displayScaleRef = useRef<{ key: string; scale: number } | null>(null);
+    // Pixel box the PDF bitmap is drawn into (natural x displayScale) —
+    // passed to the Konva image node so a higher-resolution bitmap cannot
+    // grow the plan under existing measurements.
+    const [pdfDisplaySize, setPdfDisplaySize] = useState<{
+        width: number;
+        height: number;
+    } | null>(null);
 
     const fitImageToStage = useCallback(
         (img: HTMLImageElement, fitKey?: string, naturalSize?: { width: number; height: number }) => {
@@ -198,14 +212,28 @@ export const useCanvasMedia = ({
             const naturalSize = { width: baseViewport.width, height: baseViewport.height };
             naturalSizeRef.current = naturalSize;
 
-            // First paint fills the container at physical-pixel density (fast).
-            // Zooming passes a larger qualityScale via refreshRenderQuality so
-            // the page is re-rasterized sharp instead of stretching a fixed
-            // bitmap — the "blurry when zoomed" complaint. Either way the
-            // pixel budget caps the canvas so big plans can't blow memory.
-            const requested =
-                qualityScale ??
-                Math.min(4, Math.max(2, (containerWidth / baseViewport.width) * dpr));
+            // Freeze this page's display footprint the first time it renders,
+            // using the exact legacy formula — stored measurements are in that
+            // bitmap-pixel space, so the footprint is part of the data model.
+            const key = `${planId ?? "?"}:${pageNum}:${rotation}`;
+            if (displayScaleRef.current?.key !== key) {
+                displayScaleRef.current = {
+                    key,
+                    scale: Math.min(
+                        4,
+                        Math.max(2, (containerWidth / baseViewport.width) * dpr)
+                    ),
+                };
+            }
+            const displayScale = displayScaleRef.current.scale;
+
+            // First paint renders at the footprint scale (exactly the legacy
+            // behaviour). Zooming passes a larger qualityScale via
+            // refreshRenderQuality: the page is re-rasterized sharper, but the
+            // Konva node pins it to the SAME footprint (pdfDisplaySize), so
+            // detail improves while nothing moves. The pixel budget caps the
+            // canvas so big plans can't blow memory.
+            const requested = qualityScale ?? displayScale;
             const scale = capRenderScale(
                 Math.max(2, requested),
                 baseViewport.width,
@@ -267,11 +295,12 @@ export const useCanvasMedia = ({
             pdfObjectUrlRef.current = url;
 
             setImage(img);
+            setPdfDisplaySize({
+                width: naturalSize.width * displayScale,
+                height: naturalSize.height * displayScale,
+            });
             fitImageToStage(img, planId ? `${planId}:${pageNum}:${rotation}` : undefined, naturalSize);
-            renderedScaleRef.current = {
-                key: `${planId ?? "?"}:${pageNum}:${rotation}`,
-                scale,
-            };
+            renderedScaleRef.current = { key, scale };
         },
         [containerRef, fitImageToStage, setImage]
     );
@@ -366,6 +395,7 @@ export const useCanvasMedia = ({
             if (loaded.kind === "image" && loaded.imageSrc) {
                 pdfSegmentIndexRef.current = null;
                 setPdfDoc(null);
+                setPdfDisplaySize(null);
                 setBackgroundImage(loaded.imageSrc.startsWith("blob:") ? url : loaded.imageSrc);
                 setNumPages(1);
                 setStoreNumPages(1);
@@ -415,6 +445,7 @@ export const useCanvasMedia = ({
             // hiding the page panel).
             if (activePlanId && getPlanPdf(activePlanId)) {
                 setPdfDoc(null);
+                setPdfDisplaySize(null);
             }
         }
         shownPlanRef.current = activePlanId;
@@ -534,6 +565,7 @@ export const useCanvasMedia = ({
         img.onload = () => {
             baseImageRef.current = img;
             setPdfDoc(null);
+                setPdfDisplaySize(null);
             // Bake the active plan/page rotation into the displayed bitmap.
             const rot = rotations[currentPage] ?? 0;
             void rotateImageElement(img, rot).then((displayImg) => {
@@ -685,6 +717,7 @@ export const useCanvasMedia = ({
                     const text = await file.text();
                     const { dataUrl } = await rasterizeDxf(text);
                     setPdfDoc(null);
+                setPdfDisplaySize(null);
                     setNumPages(1);
                     setStoreNumPages(1);
                     setCurrentPage(1);
@@ -729,6 +762,7 @@ export const useCanvasMedia = ({
                 }
             } else if (file.type.startsWith("image/")) {
                 setPdfDoc(null);
+                setPdfDisplaySize(null);
                 setNumPages(1);
                 setStoreNumPages(1);
                 setCurrentPage(1);
@@ -851,6 +885,9 @@ export const useCanvasMedia = ({
         // Natural PDF page dimensions at scale=1 — use these (not image.width/height) when
         // computing rotation point transforms so the math is independent of render quality.
         pdfNaturalSize: naturalSizeRef.current,
+        // Fixed footprint (px) the PDF bitmap must be drawn into — stored
+        // measurement coords live in this space, so the Konva node pins to it.
+        pdfDisplaySize,
         // Spatial index of PDF vector line segments for the current page — used for snap-to-line.
         pdfSegmentIndexRef,
     };

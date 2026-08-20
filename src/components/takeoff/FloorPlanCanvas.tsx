@@ -300,7 +300,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   const rotateAllPages = useTakeoffStore((s) => s.rotateAllPages);
   const activeRealWidthLive = useTakeoffStore((s) => s.activeRealWidth);
 
-  const { handleFileUpload, changePage, rerenderCurrentPage, refreshRenderQuality, refitToView, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfSegmentIndexRef } =
+  const { handleFileUpload, changePage, rerenderCurrentPage, refreshRenderQuality, refitToView, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfDisplaySize, pdfSegmentIndexRef } =
     useCanvasMedia({
     containerRef,
     backgroundImage,
@@ -2044,6 +2044,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         isDraggingObject={isDraggingObject}
         image={image}
         imageScale={imageScale}
+        imageDisplaySize={pdfDisplaySize}
         onStageClick={handleStageClick}
         onStageDblClick={handleDblClick}
         onStageMouseMove={handleMouseMove}
