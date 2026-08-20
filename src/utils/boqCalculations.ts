@@ -57,6 +57,46 @@ const ELEMENT_WORDS = [
 export const elementTitleFromIndex = (index: number): string =>
   `Element ${ELEMENT_WORDS[index] ?? String(index + 1)}`;
 
+/**
+ * True when a title is still an app-generated "Element N" — i.e. the user has
+ * never renamed it. Deliberately inferred from the string rather than stored
+ * as a flag: the auto titles are a closed, known set, so this needs no schema
+ * change and works for elements created before renumbering existed.
+ *
+ * Matching is case-insensitive and ignores surrounding space because the
+ * rename input sentence-cases what it stores.
+ */
+export const isAutoElementTitle = (title: string): boolean => {
+  const t = (title ?? '').trim().toLowerCase();
+  if (!t) return true; // blank is treated as auto so it picks up a number
+  if (ELEMENT_WORDS.some((w) => t === `element ${w.toLowerCase()}`)) return true;
+  // Beyond the words list the generator falls back to digits ("Element 11").
+  return /^element \d+$/.test(t);
+};
+
+/**
+ * Renumber auto-titled elements to match their POSITION, leaving user-named
+ * ones untouched. Positional (not sequential-among-auto) is deliberate: the
+ * number tells you where a section sits in the bill, so with a custom name in
+ * the middle you get One, DPM Works, Three — position three really is third.
+ *
+ * Returns the same array reference when nothing changed, so callers can skip
+ * pointless state updates and sync ops.
+ */
+export const renumberAutoElements = <T extends { title: string }>(
+  elements: T[]
+): T[] => {
+  let changed = false;
+  const next = elements.map((el, index) => {
+    if (!isAutoElementTitle(el.title)) return el;
+    const title = elementTitleFromIndex(index);
+    if (el.title === title) return el;
+    changed = true;
+    return { ...el, title };
+  });
+  return changed ? next : elements;
+};
+
 export const createEmptyBoqItem = (): EstimationCardData => ({
   id: generateClientId(),
   unit: 'm3',

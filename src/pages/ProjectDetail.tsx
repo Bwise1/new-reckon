@@ -121,7 +121,10 @@ const ProjectDetail = () => {
         return;
       }
       setActiveTool(type);
-      // Auto-target the focused BOQ card if no targeting is active yet
+      // Auto-target the focused BOQ card if no targeting is active yet. This
+      // is also what resumes measuring after pan/select put the tool down
+      // without moving focus — the cursor is still in that card's takeoff box,
+      // so picking a tool again should re-activate THAT card.
       if (focusedBoqCard && !boqTargeting) {
         startBoqTargeting(focusedBoqCard.elementId, focusedBoqCard.itemId, focusedBoqCard.unit);
       }
@@ -142,20 +145,33 @@ const ProjectDetail = () => {
   // different card) — not to boqTargeting changing on its own. Otherwise
   // Exit/Escape (which clear boqTargeting but leave focusedBoqCard as-is)
   // would interact badly with this effect.
-  const lastFocusedBoqCardRef = useRef<typeof focusedBoqCard>(null);
+  // Tracked as a STABLE KEY, not the object: setFocusedBoqCard builds a fresh
+  // object on every focus event, so comparing references (or comparing against
+  // a ref updated inside this effect) mistook a REfocus of the same card for a
+  // switch — which tore down a live session when the user simply put pan down
+  // and picked the tool back up.
+  const focusedCardKey = focusedBoqCard
+    ? `${focusedBoqCard.elementId}:${focusedBoqCard.itemId}`
+    : null;
+  const lastFocusedCardKeyRef = useRef<string | null>(focusedCardKey);
   useEffect(() => {
-    const prev = lastFocusedBoqCardRef.current;
-    lastFocusedBoqCardRef.current = focusedBoqCard;
-    if (!focusedBoqCard) return;
-    if (!activeTool) return;
-    const focusChanged =
-      prev?.elementId !== focusedBoqCard.elementId ||
-      prev?.itemId !== focusedBoqCard.itemId;
-    if (!focusChanged) return;
+    const prevKey = lastFocusedCardKeyRef.current;
+    lastFocusedCardKeyRef.current = focusedCardKey;
+    if (!focusedCardKey || !activeTool) return;
+    if (prevKey === focusedCardKey) return;
+    // Refocusing the card that is ALREADY being measured is not a switch —
+    // e.g. clicking back into the takeoff box, or re-picking the tool after
+    // pan. Only a move to a genuinely different card ends the session.
+    if (
+      boqTargeting &&
+      `${boqTargeting.elementId}:${boqTargeting.itemId}` === focusedCardKey
+    ) {
+      return;
+    }
     setActiveTool(null);
     exitBoqTargeting();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusedBoqCard]);
+  }, [focusedCardKey]);
 
   const handleFinishTool = useCallback(() => {
     // "Done" is the single finish control: put the tool down AND end any active
