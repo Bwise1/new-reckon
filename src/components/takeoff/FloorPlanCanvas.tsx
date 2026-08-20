@@ -300,7 +300,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   const rotateAllPages = useTakeoffStore((s) => s.rotateAllPages);
   const activeRealWidthLive = useTakeoffStore((s) => s.activeRealWidth);
 
-  const { handleFileUpload, changePage, rerenderCurrentPage, refitToView, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfSegmentIndexRef } =
+  const { handleFileUpload, changePage, rerenderCurrentPage, refreshRenderQuality, refitToView, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfSegmentIndexRef } =
     useCanvasMedia({
     containerRef,
     backgroundImage,
@@ -321,6 +321,17 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     setNumPages,
     projectId: currentProjectId ?? undefined,
   });
+
+  // Zoom-adaptive sharpness: when the zoom level settles, re-rasterize the
+  // PDF page to match it (debounced so wheel/pinch streams don't thrash the
+  // renderer). Konva keeps showing the old bitmap until the sharper one swaps
+  // in at identical layout coordinates, so there's no visual jump — just the
+  // plan snapping into focus. This is what keeps plans crisp at high zoom
+  // instead of stretching one fixed-resolution render.
+  useEffect(() => {
+    const timer = window.setTimeout(() => refreshRenderQuality(stageScale), 300);
+    return () => window.clearTimeout(timer);
+  }, [stageScale, refreshRenderQuality]);
 
   useEffect(() => {
     onPlanLoadStatusChange?.(planLoadStatus);

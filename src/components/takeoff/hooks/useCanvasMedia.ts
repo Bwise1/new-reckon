@@ -12,6 +12,16 @@ import { getCanvasFitMode } from "@/utils/canvasPrefs";
 import { isDxfFile } from "@/utils/dxfRasterizer";
 import { rotateImageElement } from "@/utils/imageRotate";
 
+// Render-quality budget. A page is rasterized at `scale` × its natural (pt)
+// size; without a ceiling a large plan at high zoom would allocate a canvas
+// big enough to crash the tab (an A0 page at 4× is already 64+ megapixels).
+// ~33.5 MP ≈ 134 MB RGBA transient — comfortably inside desktop limits — and
+// 8192 px per side stays under every browser's canvas dimension cap.
+const MAX_RENDER_PIXELS = 33_500_000;
+const MAX_RENDER_DIM = 8192;
+const capRenderScale = (scale: number, w: number, h: number) =>
+    Math.min(scale, Math.sqrt(MAX_RENDER_PIXELS / (w * h)), MAX_RENDER_DIM / Math.max(w, h));
+
 interface UseCanvasMediaParams {
     containerRef: React.RefObject<HTMLDivElement | null>;
     backgroundImage: string | null;
@@ -80,6 +90,17 @@ export const useCanvasMedia = ({
     // Spatial index of PDF vector segments for the currently displayed page.
     // Populated after renderPdfPage; null for raster image plans.
     const pdfSegmentIndexRef = useRef<SegmentIndex | null>(null);
+    // Monotonic render generation: every renderPdfPage call bumps it, and a
+    // render only commits (setImage/fit) if it is still the newest when its
+    // async work resolves — last write wins, so an old page/rotation/quality
+    // render resolving late can never stomp a newer one.
+    const renderGenRef = useRef(0);
+    // What quality the CURRENT bitmap was rendered at, keyed by
+    // plan:page:rotation — lets the zoom handler skip re-renders that would
+    // not get meaningfully sharper.
+    const renderedScaleRef = useRef<{ key: string; scale: number } | null>(null);
+    // Object URL backing the current PDF bitmap; revoked when replaced.
+    const pdfObjectUrlRef = useRef<string | null>(null);
 
     const fitImageToStage = useCallback(
         (img: HTMLImageElement, fitKey?: string, naturalSize?: { width: number; height: number }) => {
@@ -156,7 +177,14 @@ export const useCanvasMedia = ({
     );
 
     const renderPdfPage = useCallback(
-        async (pdf: pdfjsLib.PDFDocumentProxy, pageNum: number, planId?: string, rotation = 0) => {
+        async (
+            pdf: pdfjsLib.PDFDocumentProxy,
+            pageNum: number,
+            planId?: string,
+            rotation = 0,
+            qualityScale?: number
+        ) => {
+            const gen = ++renderGenRef.current;
             const page = await pdf.getPage(pageNum);
 
             // Determine how many pixels wide the container is right now so we
@@ -170,9 +198,19 @@ export const useCanvasMedia = ({
             const naturalSize = { width: baseViewport.width, height: baseViewport.height };
             naturalSizeRef.current = naturalSize;
 
-            // Scale so the page fills the container at full physical-pixel density.
-            // Cap at 4× to avoid canvas memory limits on large PDFs.
-            const scale = Math.min(4, Math.max(2, (containerWidth / baseViewport.width) * dpr));
+            // First paint fills the container at physical-pixel density (fast).
+            // Zooming passes a larger qualityScale via refreshRenderQuality so
+            // the page is re-rasterized sharp instead of stretching a fixed
+            // bitmap — the "blurry when zoomed" complaint. Either way the
+            // pixel budget caps the canvas so big plans can't blow memory.
+            const requested =
+                qualityScale ??
+                Math.min(4, Math.max(2, (containerWidth / baseViewport.width) * dpr));
+            const scale = capRenderScale(
+                Math.max(2, requested),
+                baseViewport.width,
+                baseViewport.height
+            );
             const viewport = page.getViewport({ scale, rotation });
 
             const canvas = document.createElement("canvas");
@@ -199,15 +237,41 @@ export const useCanvasMedia = ({
 
             });
 
+            // toBlob + object URL instead of toDataURL: encoding is async (no
+            // main-thread stall on multi-megapixel canvases) and skips the
+            // base64 copy of the whole bitmap.
+            const blob = await new Promise<Blob | null>((resolve) =>
+                canvas.toBlob(resolve, "image/jpeg", 0.92)
+            );
+            if (!blob) return;
+            // A newer render started while this one worked — drop it.
+            if (gen !== renderGenRef.current) return;
+
+            const url = URL.createObjectURL(blob);
             const img = new window.Image();
-            // JPEG is far faster to encode than PNG for large canvases
-            img.src = canvas.toDataURL("image/jpeg", 0.92);
-            await new Promise<void>((resolve, reject) => {
-                img.onload = () => resolve();
-                img.onerror = () => reject(new Error("Failed to render PDF page to image"));
-            });
+            img.src = url;
+            try {
+                await new Promise<void>((resolve, reject) => {
+                    img.onload = () => resolve();
+                    img.onerror = () => reject(new Error("Failed to render PDF page to image"));
+                });
+            } catch (error) {
+                URL.revokeObjectURL(url);
+                throw error;
+            }
+            if (gen !== renderGenRef.current) {
+                URL.revokeObjectURL(url);
+                return;
+            }
+            if (pdfObjectUrlRef.current) URL.revokeObjectURL(pdfObjectUrlRef.current);
+            pdfObjectUrlRef.current = url;
+
             setImage(img);
             fitImageToStage(img, planId ? `${planId}:${pageNum}:${rotation}` : undefined, naturalSize);
+            renderedScaleRef.current = {
+                key: `${planId ?? "?"}:${pageNum}:${rotation}`,
+                scale,
+            };
         },
         [containerRef, fitImageToStage, setImage]
     );
@@ -737,6 +801,40 @@ export const useCanvasMedia = ({
         }
     }, [pdfDoc, currentPage, activePlanId, renderPdfPage, rotations, setImage, fitImageToStage]);
 
+    /**
+     * Re-rasterize the current PDF page to match the given zoom, so zooming in
+     * shows real detail instead of a stretched bitmap. Called (debounced) when
+     * the stage scale settles. Only ever upgrades — zooming back out keeps the
+     * sharper bitmap (it downsamples cleanly) — and skips when the sharper
+     * render would gain less than ~25%. Raster image plans are skipped: their
+     * source pixels are all the detail that exists.
+     */
+    const refreshRenderQuality = useCallback(
+        (stageZoom: number) => {
+            if (!pdfDoc || !activePlanId) return;
+            const natural = naturalSizeRef.current;
+            if (!natural) return;
+            const containerWidth = containerRef.current?.offsetWidth ?? 1200;
+            const dpr = window.devicePixelRatio || 1;
+            const rotation = rotations[currentPage] ?? 0;
+
+            const desired = capRenderScale(
+                Math.max(2, (containerWidth / natural.width) * dpr * stageZoom),
+                natural.width,
+                natural.height
+            );
+
+            const key = `${activePlanId}:${currentPage}:${rotation}`;
+            const rendered = renderedScaleRef.current;
+            if (rendered && rendered.key === key && desired <= rendered.scale * 1.25) return;
+
+            void renderPdfPage(pdfDoc, currentPage, activePlanId, rotation, desired).catch(
+                (error) => console.warn("Quality re-render failed:", error)
+            );
+        },
+        [pdfDoc, activePlanId, currentPage, rotations, containerRef, renderPdfPage]
+    );
+
     const hasLoadedPlan = Boolean(image);
     const currentRotation = rotations[currentPage] ?? 0;
 
@@ -744,6 +842,7 @@ export const useCanvasMedia = ({
         handleFileUpload,
         changePage,
         rerenderCurrentPage,
+        refreshRenderQuality,
         refitToView,
         hasLoadedPlan,
         planLoadStatus,
