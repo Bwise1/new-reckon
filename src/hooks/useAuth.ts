@@ -11,7 +11,12 @@ export function useLogin() {
   return useMutation({
     mutationFn: (data: LoginRequest) => authService.login(data),
     onSuccess: (response) => {
-      const { user, token, refreshToken } = response.data;
+      const { user, token, refreshToken, identityToken, accountId } = response.data;
+      // Keep the identity-service token separate from the API token: `token`
+      // authenticates against Reckon Bill, `identityToken` against accounts
+      // (logout, /me). Only present when logging in via the accounts service.
+      if (identityToken) localStorage.setItem('identityToken', identityToken);
+      if (accountId) localStorage.setItem('accountId', accountId);
       setAuth(user, token, refreshToken);
       navigate('/dashboard');
     },

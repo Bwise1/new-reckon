@@ -8,8 +8,13 @@ export interface User {
 export interface AuthResponse {
   data: {
     user: User;
+    /** Token for Reckon Bill's API. */
     token: string;
     refreshToken: string;
+    /** Identity-service token, present only when logging in via accounts. */
+    identityToken?: string;
+    /** Account id in the identity service, present only via accounts. */
+    accountId?: string;
   };
 }
 
