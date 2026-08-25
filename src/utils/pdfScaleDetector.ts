@@ -70,3 +70,26 @@ export async function detectDrawingScale(
  */
 export const ratioToPxPerMeter = (ratio: number, displayScale: number): number =>
   (1000 / ratio) * (72 / 25.4) * displayScale;
+
+/** Inverse of ratioToPxPerMeter: calibration (display px per meter) back to
+ *  the paper ratio N of 1:N. Only meaningful for PDFs, where displayScale ties
+ *  bitmap px to true physical points. */
+export const pxPerMeterToRatio = (pxPerMeter: number, displayScale: number): number =>
+  (1000 * 72 * displayScale) / (25.4 * pxPerMeter);
+
+/** Architect/engineer scales a sheet is plausibly drawn at. */
+const STANDARD_RATIOS = [
+  1, 2, 5, 10, 20, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500, 750, 1000, 1250, 2000,
+];
+
+/**
+ * Snap a derived ratio to the nearest standard drawing scale when it is within
+ * tolerance (default 2.5% — hand calibration is never exact). Returns the raw
+ * rounded ratio otherwise, so an unusual-but-real scale still shows truthfully.
+ */
+export const snapToStandardRatio = (ratio: number, tolerance = 0.025): number => {
+  for (const std of STANDARD_RATIOS) {
+    if (Math.abs(ratio - std) / std <= tolerance) return std;
+  }
+  return Math.round(ratio);
+};

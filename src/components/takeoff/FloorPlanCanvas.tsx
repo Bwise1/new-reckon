@@ -3560,6 +3560,11 @@ if (!prev && activeTool) {
         autoScrollEnabled={autoScrollEnabled}
         onToggleAutoScroll={handleToggleAutoScroll}
         mousePos={mousePos}
+        pdfSpaceScale={
+          pdfDisplaySize && pdfNaturalSize && pdfNaturalSize.width > 0
+            ? pdfDisplaySize.width / pdfNaturalSize.width
+            : null
+        }
       />
       {(() => {
         // Slim status pill — top-center of viewport. Only appears when a

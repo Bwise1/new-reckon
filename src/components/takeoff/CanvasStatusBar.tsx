@@ -9,6 +9,7 @@ import {
   Maximize2,
 } from "lucide-react";
 import type { Point } from "@/types/takeoff";
+import { pxPerMeterToRatio, snapToStandardRatio } from "@/utils/pdfScaleDetector";
 
 interface CanvasStatusBarProps {
   numPages: number;
@@ -24,6 +25,9 @@ interface CanvasStatusBarProps {
   onToggleAutoScroll: () => void;
   /** Cursor position in display-bitmap px (image space), or null when outside. */
   mousePos: Point | null;
+  /** Display-bitmap px per PDF pt for the current page; null for raster plans.
+   *  Lets the bar translate the calibration into a true paper ratio (1:100). */
+  pdfSpaceScale?: number | null;
 }
 
 /** zz-style compact toggle chip: `Label : On`. */
@@ -66,7 +70,16 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
   autoScrollEnabled,
   onToggleAutoScroll,
   mousePos,
+  pdfSpaceScale,
 }) => {
+  // PDFs carry their physical size (pt = 1/72"), so the calibration can be
+  // read back as the drawing's paper scale and snapped to standard ratios.
+  // Rasters have no trustworthy physical size - show a plain scaled state.
+  const scaleText = !currentScale
+    ? "Not Scaled"
+    : pdfSpaceScale && pdfSpaceScale > 0
+      ? `Scale: 1:${snapToStandardRatio(pxPerMeterToRatio(currentScale, pdfSpaceScale))}`
+      : "Scaled";
   const cursorText = mousePos
     ? currentScale && currentScale > 0
       ? `X: ${(mousePos.x / currentScale).toFixed(2)}m, Y: ${(mousePos.y / currentScale).toFixed(2)}m`
@@ -122,7 +135,9 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
         ) : (
           <AlertCircle className="h-3 w-3" />
         )}
-        {currentScale ? `Scale: 1:${currentScale.toFixed(1)}` : "Not Scaled"}
+        <span title={currentScale ? `1m = ${currentScale.toFixed(1)}px` : undefined}>
+          {scaleText}
+        </span>
       </span>
 
       <span className="flex-1" />
