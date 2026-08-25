@@ -95,7 +95,6 @@ export const useCanvasMedia = ({
             // regardless of the render quality scale factor. For raster images, img.width
             // is the correct natural size already (no high-res overscaling).
             const refWidth = naturalSize?.width ?? img.width;
-            const refHeight = naturalSize?.height ?? img.height;
 
             // imageScale stays width-based and MUST NOT change with fit mode —
             // all stored measurement points are in image-pixel space and every
@@ -105,9 +104,16 @@ export const useCanvasMedia = ({
             const scaleFactor = containerWidth / refWidth;
             setImageScale(scaleFactor);
 
-            // The stage (unzoomed) is the plan drawn at imageScale.
-            const baseStageWidth = containerWidth;
-            const baseStageHeight = refHeight * scaleFactor;
+            // The sheet (unzoomed plan footprint) is the BITMAP drawn at
+            // imageScale — not the container width. For PDFs the bitmap is
+            // rendered at >=2x the natural page size while imageScale is
+            // natural-based, so the display footprint is renderScale x the
+            // container; stored measurement points live in bitmap space, which
+            // makes that footprint part of the data model. Sizing the sheet
+            // from refWidth here made it half the plan and the fit "not fit".
+            // For raster images bitmap == natural and nothing changes.
+            const baseStageWidth = img.width * scaleFactor;
+            const baseStageHeight = img.height * scaleFactor;
             setStageSize({
                 width: baseStageWidth,
                 height: baseStageHeight,
@@ -118,7 +124,10 @@ export const useCanvasMedia = ({
                 fittedRef.current.add(fitKey);
 
                 const mode = getCanvasFitMode();
-                let initialScale = 1;
+                // Width-fit: sheet width == container width. For raster plans
+                // this is 1 (legacy); for PDFs it corrects the legacy behavior
+                // of showing the sheet at renderScale x the pane width.
+                let initialScale = baseStageWidth > 0 ? containerWidth / baseStageWidth : 1;
                 const isPageFit = mode === "page" && baseStageHeight > 0 && containerHeight > 0;
                 if (isPageFit) {
                     // Fit-page: scale so the whole plan fits the box, limited by
@@ -565,12 +574,13 @@ export const useCanvasMedia = ({
             if (containerWidth <= 0) return;
             const natural = naturalSizeRef.current;
             const refWidth = natural?.width ?? image.width;
-            const refHeight = natural?.height ?? image.height;
             const scaleFactor = containerWidth / refWidth;
             setImageScale(scaleFactor);
+            // Same bitmap-based footprint as fitImageToStage: the sheet must
+            // track the displayed image, not the container.
             setStageSize({
-                width: containerWidth,
-                height: refHeight * scaleFactor,
+                width: image.width * scaleFactor,
+                height: image.height * scaleFactor,
             });
         });
         observer.observe(containerRef.current);
