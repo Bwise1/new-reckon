@@ -23,6 +23,15 @@ const FIT_PAGE_MARGIN = 0.95;
 // 8192 px per side stays under every browser's canvas dimension cap.
 const MAX_RENDER_PIXELS = 33_500_000;
 const MAX_RENDER_DIM = 8192;
+
+// v2 coordinate space: the base raster is a fixed DPI of the physical sheet,
+// capped on the longest edge - identical on every device and window size, so
+// stored points can never drift across devices. (v1/legacy pages keep the old
+// container-relative formula because their stored points live in that space.)
+const RENDER_V2_DPI = 300;
+const RENDER_V2_MAX_EDGE = 7200;
+const v2DisplayScale = (naturalW: number, naturalH: number) =>
+    Math.min(RENDER_V2_DPI / 72, RENDER_V2_MAX_EDGE / Math.max(naturalW, naturalH));
 const capRenderScale = (scale: number, w: number, h: number) =>
     Math.min(scale, Math.sqrt(MAX_RENDER_PIXELS / (w * h)), MAX_RENDER_DIM / Math.max(w, h));
 
@@ -237,12 +246,18 @@ export const useCanvasMedia = ({
             // bitmap-pixel space, so the footprint is part of the data model.
             const key = `${planId ?? "?"}:${pageNum}:${rotation}`;
             if (displayScaleRef.current?.key !== key) {
+                const planMeta = planId
+                    ? useTakeoffStore.getState().plans.find((pl) => pl.id === planId)
+                    : undefined;
+                const isV2 = (planMeta?.renderVersion ?? 1) >= 2;
                 displayScaleRef.current = {
                     key,
-                    scale: Math.min(
-                        4,
-                        Math.max(2, (containerWidth / baseViewport.width) * dpr)
-                    ),
+                    scale: isV2
+                        ? v2DisplayScale(baseViewport.width, baseViewport.height)
+                        : Math.min(
+                              4,
+                              Math.max(2, (containerWidth / baseViewport.width) * dpr)
+                          ),
                 };
             }
             const displayScale = displayScaleRef.current.scale;

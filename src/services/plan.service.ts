@@ -13,6 +13,7 @@ export interface ProjectPlan {
   page_count: number;
   sort_order: number;
   discipline?: string | null;
+  render_version?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -44,6 +45,8 @@ export const planService = {
     formData.append('page_count', String(pageCount));
     formData.append('sort_order', String(sortOrder));
     if (discipline) formData.append('discipline', discipline);
+    // New uploads always use the v2 (document-DPI) coordinate space.
+    formData.append('render_version', '2');
     return apiClient.postForm<{ data: { plan: ProjectPlan } }>(
       `/projects/${projectId}/plans`,
       formData

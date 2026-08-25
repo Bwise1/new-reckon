@@ -549,6 +549,9 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       pageCount: meta?.pageCount ?? 1,
       sortOrder: state.plans.length,
       discipline: meta?.discipline,
+      // Locally-created plans always use the v2 (document-DPI) space; the
+      // server stores the same via render_version=2 on upload.
+      renderVersion: 2,
     };
     const fresh = emptyPlanDocumentState();
 

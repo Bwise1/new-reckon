@@ -60,6 +60,10 @@ export interface ProjectPlan {
   pageCount: number;
   sortOrder: number;
   discipline?: PlanDiscipline;
+  /** Coordinate-space version for stored measurements. 1 (or absent) = legacy
+   *  container-relative raster scale; 2 = fixed document-DPI raster scale.
+   *  Set at upload and immutable after — changing it would rescale points. */
+  renderVersion?: number;
 }
 
 export interface TakeoffItem {

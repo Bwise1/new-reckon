@@ -27,6 +27,7 @@ export const mapApiPlanToClient = (api: ApiProjectPlan): ProjectPlan => {
     pageCount: api.page_count ?? 1,
     sortOrder: api.sort_order ?? 0,
     discipline: coerceDiscipline(api.discipline),
+    renderVersion: api.render_version ?? 1,
   };
 };
 
