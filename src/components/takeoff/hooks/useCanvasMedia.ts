@@ -121,6 +121,26 @@ export const useCanvasMedia = ({
     // therefore NEVER change for a given page — quality re-renders draw
     // sharper pixels INTO this fixed box, they do not resize it.
     const displayScaleRef = useRef<{ key: string; scale: number } | null>(null);
+    // Hi-res region patch: a crop of the current page re-rasterized at the
+    // zoomed resolution, drawn over the base bitmap. Coordinates are in
+    // display-bitmap px (the same space as pdfDisplaySize and stored points).
+    const regionGenRef = useRef(0);
+    const regionUrlRef = useRef<string | null>(null);
+    const [regionPatch, setRegionPatch] = useState<{
+        image: HTMLImageElement;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    } | null>(null);
+    const clearRegionPatch = useCallback(() => {
+        regionGenRef.current += 1;
+        if (regionUrlRef.current) {
+            URL.revokeObjectURL(regionUrlRef.current);
+            regionUrlRef.current = null;
+        }
+        setRegionPatch(null);
+    }, []);
     // Pixel box the PDF bitmap is drawn into (natural x displayScale) —
     // passed to the Konva image node so a higher-resolution bitmap cannot
     // grow the plan under existing measurements.
@@ -224,10 +244,10 @@ export const useCanvasMedia = ({
             pdf: pdfjsLib.PDFDocumentProxy,
             pageNum: number,
             planId?: string,
-            rotation = 0,
-            qualityScale?: number
+            rotation = 0
         ) => {
             const gen = ++renderGenRef.current;
+            clearRegionPatch();
             const page = await pdf.getPage(pageNum);
 
             // Determine how many pixels wide the container is right now so we
@@ -262,15 +282,12 @@ export const useCanvasMedia = ({
             }
             const displayScale = displayScaleRef.current.scale;
 
-            // First paint renders at the footprint scale (exactly the legacy
-            // behaviour). Zooming passes a larger qualityScale via
-            // refreshRenderQuality: the page is re-rasterized sharper, but the
-            // Konva node pins it to the SAME footprint (pdfDisplaySize), so
-            // detail improves while nothing moves. The pixel budget caps the
-            // canvas so big plans can't blow memory.
-            const requested = qualityScale ?? displayScale;
+            // The base bitmap renders once, at the footprint scale. Zoom detail
+            // comes from refreshRegionPatch, which re-rasterizes only the
+            // visible crop and overlays it - the base never re-renders, so
+            // nothing can move and memory stays flat.
             const scale = capRenderScale(
-                Math.max(2, requested),
+                displayScale,
                 baseViewport.width,
                 baseViewport.height
             );
@@ -340,7 +357,7 @@ export const useCanvasMedia = ({
             });
             renderedScaleRef.current = { key, scale };
         },
-        [containerRef, fitImageToStage, setImage]
+        [containerRef, fitImageToStage, setImage, clearRegionPatch]
     );
 
     const uploadPlanToCloud = useCallback(
@@ -875,37 +892,129 @@ export const useCanvasMedia = ({
     }, [pdfDoc, currentPage, activePlanId, renderPdfPage, rotations, setImage, fitImageToStage]);
 
     /**
-     * Re-rasterize the current PDF page to match the given zoom, so zooming in
-     * shows real detail instead of a stretched bitmap. Called (debounced) when
-     * the stage scale settles. Only ever upgrades — zooming back out keeps the
-     * sharper bitmap (it downsamples cleanly) — and skips when the sharper
-     * render would gain less than ~25%. Raster image plans are skipped: their
-     * source pixels are all the detail that exists.
+     * Re-rasterize only the VISIBLE crop of the current PDF page at the zoomed
+     * resolution and overlay it on the base bitmap (regionPatch). Called
+     * (debounced) when zoom/pan settle. The base bitmap never re-renders, so a
+     * deep zoom costs ~1-2 MP instead of a full-page 30+ MP re-render. Raster
+     * image plans are skipped: their source pixels are all the detail there is.
      */
-    const refreshRenderQuality = useCallback(
-        (stageZoom: number) => {
-            if (!pdfDoc || !activePlanId) return;
+    const refreshRegionPatch = useCallback(
+        async (stageZoom: number, stagePosNow: { x: number; y: number }) => {
+            const container = containerRef.current;
+            if (!pdfDoc || !activePlanId || !container) return;
             const natural = naturalSizeRef.current;
-            if (!natural) return;
-            const containerWidth = containerRef.current?.offsetWidth ?? 1200;
-            const dpr = window.devicePixelRatio || 1;
+            const dispEntry = displayScaleRef.current;
+            if (!natural || !dispEntry) return;
             const rotation = rotations[currentPage] ?? 0;
+            // Ignore calls that race a page/rotation change.
+            if (dispEntry.key !== `${activePlanId}:${currentPage}:${rotation}`) return;
 
-            const desired = capRenderScale(
-                Math.max(2, (containerWidth / natural.width) * dpr * stageZoom),
-                natural.width,
-                natural.height
+            const displayScale = dispEntry.scale;
+            const dpr = window.devicePixelRatio || 1;
+            const viewW = container.offsetWidth;
+            const viewH = container.offsetHeight;
+            if (viewW <= 0 || viewH <= 0) return;
+            const imageScaleNow = viewW / natural.width;
+
+            // Device pixels per display-bitmap pixel: <= ~1 means the base
+            // bitmap already out-resolves the screen - no patch needed.
+            const devicePerDisplay = imageScaleNow * stageZoom * dpr;
+            if (devicePerDisplay <= 1.15) {
+                clearRegionPatch();
+                return;
+            }
+
+            // Visible window in display-bitmap px, padded 15% so small pans
+            // don't immediately fall off the sharp region.
+            const dispW = natural.width * displayScale;
+            const dispH = natural.height * displayScale;
+            const denom = stageZoom * imageScaleNow;
+            const x0 = Math.max(0, -stagePosNow.x / denom);
+            const y0 = Math.max(0, -stagePosNow.y / denom);
+            const x1 = Math.min(dispW, (viewW - stagePosNow.x) / denom);
+            const y1 = Math.min(dispH, (viewH - stagePosNow.y) / denom);
+            if (x1 <= x0 || y1 <= y0) {
+                clearRegionPatch();
+                return;
+            }
+            const padX = (x1 - x0) * 0.15;
+            const padY = (y1 - y0) * 0.15;
+            const rx0 = Math.max(0, x0 - padX);
+            const ry0 = Math.max(0, y0 - padY);
+            const rx1 = Math.min(dispW, x1 + padX);
+            const ry1 = Math.min(dispH, y1 + padY);
+
+            // Natural-pt -> rendered-px scale for the patch: enough for the
+            // screen, capped by a pixel budget and a sanity multiple.
+            const regionPtW = (rx1 - rx0) / displayScale;
+            const regionPtH = (ry1 - ry0) / displayScale;
+            let renderScale = displayScale * devicePerDisplay;
+            renderScale = Math.min(renderScale, displayScale * 8);
+            renderScale = Math.min(
+                renderScale,
+                Math.sqrt(12_000_000 / Math.max(1, regionPtW * regionPtH))
             );
+            if (renderScale <= displayScale * 1.1) {
+                clearRegionPatch();
+                return;
+            }
 
-            const key = `${activePlanId}:${currentPage}:${rotation}`;
-            const rendered = renderedScaleRef.current;
-            if (rendered && rendered.key === key && desired <= rendered.scale * 1.25) return;
+            const gen = ++regionGenRef.current;
+            try {
+                const page = await pdfDoc.getPage(currentPage);
+                if (gen !== regionGenRef.current) return;
+                const viewport = page.getViewport({ scale: renderScale, rotation });
+                const canvas = document.createElement("canvas");
+                canvas.width = Math.max(1, Math.round(regionPtW * renderScale));
+                canvas.height = Math.max(1, Math.round(regionPtH * renderScale));
+                const ctx = canvas.getContext("2d", { alpha: false });
+                if (!ctx) return;
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = "high";
+                await page.render({
+                    canvasContext: ctx,
+                    viewport,
+                    canvas,
+                    // Shift the page so the crop starts at the canvas origin.
+                    transform: [
+                        1, 0, 0, 1,
+                        -(rx0 / displayScale) * renderScale,
+                        -(ry0 / displayScale) * renderScale,
+                    ],
+                }).promise;
+                if (gen !== regionGenRef.current) return;
 
-            void renderPdfPage(pdfDoc, currentPage, activePlanId, rotation, desired).catch(
-                (error) => console.warn("Quality re-render failed:", error)
-            );
+                const blob = await new Promise<Blob | null>((resolve) =>
+                    canvas.toBlob(resolve, "image/jpeg", 0.92)
+                );
+                if (!blob || gen !== regionGenRef.current) return;
+                const url = URL.createObjectURL(blob);
+                const img = new window.Image();
+                img.src = url;
+                await new Promise<void>((resolve, reject) => {
+                    img.onload = () => resolve();
+                    img.onerror = () => reject(new Error("region patch decode failed"));
+                });
+                if (gen !== regionGenRef.current) {
+                    URL.revokeObjectURL(url);
+                    return;
+                }
+                if (regionUrlRef.current) URL.revokeObjectURL(regionUrlRef.current);
+                regionUrlRef.current = url;
+                setRegionPatch({
+                    image: img,
+                    x: rx0,
+                    y: ry0,
+                    width: rx1 - rx0,
+                    height: ry1 - ry0,
+                });
+            } catch (error) {
+                console.warn("Region patch render failed:", error);
+            }
         },
-        [pdfDoc, activePlanId, currentPage, rotations, containerRef, renderPdfPage]
+        [pdfDoc, activePlanId, currentPage, rotations, containerRef, clearRegionPatch]
     );
 
     const hasLoadedPlan = Boolean(image);
@@ -915,7 +1024,8 @@ export const useCanvasMedia = ({
         handleFileUpload,
         changePage,
         rerenderCurrentPage,
-        refreshRenderQuality,
+        refreshRegionPatch,
+        regionPatch,
         refitToView,
         hasLoadedPlan,
         planLoadStatus,

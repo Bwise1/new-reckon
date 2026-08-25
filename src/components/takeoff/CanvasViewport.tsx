@@ -17,6 +17,15 @@ interface CanvasViewportProps {
    *  bitmap's own resolution — a sharper re-render keeps the same box.
    *  null/undefined (raster plans) falls back to the image's natural size. */
   imageDisplaySize?: { width: number; height: number } | null;
+  /** Hi-res crop of the plan overlaid on the base bitmap while zoomed in.
+   *  Coordinates/size are in display-bitmap px (same space as imageDisplaySize). */
+  regionPatch?: {
+    image: HTMLImageElement;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null;
   onStageClick: (e: Konva.KonvaEventObject<MouseEvent>) => void;
   onStageDblClick: () => void;
   onStageMouseMove: (e: Konva.KonvaEventObject<MouseEvent>) => void;
@@ -41,6 +50,7 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
   image,
   imageScale,
   imageDisplaySize,
+  regionPatch,
   onStageClick,
   onStageDblClick,
   onStageMouseMove,
@@ -118,6 +128,17 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
               scaleY={imageScale}
               width={imageDisplaySize?.width}
               height={imageDisplaySize?.height}
+            />
+          )}
+          {image && regionPatch && (
+            <KonvaImage
+              image={regionPatch.image}
+              x={regionPatch.x * imageScale}
+              y={regionPatch.y * imageScale}
+              scaleX={imageScale}
+              scaleY={imageScale}
+              width={regionPatch.width}
+              height={regionPatch.height}
             />
           )}
         </Layer>

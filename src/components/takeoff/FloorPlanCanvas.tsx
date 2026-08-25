@@ -292,7 +292,7 @@ if (!prev && activeTool) {
   const rotateAllPages = useTakeoffStore((s) => s.rotateAllPages);
   const activeRealWidthLive = useTakeoffStore((s) => s.activeRealWidth);
 
-  const { handleFileUpload, changePage, rerenderCurrentPage, refreshRenderQuality, refitToView, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfDisplaySize, pdfSegmentIndexRef } =
+  const { handleFileUpload, changePage, rerenderCurrentPage, refreshRegionPatch, regionPatch, refitToView, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfDisplaySize, pdfSegmentIndexRef } =
     useCanvasMedia({
     containerRef,
     backgroundImage,
@@ -321,9 +321,11 @@ if (!prev && activeTool) {
   // plan snapping into focus. This is what keeps plans crisp at high zoom
   // instead of stretching one fixed-resolution render.
   useEffect(() => {
-    const timer = window.setTimeout(() => refreshRenderQuality(stageScale), 300);
+    const timer = window.setTimeout(() => {
+      void refreshRegionPatch(stageScale, stagePos);
+    }, 300);
     return () => window.clearTimeout(timer);
-  }, [stageScale, refreshRenderQuality]);
+  }, [stageScale, stagePos, refreshRegionPatch]);
 
   useEffect(() => {
     onPlanLoadStatusChange?.(planLoadStatus);
@@ -2037,6 +2039,7 @@ if (!prev && activeTool) {
         image={image}
         imageScale={imageScale}
         imageDisplaySize={pdfDisplaySize}
+        regionPatch={regionPatch}
         onStageClick={handleStageClick}
         onStageDblClick={handleDblClick}
         onStageMouseMove={handleMouseMove}
