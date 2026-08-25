@@ -5,7 +5,6 @@ import EstimationCard from "./EstimationCard";
 import BillsOverview from "./BillsOverview";
 import { ArrowLeft } from "lucide-react";
 import BoqExportModal from "./BoqExportModal";
-import SyncStatusBadge from "@/components/ui/SyncStatusBadge";
 import { useShallow } from "zustand/react/shallow";
 import { useTakeoffStore } from "@/store/useTakeoffStore";
 import { useAuthStore } from "@/stores/auth.store";
@@ -176,9 +175,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
           <FiUser className="text-secondary text-xl" />
         </div>
 
-        <div className="flex-1 min-w-0 flex justify-center">
-          <SyncStatusBadge />
-        </div>
+        <span className="flex-1" />
 
         <button
           type="button"

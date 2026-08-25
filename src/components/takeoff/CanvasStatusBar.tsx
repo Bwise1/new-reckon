@@ -4,10 +4,13 @@ import {
   ChevronRight,
   Check,
   AlertCircle,
+  Loader2,
+  WifiOff,
   ZoomIn,
   ZoomOut,
   Maximize2,
 } from "lucide-react";
+import { useSyncStatus } from "@/hooks/useSyncStatus";
 import type { Point } from "@/types/takeoff";
 
 interface CanvasStatusBarProps {
@@ -48,6 +51,33 @@ const ToggleChip: React.FC<{
 );
 
 const Divider: React.FC = () => <span className="h-3 w-px bg-gray-200" />;
+
+/** Inline sync state for the status strip: Synced / Syncing (n) / Offline. */
+const SyncSegment: React.FC = () => {
+  const { isOnline, pendingCount } = useSyncStatus();
+  if (!isOnline) {
+    return (
+      <span className="inline-flex items-center gap-1 text-red-500">
+        <WifiOff className="h-3 w-3" />
+        Offline{pendingCount > 0 ? ` (${pendingCount})` : ""}
+      </span>
+    );
+  }
+  if (pendingCount > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-amber-600">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Syncing ({pendingCount})
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-green-700">
+      <Check className="h-3 w-3" strokeWidth={2.5} />
+      Synced
+    </span>
+  );
+};
 
 /**
  * Thin technical status strip under the canvas: page navigation, plan name,
@@ -125,6 +155,9 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
         )}
         {scaleText}
       </span>
+
+      <Divider />
+      <SyncSegment />
 
       <span className="flex-1" />
 
