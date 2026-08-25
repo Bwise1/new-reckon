@@ -356,6 +356,73 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
    * store BOQ (relative to `before`), and enqueue them. Called at the end of
    * every BOQ mutation. See docs/sync-rebuild.md and entitySyncMapper.
    */
+  /**
+   * Refresh the live takeoff input after a session measurement's quantity
+   * changes outside addMeasurement (deduction added/removed, count updated).
+   * pendingValue is a snapshot taken when the measurement was drawn, so
+   * without this the input keeps showing the stale figure. Recomputes the
+   * session total from current quantities — which also makes undo
+   * self-correcting: rerun after restore and it lands on the old total.
+   */
+  const refreshPendingSessionTotal = (measurementId: string) => {
+    const sumFor = (ids: string[]) => {
+      let total = 0;
+      const allItems = get().takeoffItems;
+      for (const mid of ids) {
+        for (const ti of allItems) {
+          const m = ti.measurements.find((mm) => mm.id === mid);
+          if (m) {
+            total += Math.abs(m.quantity);
+            break;
+          }
+        }
+      }
+      return total;
+    };
+
+    // Live session: the input shows boqTargeting.pendingValue.
+    const target = get().boqTargeting;
+    if (target && target.pendingMeasurementIds.includes(measurementId)) {
+      const newTotal = sumFor(target.pendingMeasurementIds);
+      if (newTotal !== target.pendingTotal) {
+        set((state) =>
+          state.boqTargeting
+            ? {
+                boqTargeting: {
+                  ...state.boqTargeting,
+                  pendingTotal: newTotal,
+                  pendingValue: newTotal.toFixed(2),
+                },
+              }
+            : state
+        );
+      }
+    }
+
+    // Stashed session: after Exit/Escape the staged value lives in
+    // pendingCommit.value and the input shows THAT (see EstimationCard's
+    // pendingMeasuredValue). Deducting from an area in this state is common —
+    // finish measuring, then punch holes — so refresh it too, or the input
+    // keeps the pre-deduction figure even though the measurement changed.
+    const stashed = get().pendingCommit;
+    if (stashed && stashed.measurementIds.includes(measurementId)) {
+      const newTotal = sumFor(stashed.measurementIds);
+      if (newTotal !== stashed.total) {
+        set((state) =>
+          state.pendingCommit
+            ? {
+                pendingCommit: {
+                  ...state.pendingCommit,
+                  total: newTotal,
+                  value: newTotal.toFixed(2),
+                },
+              }
+            : state
+        );
+      }
+    }
+  };
+
   const enqueueBoqOpsFromDiff = (before: BoqElementData[]) => {
     const projectId = get().currentProjectId;
     if (!projectId) return;
@@ -1498,39 +1565,8 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       pageScale && pageScale > 0 ? pixelArea / (pageScale * pageScale) : pixelArea;
     const quantityDelta = nextQuantity - previousQuantity;
 
-    // A BOQ history chip that MIRRORS this measurement (sourceMeasurementId set)
-    // and whose value is still the plain drawn number — not a hand-edited
-    // expression or a grouped session — should follow the measurement's
-    // quantity when a deduction changes it. Otherwise the takeoff box keeps
-    // showing the pre-deduction figure while history updates (the reported bug).
-    // Edited/grouped chips are left alone: their value is no longer a simple
-    // mirror, so overwriting it would corrupt user input.
-    const mirrorsQuantity = (value: string, qty: number) => {
-      const trimmed = value.trim();
-      if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return false; // not a plain number
-      return Math.abs(parseFloat(trimmed) - qty) < 0.005; // matches to 2dp
-    };
-    // expectedCurrent = the quantity the chip should currently be showing;
-    // newQty = what to rewrite it to. Parameterized so undo is symmetric with
-    // execute (execute: old→new, undo: new→old).
-    const rewriteLinkedHistory = (elements: BoqElementData[], expectedCurrent: number, newQty: number) =>
-      elements.map((el) => ({
-        ...el,
-        items: el.items.map((it) => ({
-          ...it,
-          history: it.history.map((h) =>
-            h.sourceMeasurementId === measurementId &&
-            !h.groupId &&
-            mirrorsQuantity(h.value, expectedCurrent)
-              ? { ...h, value: newQty.toFixed(2) }
-              : h
-          ),
-        })),
-      }));
-
     const applyDeductions = (deductions: Point[][], quantity: number) => {
       set((current) => ({
-        boqElements: rewriteLinkedHistory(current.boqElements, previousQuantity, quantity),
         takeoffItems: current.takeoffItems.map((ti) => {
           if (ti.id !== itemId) return ti;
           const nextMeasurements = ti.measurements.map((m) =>
@@ -1570,10 +1606,12 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     };
 
     executeCommand({
-      execute: () => applyDeductions(nextDeductions, nextQuantity),
+      execute: () => {
+        applyDeductions(nextDeductions, nextQuantity);
+        refreshPendingSessionTotal(measurementId);
+      },
       undo: () => {
         set((current) => ({
-          boqElements: rewriteLinkedHistory(current.boqElements, nextQuantity, previousQuantity),
           takeoffItems: current.takeoffItems.map((ti) => {
             if (ti.id !== itemId) return ti;
             const nextMeasurements = ti.measurements.map((m) =>
@@ -1601,6 +1639,9 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
             },
           });
         }
+        // Quantities are restored above; recomputing lands the takeoff input
+        // back on the pre-deduction total.
+        refreshPendingSessionTotal(measurementId);
       },
       description: 'Add deduction',
     });
@@ -1656,6 +1697,9 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         }));
         get().triggerAutoSave();
         enqueueDeductionsSync(nextDeductions, nextQuantity);
+        // Removing a deduction raises the quantity back; keep the live
+        // takeoff input in step (same refresh as adding a deduction).
+        refreshPendingSessionTotal(measurementId);
       },
       undo: () => {
         set((current) => ({
@@ -1675,6 +1719,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         }));
         get().triggerAutoSave();
         enqueueDeductionsSync(prevDeductions, previousQuantity);
+        refreshPendingSessionTotal(measurementId);
       },
       description: 'Remove deduction',
     });
@@ -2018,7 +2063,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     if (!element) return;
 
     // Deleting the LAST item in an element removes the whole (now-empty)
-    // element — but never the final element, so the BOQ always has at least
+    // element — but never the final element, so the BOQ always keeps at least
     // one element with one item to work in.
     const isLastItemInElement = element.items.length <= 1;
     const isLastElement = state.boqElements.length <= 1;
@@ -2029,22 +2074,16 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       items: [...el.items],
     }));
 
-    const apply = (current: { boqElements: BoqElementData[] }) => {
-      if (isLastItemInElement) {
-        // Drop the element entirely.
-        return {
-          boqElements: current.boqElements.filter((el) => el.id !== elementId),
-        };
-      }
-      // Otherwise just remove the one item.
-      return {
-        boqElements: current.boqElements.map((el) =>
-          el.id === elementId
-            ? { ...el, items: el.items.filter((i) => i.id !== itemId) }
-            : el
-        ),
-      };
-    };
+    const apply = (current: { boqElements: BoqElementData[] }) =>
+      isLastItemInElement
+        ? { boqElements: current.boqElements.filter((el) => el.id !== elementId) }
+        : {
+            boqElements: current.boqElements.map((el) =>
+              el.id === elementId
+                ? { ...el, items: el.items.filter((i) => i.id !== itemId) }
+                : el
+            ),
+          };
 
     executeCommand({
       execute: () => {

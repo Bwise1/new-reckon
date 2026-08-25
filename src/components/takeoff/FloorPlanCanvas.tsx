@@ -212,11 +212,18 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   // to activeTool going truthy.
   const prevActiveToolRef = useRef(activeTool);
   useEffect(() => {
-    const became = !prevActiveToolRef.current && !!activeTool;
+    const prev = prevActiveToolRef.current;
     prevActiveToolRef.current = activeTool;
-    if (!became) return;
-    if (isPanningMode) setIsPanningMode(false);
-    if (isSelectMode) setIsSelectMode(false);
+if (!prev && activeTool) {
+      // Tool picked up: pan/select go down (mutual exclusivity).
+      if (isPanningMode) setIsPanningMode(false);
+      if (isSelectMode) setIsSelectMode(false);
+    } else if (prev && !activeTool) {
+      // Tool put down (Done, Escape, or switching BOQ cards mid-draw):
+      // discard any unfinished in-progress points so they can't ghost into
+      // the next measurement when a tool is picked up again.
+      setCurrentPoints([]);
+    }
   }, [activeTool, isPanningMode, setIsPanningMode, isSelectMode, setIsSelectMode]);
 
   const confirm = useConfirm();
@@ -285,7 +292,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   const rotateAllPages = useTakeoffStore((s) => s.rotateAllPages);
   const activeRealWidthLive = useTakeoffStore((s) => s.activeRealWidth);
 
-  const { handleFileUpload, changePage, rerenderCurrentPage, refitToView, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfSegmentIndexRef } =
+  const { handleFileUpload, changePage, rerenderCurrentPage, refreshRenderQuality, refitToView, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfDisplaySize, pdfSegmentIndexRef } =
     useCanvasMedia({
     containerRef,
     backgroundImage,
@@ -306,6 +313,17 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     setNumPages,
     projectId: currentProjectId ?? undefined,
   });
+
+  // Zoom-adaptive sharpness: when the zoom level settles, re-rasterize the
+  // PDF page to match it (debounced so wheel/pinch streams don't thrash the
+  // renderer). Konva keeps showing the old bitmap until the sharper one swaps
+  // in at identical layout coordinates, so there's no visual jump — just the
+  // plan snapping into focus. This is what keeps plans crisp at high zoom
+  // instead of stretching one fixed-resolution render.
+  useEffect(() => {
+    const timer = window.setTimeout(() => refreshRenderQuality(stageScale), 300);
+    return () => window.clearTimeout(timer);
+  }, [stageScale, refreshRenderQuality]);
 
   useEffect(() => {
     onPlanLoadStatusChange?.(planLoadStatus);
@@ -1954,7 +1972,25 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         selectedMeasurementId={selectedMeasurement?.measurementId ?? null}
         onSelectTool={onSelectTool}
         onFinishTool={onFinishTool}
-        onColorChange={onColorChange}
+        onColorChange={(color) => {
+          // Mirror the width control: with a measurement selected, recolor
+          // THAT measurement (per-measurement color overrides the item color
+          // — getMeasurementColor reads m.color ?? item.color, and the sync
+          // diff already ships color changes). With nothing selected, keep
+          // the old behaviour: set the default color for new measurements.
+          if (selectedMeasurement) {
+            const item = takeoffItems.find((i) => i.id === selectedMeasurement.itemId);
+            const m = item?.measurements.find((mm) => mm.id === selectedMeasurement.measurementId);
+            if (item && m) {
+              const updatedMeasurements = item.measurements.map((measurement) =>
+                measurement.id === m.id ? { ...measurement, color } : measurement
+              );
+              updateTakeoffItem(item.id, { measurements: updatedMeasurements });
+              return;
+            }
+          }
+          onColorChange(color);
+        }}
         onRealWidthChange={(w) => {
           if (selectedMeasurement && currentScale && currentScale > 0) {
             const item = takeoffItems.find((i) => i.id === selectedMeasurement.itemId);
@@ -2000,6 +2036,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
         isDraggingObject={isDraggingObject}
         image={image}
         imageScale={imageScale}
+        imageDisplaySize={pdfDisplaySize}
         onStageClick={handleStageClick}
         onStageDblClick={handleDblClick}
         onStageMouseMove={handleMouseMove}
@@ -3457,7 +3494,13 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
                     measurementId: areaContextMenu.measurementId,
                   });
                   setCurrentPoints([]);
-                  onSelectTool("area");
+                  // Set the tool directly — NOT via onSelectTool, which is a
+                  // TOGGLE. When the user is already measuring with the area
+                  // tool (the normal case for a deduction), the toggle turned
+                  // the tool OFF, so the first Deduct click deactivated
+                  // measuring and a second right-click → Deduct was needed to
+                  // toggle it back on. setActiveTool is idempotent.
+                  setActiveTool("area");
                   setAreaContextMenu(null);
                 }}
                 className="w-full text-left px-3 py-1.5 hover:bg-gray-100 cursor-pointer"

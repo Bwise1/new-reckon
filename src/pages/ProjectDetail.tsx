@@ -129,19 +129,19 @@ const ProjectDetail = () => {
     [activeTool, setActiveTool, focusedBoqCard, boqTargeting, startBoqTargeting]
   );
 
-  // Keep measurement targeting following whichever BOQ card the user has
-  // focused, but ONLY while a drawing tool is already active — clicking
-  // into a card's Takeoff field on its own must not start measuring mode;
-  // that only begins when a measuring tool (Linear/Area/Count) is picked
-  // (see handleSelectTool above). This effect just makes switching cards
-  // mid-measurement retarget to the newly focused card instead of staying
-  // bound to whichever card was targeted first.
+  // Clicking a DIFFERENT card's takeoff box mid-measurement puts the tool
+  // DOWN instead of silently retargeting the session. The old behaviour
+  // (retarget to the newly focused card) made it too easy to keep drawing
+  // into the wrong item without noticing. Now the session ends — any staged
+  // value is stashed for the card it belongs to via exitBoqTargeting, so
+  // nothing is lost — and measuring the new card begins only when the user
+  // deliberately picks a tool again, which auto-targets the freshly focused
+  // card (see handleSelectTool above).
   //
   // Only reacts to focusedBoqCard actually CHANGING (a real click on a
   // different card) — not to boqTargeting changing on its own. Otherwise
   // Exit/Escape (which clear boqTargeting but leave focusedBoqCard as-is)
-  // would get immediately undone by this effect re-targeting the same
-  // still-focused card right back.
+  // would interact badly with this effect.
   const lastFocusedBoqCardRef = useRef<typeof focusedBoqCard>(null);
   useEffect(() => {
     const prev = lastFocusedBoqCardRef.current;
@@ -152,8 +152,8 @@ const ProjectDetail = () => {
       prev?.elementId !== focusedBoqCard.elementId ||
       prev?.itemId !== focusedBoqCard.itemId;
     if (!focusChanged) return;
-    if (boqTargeting?.pendingValue) return;
-    startBoqTargeting(focusedBoqCard.elementId, focusedBoqCard.itemId, focusedBoqCard.unit);
+    setActiveTool(null);
+    exitBoqTargeting();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedBoqCard]);
 

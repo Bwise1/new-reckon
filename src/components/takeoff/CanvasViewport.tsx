@@ -12,6 +12,11 @@ interface CanvasViewportProps {
   isDraggingObject: boolean;
   image: HTMLImageElement | null;
   imageScale: number;
+  /** For PDF plans: the fixed pixel box the bitmap is drawn into. Stored
+   *  measurement coords are in this space, so it must not follow the
+   *  bitmap's own resolution — a sharper re-render keeps the same box.
+   *  null/undefined (raster plans) falls back to the image's natural size. */
+  imageDisplaySize?: { width: number; height: number } | null;
   onStageClick: (e: Konva.KonvaEventObject<MouseEvent>) => void;
   onStageDblClick: () => void;
   onStageMouseMove: (e: Konva.KonvaEventObject<MouseEvent>) => void;
@@ -35,6 +40,7 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
   isDraggingObject,
   image,
   imageScale,
+  imageDisplaySize,
   onStageClick,
   onStageDblClick,
   onStageMouseMove,
@@ -92,7 +98,7 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
             The Rect is the SHEET (stageSize = plan aspect box), deliberately
             not the pane: it travels with pan/zoom like paper on a desk. */}
         <Layer listening={false}>
-          {image && (
+{image && (
             <Rect
               x={0}
               y={0}
@@ -105,7 +111,15 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
               shadowOffsetY={2}
             />
           )}
-          {image && <KonvaImage image={image} scaleX={imageScale} scaleY={imageScale} />}
+          {image && (
+            <KonvaImage
+              image={image}
+              scaleX={imageScale}
+              scaleY={imageScale}
+              width={imageDisplaySize?.width}
+              height={imageDisplaySize?.height}
+            />
+          )}
         </Layer>
 
         {/* Layer 2: finalized measurements — points stored in image-pixel space,
