@@ -20,8 +20,6 @@ interface CanvasStatusBarProps {
   stageScale: number;
   setStageScale: (scale: number) => void;
   onFit: () => void;
-  orthoEnabled: boolean;
-  onToggleOrtho: () => void;
   autoScrollEnabled: boolean;
   onToggleAutoScroll: () => void;
   /** Cursor position in display-bitmap px (image space), or null when outside. */
@@ -65,8 +63,6 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
   stageScale,
   setStageScale,
   onFit,
-  orthoEnabled,
-  onToggleOrtho,
   autoScrollEnabled,
   onToggleAutoScroll,
   mousePos,
@@ -126,18 +122,12 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
         ) : (
           <AlertCircle className="h-3 w-3" />
         )}
-        {currentScale ? `Calibrated (1m = ${currentScale.toFixed(1)}px)` : "Not Scaled"}
+        {currentScale ? `Scale: 1:${currentScale.toFixed(1)}` : "Not Scaled"}
       </span>
 
       <span className="flex-1" />
 
       {/* Drafting toggles, zz-style */}
-      <ToggleChip
-        label="Ortho"
-        on={orthoEnabled}
-        onClick={onToggleOrtho}
-        title="Constrain drawing to snapped angles (Shift still works as a hold)"
-      />
       <ToggleChip
         label="Auto Scroll"
         on={autoScrollEnabled}

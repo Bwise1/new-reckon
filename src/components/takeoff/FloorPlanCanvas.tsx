@@ -196,7 +196,9 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   // Drafting toggles, persisted like other canvas prefs. Ortho makes angle
   // snapping permanent (Shift still works as a momentary hold); Auto Scroll
   // pans the sheet when the cursor reaches the pane edge mid-measurement.
-  const [orthoEnabled, setOrthoEnabled] = useState(() => {
+  // Ortho toggle UI removed from the bar for now; Shift-hold still angle-
+  // snaps, and this pref keeps working for anyone who enabled it earlier.
+  const [orthoEnabled] = useState(() => {
     try {
       return localStorage.getItem("reckon_ortho") === "1";
     } catch {
@@ -210,16 +212,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       return true;
     }
   });
-  const handleToggleOrtho = useCallback(() => {
-    setOrthoEnabled((prev) => {
-      try {
-        localStorage.setItem("reckon_ortho", prev ? "0" : "1");
-      } catch {
-        // ignore storage failures
-      }
-      return !prev;
-    });
-  }, []);
   const handleToggleAutoScroll = useCallback(() => {
     setAutoScrollEnabled((prev) => {
       try {
@@ -3565,8 +3557,6 @@ if (!prev && activeTool) {
         stageScale={stageScale}
         setStageScale={setStageScale}
         onFit={() => refitToView(image)}
-        orthoEnabled={orthoEnabled}
-        onToggleOrtho={handleToggleOrtho}
         autoScrollEnabled={autoScrollEnabled}
         onToggleAutoScroll={handleToggleAutoScroll}
         mousePos={mousePos}
