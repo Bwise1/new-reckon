@@ -239,7 +239,8 @@ export const boqElementsFromApiTree = (
 export const boqTreeOpsDiff = (
   projectId: string,
   before: BoqElementData[],
-  after: BoqElementData[]
+  after: BoqElementData[],
+  billId?: string
 ): SyncOp[] => {
   const ops: SyncOp[] = [];
   const beforeElementById = new Map(before.map((el) => [el.id, el]));
@@ -267,7 +268,11 @@ export const boqTreeOpsDiff = (
         kind: 'boq.element.upsert',
         projectId,
         clientUuid: nextEl.id,
-        body: { title: nextEl.title, sort_order: elIdx },
+        body: {
+          title: nextEl.title,
+          sort_order: elIdx,
+          ...(billId ? { bill_client_uuid: billId } : {}),
+        },
       });
     } else if (before.indexOf(prevEl) !== elIdx) {
       // Sort order changed but title didn't — still upsert to bump order.
@@ -275,7 +280,11 @@ export const boqTreeOpsDiff = (
         kind: 'boq.element.upsert',
         projectId,
         clientUuid: nextEl.id,
-        body: { title: nextEl.title, sort_order: elIdx },
+        body: {
+          title: nextEl.title,
+          sort_order: elIdx,
+          ...(billId ? { bill_client_uuid: billId } : {}),
+        },
       });
     }
 
@@ -376,5 +385,6 @@ export const boqTreeOpsDiff = (
  */
 export const boqTreeToUpsertOps = (
   projectId: string,
-  tree: BoqElementData[]
-): SyncOp[] => boqTreeOpsDiff(projectId, [], tree);
+  tree: BoqElementData[],
+  billId?: string
+): SyncOp[] => boqTreeOpsDiff(projectId, [], tree, billId);

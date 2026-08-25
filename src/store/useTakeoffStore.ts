@@ -5,6 +5,7 @@ import type {
   Measurement,
   CalibrationLine,
   EstimationCardData,
+  BoqBillData,
   BoqElementData,
   BoqPricing,
   ProjectPlan,
@@ -76,6 +77,11 @@ interface TakeoffStore {
   deletedPlanIds: string[];
 
   boqElements: BoqElementData[];
+  /** Bills (sheets). boqElements is always the ACTIVE bill's tree; inactive
+   *  bills' trees are stashed in billElements (same pattern as planStates). */
+  bills: BoqBillData[];
+  activeBillId: string | null;
+  billElements: Record<string, BoqElementData[]>;
   pricing: BoqPricing;
 
   /** The BOQ card that currently has focus in the sidebar. Used to auto-start
@@ -147,6 +153,20 @@ interface TakeoffStore {
   // Persistence
   loadProject: (projectId: string) => void;
   triggerAutoSave: () => void;
+  addBill: (name?: string) => void;
+  renameBill: (billId: string, name: string) => void;
+  duplicateBill: (billId: string) => void;
+  deleteBill: (billId: string) => void;
+  switchBill: (billId: string) => void;
+  /** All bills with their element trees (active bill from the working set). */
+  collectBills: () => { id: string; name: string; elements: BoqElementData[] }[];
+  /** Replace the whole bill structure (hydration). */
+  setBillsState: (
+    bills: BoqBillData[],
+    activeBillId: string,
+    billElements: Record<string, BoqElementData[]>,
+    activeElements: BoqElementData[]
+  ) => void;
   selectPlan: (planId: string) => void;
   addPlanFromUpload: (
     name: string,
@@ -317,6 +337,9 @@ const initialState = {
   planStates: {},
   deletedPlanIds: [],
   boqElements: [createEmptyBoqElement(0)],
+  bills: [],
+  activeBillId: null,
+  billElements: {},
   focusedBoqCard: null,
   boqTargeting: null,
   pendingCommit: null,
@@ -427,7 +450,8 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     const projectId = get().currentProjectId;
     if (!projectId) return;
     const after = get().boqElements;
-    for (const op of boqTreeOpsDiff(projectId, before, after)) {
+    const billId = get().activeBillId ?? undefined;
+    for (const op of boqTreeOpsDiff(projectId, before, after, billId)) {
       syncQueue.enqueue(op);
     }
   };
@@ -452,6 +476,25 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
             savedData.boqElements?.length > 0
               ? savedData.boqElements
               : [createEmptyBoqElement(0)],
+          // Legacy saves have no bills — wrap the tree in a default bill.
+          ...(savedData.bills && savedData.bills.length > 0
+            ? {
+                bills: savedData.bills,
+                activeBillId:
+                  savedData.activeBillId &&
+                  savedData.bills.some((b) => b.id === savedData.activeBillId)
+                    ? savedData.activeBillId
+                    : savedData.bills[0].id,
+                billElements: savedData.billElements ?? {},
+              }
+            : (() => {
+                const defaultBill = { id: generateClientId(), name: 'Bill No. 1' };
+                return {
+                  bills: [defaultBill],
+                  activeBillId: defaultBill.id,
+                  billElements: {},
+                };
+              })()),
           pricing: savedData.pricing || { vatRate: 0, contingency: 0 },
           undoStack: [],
           redoStack: [],
@@ -480,6 +523,204 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       }
     },
 
+  addBill: (name) => {
+    const state = get();
+    const projectId = state.currentProjectId;
+    // A project that predates bills has an unowned working set: adopt it as
+    // the first bill before adding, or the current elements would be orphaned.
+    let bills = state.bills;
+    let stashed = state.billElements;
+    if (!state.activeBillId || bills.length === 0) {
+      const firstId = generateClientId();
+      bills = [{ id: firstId, name: 'Bill No. 1' }];
+      stashed = { [firstId]: state.boqElements };
+      if (projectId) {
+        syncQueue.enqueue({
+          kind: 'boq.bill.upsert',
+          projectId,
+          clientUuid: firstId,
+          body: { name: 'Bill No. 1', sort_order: 0 },
+        });
+      }
+    } else {
+      stashed = { ...stashed, [state.activeBillId]: state.boqElements };
+    }
+    const id = generateClientId();
+    const billName = name ?? `Bill No. ${bills.length + 1}`;
+    set({
+      bills: [...bills, { id, name: billName }],
+      billElements: stashed,
+      activeBillId: id,
+      boqElements: [createEmptyBoqElement(0)],
+      focusedBoqCard: null,
+    });
+    if (projectId) {
+      syncQueue.enqueue({
+        kind: 'boq.bill.upsert',
+        projectId,
+        clientUuid: id,
+        body: { name: billName, sort_order: bills.length },
+      });
+    }
+    get().triggerAutoSave();
+  },
+
+  renameBill: (billId, name) => {
+    const state = get();
+    const bill = state.bills.find((b) => b.id === billId);
+    if (!bill || bill.name === name) return;
+    set({
+      bills: state.bills.map((b) => (b.id === billId ? { ...b, name } : b)),
+    });
+    const projectId = state.currentProjectId;
+    if (projectId) {
+      syncQueue.enqueue({
+        kind: 'boq.bill.upsert',
+        projectId,
+        clientUuid: billId,
+        body: { name, sort_order: state.bills.findIndex((b) => b.id === billId) },
+      });
+    }
+    get().triggerAutoSave();
+  },
+
+  duplicateBill: (billId) => {
+    const state = get();
+    const source = state.bills.find((b) => b.id === billId);
+    if (!source) return;
+    const sourceElements =
+      billId === state.activeBillId
+        ? state.boqElements
+        : state.billElements[billId] ?? [];
+    // Fresh ids at every level, mirroring the prototype's cloneBillWithFreshIds.
+    const cloned = sourceElements.map((el) => ({
+      ...el,
+      id: generateClientId(),
+      items: el.items.map((item) => ({
+        ...item,
+        id: generateClientId(),
+        history: item.history.map((h) => ({
+          ...h,
+          id: generateClientId(),
+          // Measurement links must not duplicate — the measurement belongs
+          // to the original item only.
+          sourceMeasurementId: undefined,
+          groupId: undefined,
+        })),
+      })),
+    }));
+    const id = generateClientId();
+    const name = `${source.name} (Copy)`;
+    const stashed = state.activeBillId
+      ? { ...state.billElements, [state.activeBillId]: state.boqElements }
+      : state.billElements;
+    set({
+      bills: [...state.bills, { id, name }],
+      billElements: stashed,
+      activeBillId: id,
+      boqElements: cloned.length > 0 ? cloned : [createEmptyBoqElement(0)],
+      focusedBoqCard: null,
+    });
+    const projectId = state.currentProjectId;
+    if (projectId) {
+      syncQueue.enqueue({
+        kind: 'boq.bill.upsert',
+        projectId,
+        clientUuid: id,
+        body: { name, sort_order: state.bills.length },
+      });
+      for (const op of boqTreeOpsDiff(projectId, [], get().boqElements, id)) {
+        syncQueue.enqueue(op);
+      }
+    }
+    get().triggerAutoSave();
+  },
+
+  deleteBill: (billId) => {
+    const state = get();
+    if (state.bills.length <= 1) return;
+    const idx = state.bills.findIndex((b) => b.id === billId);
+    if (idx === -1) return;
+    const deletedElements =
+      billId === state.activeBillId
+        ? state.boqElements
+        : state.billElements[billId] ?? [];
+    const nextBills = state.bills.filter((b) => b.id !== billId);
+    const nextStash = { ...state.billElements };
+    delete nextStash[billId];
+
+    let nextActive = state.activeBillId;
+    let nextElements = state.boqElements;
+    if (billId === state.activeBillId) {
+      const fallback = nextBills[Math.max(0, idx - 1)];
+      nextActive = fallback.id;
+      nextElements = nextStash[fallback.id] ?? [createEmptyBoqElement(0)];
+      delete nextStash[fallback.id];
+    }
+    set({
+      bills: nextBills,
+      billElements: nextStash,
+      activeBillId: nextActive,
+      boqElements: nextElements,
+      focusedBoqCard: null,
+    });
+    const projectId = state.currentProjectId;
+    if (projectId) {
+      // Explicit element deletes first (also covered server-side by cascade).
+      for (const el of deletedElements) {
+        syncQueue.enqueue({ kind: 'boq.element.delete', projectId, clientUuid: el.id });
+      }
+      syncQueue.enqueue({ kind: 'boq.bill.delete', projectId, clientUuid: billId });
+    }
+    get().triggerAutoSave();
+  },
+
+  switchBill: (billId) => {
+    const state = get();
+    if (billId === state.activeBillId) return;
+    if (!state.bills.some((b) => b.id === billId)) return;
+    // Commit any open measuring session before switching, same as plan switch.
+    if (state.boqTargeting) get().exitBoqTargeting();
+    const current = get();
+    const stashed = current.activeBillId
+      ? { ...current.billElements, [current.activeBillId]: current.boqElements }
+      : current.billElements;
+    const nextElements = stashed[billId] ?? [createEmptyBoqElement(0)];
+    const nextStash = { ...stashed };
+    delete nextStash[billId];
+    set({
+      billElements: nextStash,
+      activeBillId: billId,
+      boqElements: nextElements,
+      focusedBoqCard: null,
+    });
+    get().triggerAutoSave();
+  },
+
+  collectBills: () => {
+    const state = get();
+    return state.bills.map((bill) => ({
+      id: bill.id,
+      name: bill.name,
+      elements:
+        bill.id === state.activeBillId
+          ? state.boqElements
+          : state.billElements[bill.id] ?? [],
+    }));
+  },
+
+  setBillsState: (bills, activeBillId, billElements, activeElements) => {
+    const stash = { ...billElements };
+    delete stash[activeBillId];
+    set({
+      bills,
+      activeBillId,
+      billElements: stash,
+      boqElements: activeElements.length > 0 ? activeElements : [createEmptyBoqElement(0)],
+      focusedBoqCard: null,
+    });
+  },
+
   triggerAutoSave: () => {
     const state = get();
     if (state.currentProjectId) {
@@ -500,6 +741,9 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         planStates,
         deletedPlanIds: state.deletedPlanIds,
         boqElements: state.boqElements,
+        bills: state.bills,
+        activeBillId: state.activeBillId,
+        billElements: state.billElements,
         pricing: state.pricing,
         rotations: state.rotations,
       });

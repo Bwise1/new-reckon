@@ -13,6 +13,7 @@ export function useBoqExport() {
   // Per-field selectors: a whole-store subscription re-rendered every consumer
   // of this hook on any unrelated store mutation.
   const boqElements = useTakeoffStore((s) => s.boqElements);
+  const collectBills = useTakeoffStore((s) => s.collectBills);
   const pricing = useTakeoffStore((s) => s.pricing);
   const setPricing = useTakeoffStore((s) => s.setPricing);
 
@@ -20,15 +21,20 @@ export function useBoqExport() {
   const [busyAction, setBusyAction] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
 
-  const buildExportPayload = (vat: number, contingency: number) =>
-    buildBoqPayload({
+  const buildExportPayload = (vat: number, contingency: number) => {
+    const bills = collectBills();
+    return buildBoqPayload({
       projectId: projectId || 'local-web-project',
       title: project?.title ?? 'Bill of Quantities',
       location: project?.location ?? 'Lagos, Nigeria',
-      elements: boqElements,
+      // Flat list keeps older servers working; bills drive the sheet-per-bill
+      // workbook. Multi-bill projects flatten every bill into the PDF path.
+      elements: bills.length > 1 ? bills.flatMap((b) => b.elements) : boqElements,
+      bills: bills.map((b) => ({ name: b.name, elements: b.elements })),
       contingency,
       vatRate: vat,
     });
+  };
 
   const openDownload = async (downloadUrl?: string) => {
     if (!downloadUrl) return;
@@ -36,7 +42,7 @@ export function useBoqExport() {
   };
 
   const runPreview = async (vat: number, contingency: number, format: ExportFormat) => {
-    if (!hasExportableBoq(boqElements)) {
+    if (!collectBills().some((b) => hasExportableBoq(b.elements))) {
       setStatusMessage('Add at least one item with a measurement or quantity before exporting.');
       setExportModalMode(null);
       return;
@@ -65,7 +71,7 @@ export function useBoqExport() {
       setExportModalMode(null);
       return;
     }
-    if (!hasExportableBoq(boqElements)) {
+    if (!collectBills().some((b) => hasExportableBoq(b.elements))) {
       setStatusMessage('Add at least one item with a measurement or quantity before exporting.');
       setExportModalMode(null);
       return;

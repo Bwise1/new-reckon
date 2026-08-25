@@ -1,4 +1,5 @@
 import type {
+  BoqBillData,
   TakeoffItem,
   CalibrationLine,
   EstimationCardData,
@@ -28,6 +29,11 @@ export interface PersistedProjectData {
    * server-resurrection during merges. */
   deletedPlanIds: string[];
   boqElements: BoqElementData[];
+  /** Bills (sheets). Absent in legacy saves — loader seeds a default bill. */
+  bills?: BoqBillData[];
+  activeBillId?: string | null;
+  /** Stashed element trees of INACTIVE bills, keyed by bill id. */
+  billElements?: Record<string, BoqElementData[]>;
   pricing: BoqPricing;
   rotations: Record<number, number>;
   lastSaved: string;

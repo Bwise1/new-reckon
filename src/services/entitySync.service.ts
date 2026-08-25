@@ -160,9 +160,19 @@ export interface ApiBoqItem {
   updated_at?: string;
 }
 
+export interface ApiBoqBill {
+  client_uuid: string;
+  project_id: number;
+  name: string;
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface ApiBoqElement {
   client_uuid: string;
   project_id: number;
+  bill_client_uuid?: string | null;
   title: string;
   sort_order: number;
   items: ApiBoqItem[];
@@ -170,9 +180,17 @@ export interface ApiBoqElement {
   updated_at?: string;
 }
 
+export interface BoqBillUpsertBody {
+  name: string;
+  sort_order?: number;
+}
+
 export interface BoqElementUpsertBody {
   title: string;
   sort_order?: number;
+  /** Which bill the element belongs to. Omitted keeps the server value
+   *  (legacy elements have NULL = the project's first bill). */
+  bill_client_uuid?: string;
 }
 
 export interface BoqItemUpsertBody {
@@ -195,8 +213,21 @@ export interface BoqHistoryUpsertBody {
 
 export const boqSync = {
   list: (projectId: string) =>
-    apiClient.get<{ data: { elements: ApiBoqElement[] } }>(
+    apiClient.get<{ data: { bills?: ApiBoqBill[]; elements: ApiBoqElement[] } }>(
       `/projects/${projectId}/boq`
+    ),
+  upsertBill: (
+    projectId: string,
+    clientUuid: string,
+    body: BoqBillUpsertBody
+  ) =>
+    apiClient.put<{ data: { bill: ApiBoqBill } }>(
+      `/projects/${projectId}/boq/bills/${clientUuid}`,
+      body
+    ),
+  deleteBill: (projectId: string, clientUuid: string) =>
+    apiClient.delete<{ data?: unknown }>(
+      `/projects/${projectId}/boq/bills/${clientUuid}`
     ),
   upsertElement: (
     projectId: string,

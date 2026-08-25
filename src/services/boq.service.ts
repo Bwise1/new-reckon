@@ -31,6 +31,9 @@ interface BoqProjectPayload {
       }>;
     }>;
   }>;
+  /** Multi-bill export: one worksheet per entry plus a summary sheet.
+   *  Same element shape as the flat list above. */
+  bills?: Array<{ name: string; elements: BoqProjectPayload['elements'] }>;
 }
 
 /** Matches mobile MeasurementsValues → API fields (unit = display metric, metric = category). */
@@ -76,6 +79,7 @@ export const buildBoqPayload = ({
   title,
   location,
   elements,
+  bills,
   contingency,
   vatRate,
 }: {
@@ -83,6 +87,9 @@ export const buildBoqPayload = ({
   title: string;
   location: string;
   elements: BoqElementData[];
+  /** Bills for the multi-sheet export; the flat `elements` stays for
+   *  back-compat with servers that predate bills. */
+  bills?: { name: string; elements: BoqElementData[] }[];
   contingency: number;
   vatRate: number;
 }): BoqProjectPayload => ({
@@ -94,9 +101,26 @@ export const buildBoqPayload = ({
     contingency,
     vat_rate: vatRate,
   },
+  // One entry per bill for the multi-sheet Excel export. Same element
+  // mapping as the flat list; bills with no content are dropped.
+  ...(bills && bills.length > 0
+    ? {
+        bills: bills
+          .map((bill) => ({
+            name: bill.name,
+            elements: mapElementsForExport(bill.elements),
+          }))
+          .filter((bill) => bill.elements.length > 0),
+      }
+    : {}),
   // Drop empty (seed) elements so they don't print as a blank "ELEMENT NO.1".
   // Re-index after filtering so the remaining elements stay 1..N.
-  elements: elements.filter(elementHasContent).map((element, elementIndex) => ({
+  elements: mapElementsForExport(elements),
+});
+
+/** Shared element-to-export mapping used by the flat list and per-bill lists. */
+const mapElementsForExport = (elements: BoqElementData[]) =>
+  elements.filter(elementHasContent).map((element, elementIndex) => ({
     id: elementIndex + 1,
     header: element.title.toUpperCase(),
     items: element.items.filter(itemHasContent).map((item, itemIndex) => {
@@ -119,8 +143,7 @@ export const buildBoqPayload = ({
         ],
       };
     }),
-  })),
-});
+  }));
 
 export const boqService = {
   getSuggestions: (type: "description" | "header") =>

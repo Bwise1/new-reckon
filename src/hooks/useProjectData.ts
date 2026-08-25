@@ -6,6 +6,7 @@ import {
   measurementSync,
 } from '@/services/entitySync.service';
 import { syncQueue } from '@/services/syncQueue';
+import { generateClientId } from '@/utils/id';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import {
   boqElementsFromApiTree,
@@ -127,6 +128,7 @@ export const useProjectData = (
         void plansPromise;
 
         const serverBoqTree = boqResponse?.data?.elements ?? null;
+        const serverBills = boqResponse?.data?.bills ?? [];
         const meta = getProjectMeta(projectId);
         const alreadyMigrated = Boolean(meta?.boqMigratedAt);
 
@@ -145,7 +147,8 @@ export const useProjectData = (
           console.log(
             `[project-data] running one-shot BOQ migration for project=${projectId}`
           );
-          for (const op of boqTreeToUpsertOps(projectId, preMigrationLocalTree)) {
+          const localBillId = useTakeoffStore.getState().activeBillId ?? undefined;
+          for (const op of boqTreeToUpsertOps(projectId, preMigrationLocalTree, localBillId)) {
             syncQueue.enqueue(op);
           }
           try {
@@ -193,13 +196,51 @@ export const useProjectData = (
 
           // BOQ resolution:
           //   - If we just migrated: keep the local tree we uploaded.
-          //   - Else if server returned a non-empty tree: use it.
+          //   - Else if server returned a non-empty tree: use it, grouped by
+          //     bill (elements with no bill belong to the first bill).
           //   - Else: keep the local tree.
           let nextBoqElements = state.boqElements;
+          let billsPatch: Partial<typeof state> = {};
           if (didMigrate) {
             nextBoqElements = preMigrationLocalTree;
           } else if (serverBoqTree && serverBoqTree.length > 0) {
-            nextBoqElements = boqElementsFromApiTree(serverBoqTree);
+            const allElements = boqElementsFromApiTree(serverBoqTree);
+            const billForElement = new Map(
+              serverBoqTree.map((el) => [el.client_uuid, el.bill_client_uuid ?? null])
+            );
+            const bills =
+              serverBills.length > 0
+                ? serverBills.map((b) => ({ id: b.client_uuid, name: b.name }))
+                : [{ id: generateClientId(), name: 'Bill No. 1' }];
+            const firstBillId = bills[0].id;
+            const grouped: Record<string, typeof allElements> = {};
+            for (const el of allElements) {
+              const billId = billForElement.get(el.id) ?? firstBillId;
+              const target = bills.some((b) => b.id === billId) ? billId : firstBillId;
+              (grouped[target] = grouped[target] ?? []).push(el);
+            }
+            const activeBillId =
+              state.activeBillId && bills.some((b) => b.id === state.activeBillId)
+                ? state.activeBillId
+                : firstBillId;
+            nextBoqElements = grouped[activeBillId] ?? [];
+            const stash = { ...grouped };
+            delete stash[activeBillId];
+            billsPatch = {
+              bills,
+              activeBillId,
+              billElements: stash,
+            } as Partial<typeof state>;
+            // A project that predates bills has none on the server yet —
+            // registering the default bill makes it durable.
+            if (serverBills.length === 0) {
+              syncQueue.enqueue({
+                kind: 'boq.bill.upsert',
+                projectId,
+                clientUuid: firstBillId,
+                body: { name: bills[0].name, sort_order: 0 },
+              });
+            }
           }
 
           return {
@@ -208,7 +249,11 @@ export const useProjectData = (
             scales: activePlanState?.scales ?? state.scales,
             calibrationLines:
               activePlanState?.calibrationLines ?? state.calibrationLines,
-            boqElements: nextBoqElements,
+            boqElements:
+              nextBoqElements.length > 0
+                ? nextBoqElements
+                : state.boqElements,
+            ...billsPatch,
           } as Partial<typeof state>;
         });
 

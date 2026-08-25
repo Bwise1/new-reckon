@@ -118,6 +118,13 @@ export interface EstimationCardData {
   history: HistoryItem[];
 }
 
+/** A bill (sheet) in the BOQ: a named group of elements. Projects always
+ *  have at least one; legacy projects load as a single default bill. */
+export interface BoqBillData {
+  id: string;
+  name: string;
+}
+
 export interface BoqElementData {
   id: string;
   title: string;

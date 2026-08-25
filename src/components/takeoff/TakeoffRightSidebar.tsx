@@ -1,7 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { FiUser } from "react-icons/fi";
 import EstimationCard from "./EstimationCard";
+import BillsOverview from "./BillsOverview";
+import { ArrowLeft } from "lucide-react";
 import BoqExportModal from "./BoqExportModal";
 import SyncStatusBadge from "@/components/ui/SyncStatusBadge";
 import { useShallow } from "zustand/react/shallow";
@@ -29,6 +31,16 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
     handleExportConfirm,
   } = useBoqExport();
   const { isOnline } = useSyncStatus();
+
+  // Bill navigation: the sidebar is either the bill LIST page or one bill's
+  // element view (Reckon-Bill prototype pattern). Detail is the default so
+  // the measuring workflow lands on editable cards.
+  const [billView, setBillView] = useState<"list" | "detail">("detail");
+  const bills = useTakeoffStore((s) => s.bills);
+  const activeBillId = useTakeoffStore((s) => s.activeBillId);
+  const switchBill = useTakeoffStore((s) => s.switchBill);
+  const activeBillName =
+    bills.find((b) => b.id === activeBillId)?.name ?? "Bill No. 1";
 
   // Shallow selector, not a whole-store subscription: canvas measurements
   // mutate the store constantly and would re-render this whole sidebar.
@@ -180,12 +192,35 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
         </button>
       </div>
 
+      {billView === "detail" && (
+        <div className="shrink-0 flex items-center gap-1.5 px-4 py-2 border-b border-gray-100 text-sm">
+          <button
+            type="button"
+            onClick={() => setBillView("list")}
+            className="flex items-center gap-1 font-semibold text-gray-400 hover:text-gray-700 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            All Bills
+          </button>
+          <span className="text-gray-300">/</span>
+          <span className="font-bold text-gray-900 truncate">{activeBillName}</span>
+        </div>
+      )}
+
       {statusMessage && (
         <p className="shrink-0 px-4 py-1.5 text-[11px] text-gray-500 border-b border-gray-50 bg-gray-50">
           {statusMessage}
         </p>
       )}
 
+      {billView === "list" ? (
+        <BillsOverview
+          onOpenBill={(billId) => {
+            switchBill(billId);
+            setBillView("detail");
+          }}
+        />
+      ) : (
       <div
         className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden custom-scrollbar"
         onClick={(e) => {
@@ -348,6 +383,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
           );
         })}
       </div>
+      )}
 
       <BoqExportModal
         key={`${exportModalMode}-${pricing.vatRate}-${pricing.contingency}`}

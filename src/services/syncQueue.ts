@@ -2,6 +2,7 @@ import {
   boqSync,
   calibrationSync,
   measurementSync,
+  type BoqBillUpsertBody,
   type BoqElementUpsertBody,
   type BoqHistoryUpsertBody,
   type BoqItemUpsertBody,
@@ -56,6 +57,17 @@ export type SyncOp =
       projectId: string;
       planUuid: string;
       page: number;
+    }
+  | {
+      kind: 'boq.bill.upsert';
+      projectId: string;
+      clientUuid: string;
+      body: BoqBillUpsertBody;
+    }
+  | {
+      kind: 'boq.bill.delete';
+      projectId: string;
+      clientUuid: string;
     }
   | {
       kind: 'boq.element.upsert';
@@ -225,6 +237,7 @@ const dedupOnEnqueue = (queue: SyncOp[], op: SyncOp): SyncOp[] => {
     // BOQ upserts collapse to the latest state per client_uuid. Two upserts
     // on the same uuid replay-safe if we only keep the newest; older is
     // wasted network. Delete after a not-yet-flushed upsert cancels both.
+    case 'boq.bill.upsert':
     case 'boq.element.upsert':
     case 'boq.item.upsert':
     case 'boq.history.upsert': {
@@ -235,15 +248,18 @@ const dedupOnEnqueue = (queue: SyncOp[], op: SyncOp): SyncOp[] => {
       filtered.push(op);
       return filtered;
     }
+    case 'boq.bill.delete':
     case 'boq.element.delete':
     case 'boq.item.delete':
     case 'boq.history.delete': {
       const upsertKind =
-        op.kind === 'boq.element.delete'
-          ? 'boq.element.upsert'
-          : op.kind === 'boq.item.delete'
-            ? 'boq.item.upsert'
-            : 'boq.history.upsert';
+        op.kind === 'boq.bill.delete'
+          ? 'boq.bill.upsert'
+          : op.kind === 'boq.element.delete'
+            ? 'boq.element.upsert'
+            : op.kind === 'boq.item.delete'
+              ? 'boq.item.upsert'
+              : 'boq.history.upsert';
       // If the upsert never made it to the server, drop the delete too.
       const upsertIdx = queue.findIndex(
         (q) => q.kind === upsertKind && q.clientUuid === op.clientUuid
@@ -279,6 +295,12 @@ const runOp = async (op: SyncOp): Promise<void> => {
       return;
     case 'calibration.delete':
       await calibrationSync.delete(op.projectId, op.planUuid, op.page);
+      return;
+    case 'boq.bill.upsert':
+      await boqSync.upsertBill(op.projectId, op.clientUuid, op.body);
+      return;
+    case 'boq.bill.delete':
+      await boqSync.deleteBill(op.projectId, op.clientUuid);
       return;
     case 'boq.element.upsert':
       await boqSync.upsertElement(op.projectId, op.clientUuid, op.body);
