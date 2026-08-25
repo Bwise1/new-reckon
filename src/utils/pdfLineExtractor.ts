@@ -215,27 +215,48 @@ export class SegmentIndex {
     }
   }
 
-  /** Find closest point on any segment within `radius` of (px,py). */
-  query(px: number, py: number, radius: number): { x: number; y: number } | null {
+  /** Find the best snap target within `radius` of (px,py). Priority follows
+   *  CAD convention: segment endpoints beat midpoints beat points on the line,
+   *  so corners win even when the cursor is fractionally closer to an edge. */
+  query(
+    px: number,
+    py: number,
+    radius: number
+  ): { x: number; y: number; kind: "endpoint" | "midpoint" | "edge" } | null {
     const cs = this.cellSize;
     const r = Math.ceil(radius / cs);
     const cx0 = Math.floor(px / cs);
     const cy0 = Math.floor(py / cs);
     const r2 = radius * radius;
-    let best: { x: number; y: number; dist2: number } | null = null;
+    const RANK = { endpoint: 0, midpoint: 1, edge: 2 } as const;
+    let best:
+      | { x: number; y: number; dist2: number; kind: "endpoint" | "midpoint" | "edge" }
+      | null = null;
+    const consider = (x: number, y: number, kind: "endpoint" | "midpoint" | "edge") => {
+      const dx = x - px;
+      const dy = y - py;
+      const dist2 = dx * dx + dy * dy;
+      if (dist2 >= r2) return;
+      if (!best || RANK[kind] < RANK[best.kind] || (RANK[kind] === RANK[best.kind] && dist2 < best.dist2)) {
+        best = { x, y, dist2, kind };
+      }
+    };
 
     for (let cx = cx0 - r; cx <= cx0 + r; cx++) {
       for (let cy = cy0 - r; cy <= cy0 + r; cy++) {
         const cell = this.cells.get(this.key(cx, cy));
         if (!cell) continue;
         for (const seg of cell) {
+          consider(seg.x1, seg.y1, "endpoint");
+          consider(seg.x2, seg.y2, "endpoint");
+          consider((seg.x1 + seg.x2) / 2, (seg.y1 + seg.y2) / 2, "midpoint");
           const res = closestPointOnSegment(px, py, seg.x1, seg.y1, seg.x2, seg.y2);
-          if (res.dist2 < r2 && (!best || res.dist2 < best.dist2)) {
-            best = res;
-          }
+          consider(res.x, res.y, "edge");
         }
       }
     }
-    return best ? { x: best.x, y: best.y } : null;
+    // TS cannot see the closure assignments above, so re-widen explicitly.
+    const found = best as { x: number; y: number; kind: "endpoint" | "midpoint" | "edge" } | null;
+    return found ? { x: found.x, y: found.y, kind: found.kind } : null;
   }
 }

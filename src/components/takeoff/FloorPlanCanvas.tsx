@@ -27,6 +27,7 @@ import CanvasToolbar from "@/components/takeoff/CanvasToolbar";
 import CalibrationDialog from "@/components/takeoff/CalibrationDialog";
 import CanvasOverlays from "@/components/takeoff/CanvasOverlays";
 import CanvasViewport from "@/components/takeoff/CanvasViewport";
+import { ratioToPxPerMeter } from "@/utils/pdfScaleDetector";
 import { generateClientId } from "@/utils/id";
 import {
   getMeasurementColor,
@@ -292,7 +293,7 @@ if (!prev && activeTool) {
   const rotateAllPages = useTakeoffStore((s) => s.rotateAllPages);
   const activeRealWidthLive = useTakeoffStore((s) => s.activeRealWidth);
 
-  const { handleFileUpload, changePage, rerenderCurrentPage, refreshRegionPatch, regionPatch, refitToView, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfDisplaySize, pdfSegmentIndexRef } =
+  const { handleFileUpload, changePage, rerenderCurrentPage, refreshRegionPatch, regionPatch, detectedScale, refitToView, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfDisplaySize, pdfSegmentIndexRef } =
     useCanvasMedia({
     containerRef,
     backgroundImage,
@@ -466,6 +467,11 @@ if (!prev && activeTool) {
     imageScale,
     spatialIndexRef,
     pdfSegmentIndexRef,
+    // Display-bitmap px per PDF pt for the current page — the snap space fix.
+    pdfSpaceScale:
+      pdfDisplaySize && pdfNaturalSize && pdfNaturalSize.width > 0
+        ? pdfDisplaySize.width / pdfNaturalSize.width
+        : 1,
     snapSettings,
   });
 
@@ -3327,6 +3333,24 @@ if (!prev && activeTool) {
           ) : null
         }
       />
+
+      {currentScale == null &&
+        detectedScale &&
+        detectedScale.planId === activePlanId &&
+        detectedScale.page === currentPage &&
+        pdfDisplaySize &&
+        pdfNaturalSize && (
+          <button
+            type="button"
+            onClick={() => {
+              const displayScale = pdfNaturalSize.width > 0 ? pdfDisplaySize.width / pdfNaturalSize.width : 1;
+              setScale(currentPage, ratioToPxPerMeter(detectedScale.ratio, displayScale));
+            }}
+            className="absolute top-32 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-1.5 shadow-lg text-xs font-semibold transition-colors cursor-pointer"
+          >
+            <span>Scale 1:{detectedScale.ratio} detected on this sheet — click to apply</span>
+          </button>
+        )}
 
       {uncalibratedWarning && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-red-600 text-white px-3 py-1.5 shadow-lg text-xs font-semibold">

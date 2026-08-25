@@ -8,6 +8,8 @@ import { useTakeoffStore } from "@/store/useTakeoffStore";
 import { getPlanPdf, setPlanPdf } from "@/utils/planPdfCache";
 import { inferPlanMediaKind, loadPlanFromRemoteUrl } from "@/utils/planMediaLoader";
 import { extractPdfSegments, SegmentIndex } from "@/utils/pdfLineExtractor";
+import { getCachedSegments, setCachedSegments, segmentCacheKey } from "@/utils/pdfSegmentCache";
+import { detectDrawingScale } from "@/utils/pdfScaleDetector";
 import { getCanvasFitMode } from "@/utils/canvasPrefs";
 import { isDxfFile } from "@/utils/dxfRasterizer";
 import { rotateImageElement } from "@/utils/imageRotate";
@@ -124,6 +126,13 @@ export const useCanvasMedia = ({
     // Hi-res region patch: a crop of the current page re-rasterized at the
     // zoomed resolution, drawn over the base bitmap. Coordinates are in
     // display-bitmap px (the same space as pdfDisplaySize and stored points).
+    // Drawing scale read off the sheet's text ("1:100") — a calibration
+    // suggestion for the UI, keyed by page so a stale page can't apply.
+    const [detectedScale, setDetectedScale] = useState<{
+        planId: string;
+        page: number;
+        ratio: number;
+    } | null>(null);
     const regionGenRef = useRef(0);
     const regionUrlRef = useRef<string | null>(null);
     const [regionPatch, setRegionPatch] = useState<{
@@ -309,13 +318,31 @@ export const useCanvasMedia = ({
 
             await page.render({ canvasContext: ctx, viewport, canvas }).promise;
 
-            // Build PDF line segment index for snapping (async, non-blocking for render)
-            void extractPdfSegments(page).then((segments) => {
+            // Build the PDF line-segment index for snapping (async, off the render
+            // path). Extraction walks the whole operator list, so results are
+            // cached per plan+page in IndexedDB — reopening a heavy CAD sheet
+            // hits the cache instead of re-walking.
+            void (async () => {
+                const cacheKey = planId ? segmentCacheKey(planId, pageNum) : null;
+                let segments = cacheKey ? await getCachedSegments(cacheKey) : null;
+                if (!segments) {
+                    segments = await extractPdfSegments(page);
+                    if (cacheKey) void setCachedSegments(cacheKey, segments);
+                }
                 const index = new SegmentIndex(50);
                 for (const seg of segments) index.add(seg);
                 pdfSegmentIndexRef.current = index;
+            })().catch((error) => console.warn("Segment index failed:", error));
 
-            });
+            // Read the drawing scale off the sheet text (suggestion only).
+            if (planId) {
+                void detectDrawingScale(page)
+                    .then((found) => {
+                        if (found) setDetectedScale({ planId, page: pageNum, ratio: found.ratio });
+                        else setDetectedScale(null);
+                    })
+                    .catch(() => setDetectedScale(null));
+            }
 
             // toBlob + object URL instead of toDataURL: encoding is async (no
             // main-thread stall on multi-megapixel canvases) and skips the
@@ -431,8 +458,23 @@ export const useCanvasMedia = ({
     );
 
     const loadPlanFromCloudinary = useCallback(
-        async (planId: string, url: string, planMeta: typeof activePlan) => {
+        async (planId: string, url: string, planMeta: typeof activePlan, isStale?: () => boolean) => {
             const loaded = await loadPlanFromRemoteUrl(url, planMeta ?? {});
+
+            // A newer load superseded this one while the fetch/parse ran
+            // (StrictMode double-mount, fast plan switching). Publishing the
+            // stale document via setPlanPdf would DESTROY the live one it
+            // replaces — pdf.js then throws "Transport destroyed" mid-render.
+            if (isStale?.()) {
+                if (loaded.kind === "pdf" && loaded.pdf) {
+                    try {
+                        void loaded.pdf.destroy();
+                    } catch {
+                        // already gone
+                    }
+                }
+                return;
+            }
 
             if (loaded.kind === "pdf" && loaded.pdf) {
                 setPlanPdf(planId, loaded.pdf);
@@ -571,7 +613,12 @@ export const useCanvasMedia = ({
 
         void (async () => {
             try {
-                await loadPlanFromCloudinary(activePlanId, activePlan.url!, activePlan);
+                await loadPlanFromCloudinary(
+                    activePlanId,
+                    activePlan.url!,
+                    activePlan,
+                    () => generation !== loadGenerationRef.current
+                );
                 if (generation === loadGenerationRef.current) {
                     setPlanLoadStatus("ready");
                     setPlanLoadError(null);
@@ -977,6 +1024,10 @@ export const useCanvasMedia = ({
                     canvasContext: ctx,
                     viewport,
                     canvas,
+                    // One-shot render: print intent skips pdf.js's rAF-chunked
+                    // scheduling, so a patch still completes if the tab is
+                    // backgrounded mid-zoom, and small patches finish faster.
+                    intent: "print",
                     // Shift the page so the crop starts at the canvas origin.
                     transform: [
                         1, 0, 0, 1,
@@ -1039,5 +1090,7 @@ export const useCanvasMedia = ({
         pdfDisplaySize,
         // Spatial index of PDF vector line segments for the current page — used for snap-to-line.
         pdfSegmentIndexRef,
+        // Drawing scale detected from the sheet text — calibration suggestion.
+        detectedScale,
     };
 };

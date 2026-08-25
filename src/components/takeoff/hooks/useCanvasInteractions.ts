@@ -26,6 +26,9 @@ interface UseCanvasInteractionsParams {
   imageScale: number;
   spatialIndexRef: RefObject<SpatialIndex>;
   pdfSegmentIndexRef?: RefObject<SegmentIndex | null>;
+  /** Display-bitmap px per PDF user-space pt for the current page (the page's
+   *  displayScale). Stored points are display-bitmap px; PDF segments are pt. */
+  pdfSpaceScale?: number;
   snapSettings: {
     vertex: boolean;
     perpendicular: boolean;
@@ -50,6 +53,7 @@ export const useCanvasInteractions = ({
   imageScale,
   spatialIndexRef,
   pdfSegmentIndexRef,
+  pdfSpaceScale,
   snapSettings,
 }: UseCanvasInteractionsParams) => {
   const getSnappedPoint = useCallback(
@@ -149,17 +153,17 @@ export const useCanvasInteractions = ({
 
       // 5. Snap to PDF vector lines — lower priority than user-drawn vertex snaps
       // but wins over no snap.
-      // PDF segments are stored in PDF user-space (scale=1). Mouse `point` is in
-      // image-pixel space = PDF user-space × imageScale. Divide before querying,
-      // then multiply the result back to image-pixel space.
+      // PDF segments are in PDF user-space pt (scale=1). Mouse `point` is in
+      // display-bitmap px = pt × displayScale (pdfSpaceScale), NOT × imageScale
+      // — dividing by imageScale only worked when the two happened to be equal.
       if (snapSettings.vertex && pdfSegmentIndexRef?.current) {
-        const safeImageScale = imageScale > 0 ? imageScale : 1;
-        const pdfThreshold = snapThreshold / safeImageScale;
-        const pdfX = point.x / safeImageScale;
-        const pdfY = point.y / safeImageScale;
+        const spaceScale = pdfSpaceScale && pdfSpaceScale > 0 ? pdfSpaceScale : 1;
+        const pdfThreshold = snapThreshold / spaceScale;
+        const pdfX = point.x / spaceScale;
+        const pdfY = point.y / spaceScale;
         const pdfSnap = pdfSegmentIndexRef.current.query(pdfX, pdfY, pdfThreshold);
 if (pdfSnap) {
-          const snapInImageSpace = { x: pdfSnap.x * safeImageScale, y: pdfSnap.y * safeImageScale };
+          const snapInImageSpace = { x: pdfSnap.x * spaceScale, y: pdfSnap.y * spaceScale };
           const dist = calculateDistance(point, snapInImageSpace);
           if (dist < minDist) {
             minDist = dist;
@@ -174,6 +178,7 @@ if (pdfSnap) {
     [
       spatialIndexRef,
       pdfSegmentIndexRef,
+      pdfSpaceScale,
       stageScale,
       imageScale,
       currentPoints,
