@@ -3327,17 +3327,44 @@ if (!prev && activeTool) {
             })()}
         </>}
         overlayChildren={
-          hoveredMeasurement && hoverTooltipText && screenPointerPos ? (
-            <div
-              className="absolute z-30 pointer-events-none rounded-md bg-gray-900/90 px-2 py-1 text-xs font-semibold text-white shadow-lg"
-              style={{
-                left: screenPointerPos.x + 14,
-                top: screenPointerPos.y + 14,
-              }}
-            >
-              {hoverTooltipText}
-            </div>
-          ) : null
+          <>
+            {/* Full-viewport crosshair while a measuring tool is armed. Locks
+                to the snapped point when snapping, so the hairlines double as
+                a snap read-out across the whole sheet. */}
+            {(() => {
+              if (isPanningMode || (!activeTool && !calibrationMode)) return null;
+              const pos = snappedPoint
+                ? {
+                    x: snappedPoint.x * imageScale * stageScale + stagePos.x,
+                    y: snappedPoint.y * imageScale * stageScale + stagePos.y,
+                  }
+                : screenPointerPos;
+              if (!pos) return null;
+              return (
+                <div className="absolute inset-0 z-20 pointer-events-none" aria-hidden>
+                  <div
+                    className="absolute top-0 bottom-0 w-px bg-gray-900/45"
+                    style={{ left: pos.x }}
+                  />
+                  <div
+                    className="absolute left-0 right-0 h-px bg-gray-900/45"
+                    style={{ top: pos.y }}
+                  />
+                </div>
+              );
+            })()}
+            {hoveredMeasurement && hoverTooltipText && screenPointerPos ? (
+              <div
+                className="absolute z-30 pointer-events-none rounded-md bg-gray-900/90 px-2 py-1 text-xs font-semibold text-white shadow-lg"
+                style={{
+                  left: screenPointerPos.x + 14,
+                  top: screenPointerPos.y + 14,
+                }}
+              >
+                {hoverTooltipText}
+              </div>
+            ) : null}
+          </>
         }
       />
 
