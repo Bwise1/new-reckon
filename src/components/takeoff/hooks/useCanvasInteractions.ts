@@ -14,6 +14,7 @@ import {
   findPerpendicularPoint,
 } from "@/utils/spatialIndex";
 import type { SegmentIndex } from "@/utils/pdfLineExtractor";
+import { rotatedToUnrotated, unrotatedToRotated } from "@/utils/pdfLineExtractor";
 
 interface UseCanvasInteractionsParams {
   takeoffItems: TakeoffItem[];
@@ -29,6 +30,11 @@ interface UseCanvasInteractionsParams {
   /** Display-bitmap px per PDF user-space pt for the current page (the page's
    *  displayScale). Stored points are display-bitmap px; PDF segments are pt. */
   pdfSpaceScale?: number;
+  /** Current page rotation (0/90/180/270). Segments are extracted in the
+   *  UNROTATED page space; display points are in the rotated space. */
+  pdfRotation?: number;
+  /** UNROTATED page size in pt (swap of naturalSize when rotation is 90/270). */
+  pdfUnrotatedSize?: { width: number; height: number } | null;
   snapSettings: {
     vertex: boolean;
     perpendicular: boolean;
@@ -54,6 +60,8 @@ export const useCanvasInteractions = ({
   spatialIndexRef,
   pdfSegmentIndexRef,
   pdfSpaceScale,
+  pdfRotation,
+  pdfUnrotatedSize,
   snapSettings,
 }: UseCanvasInteractionsParams) => {
   const getSnappedPoint = useCallback(
@@ -158,12 +166,23 @@ export const useCanvasInteractions = ({
       // — dividing by imageScale only worked when the two happened to be equal.
       if (snapSettings.vertex && pdfSegmentIndexRef?.current) {
         const spaceScale = pdfSpaceScale && pdfSpaceScale > 0 ? pdfSpaceScale : 1;
+        const rotation = pdfRotation ?? 0;
+        const unrotW = pdfUnrotatedSize?.width ?? 0;
+        const unrotH = pdfUnrotatedSize?.height ?? 0;
         const pdfThreshold = snapThreshold / spaceScale;
-        const pdfX = point.x / spaceScale;
-        const pdfY = point.y / spaceScale;
-        const pdfSnap = pdfSegmentIndexRef.current.query(pdfX, pdfY, pdfThreshold);
+        // display px (rotated) -> pt (rotated) -> pt (unrotated, segment space)
+        const rotPt = { x: point.x / spaceScale, y: point.y / spaceScale };
+        const q =
+          rotation && unrotW > 0
+            ? rotatedToUnrotated(rotPt.x, rotPt.y, rotation, unrotW, unrotH)
+            : rotPt;
+        const pdfSnap = pdfSegmentIndexRef.current.query(q.x, q.y, pdfThreshold);
 if (pdfSnap) {
-          const snapInImageSpace = { x: pdfSnap.x * spaceScale, y: pdfSnap.y * spaceScale };
+          const back =
+            rotation && unrotW > 0
+              ? unrotatedToRotated(pdfSnap.x, pdfSnap.y, rotation, unrotW, unrotH)
+              : pdfSnap;
+          const snapInImageSpace = { x: back.x * spaceScale, y: back.y * spaceScale };
           const dist = calculateDistance(point, snapInImageSpace);
           if (dist < minDist) {
             minDist = dist;
@@ -179,6 +198,8 @@ if (pdfSnap) {
       spatialIndexRef,
       pdfSegmentIndexRef,
       pdfSpaceScale,
+      pdfRotation,
+      pdfUnrotatedSize,
       stageScale,
       imageScale,
       currentPoints,

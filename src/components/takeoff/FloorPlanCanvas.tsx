@@ -472,6 +472,13 @@ if (!prev && activeTool) {
       pdfDisplaySize && pdfNaturalSize && pdfNaturalSize.width > 0
         ? pdfDisplaySize.width / pdfNaturalSize.width
         : 1,
+    pdfRotation: currentRotation,
+    // naturalSize is the ROTATED viewport; segments live in unrotated space.
+    pdfUnrotatedSize: pdfNaturalSize
+      ? currentRotation % 180 !== 0
+        ? { width: pdfNaturalSize.height, height: pdfNaturalSize.width }
+        : pdfNaturalSize
+      : null,
     snapSettings,
   });
 

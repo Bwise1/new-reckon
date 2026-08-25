@@ -51,8 +51,9 @@ const openDb = (): Promise<IDBDatabase | null> => {
   return dbPromise;
 };
 
+// v3: v1 lacked the CTM, v2 flipped Y against the rotated page height.
 export const segmentCacheKey = (planId: string, page: number): string =>
-  `${planId}:${page}`;
+  `${planId}:${page}:v3`;
 
 export const getCachedSegments = async (
   key: string

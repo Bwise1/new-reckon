@@ -53,13 +53,20 @@ function subdivideCubic(
 }
 
 // Parse a flat DrawOPS array (as packed by pdfjs constructPath) into segments.
-// Coordinates are already in user-space with CTM applied by pdfjs before packing.
-// Y-flip is applied here: pdfY → pageHeight - pdfY.
+// Path coordinates are in the path's OWN space: the current transformation
+// matrix must be applied here. CAD exports virtually always wrap content in
+// scale/translate transforms, so skipping the CTM put segments thousands of
+// points outside the page and snap-to-line silently never matched.
+// Y-flip to a top-left origin is applied after the CTM.
 function parseDrawOps(
   data: ArrayLike<number>,
   pageHeight: number,
-  segments: PdfSegment[]
+  segments: PdfSegment[],
+  ctm: number[]
 ) {
+  const [a, b, c, d, e, f] = ctm;
+  const tx = (x: number, y: number) => a * x + c * y + e;
+  const ty = (x: number, y: number) => b * x + d * y + f;
   let curX = 0, curY = 0;
   let subpathStartX = 0, subpathStartY = 0;
   let i = 0;
@@ -69,13 +76,13 @@ function parseDrawOps(
     switch (op) {
       case DRAW_MOVETO: {
         const x = data[i++], y = data[i++];
-        curX = x; curY = pageHeight - y;
+        curX = tx(x, y); curY = pageHeight - ty(x, y);
         subpathStartX = curX; subpathStartY = curY;
         break;
       }
       case DRAW_LINETO: {
         const x = data[i++], y = data[i++];
-        const nx = x, ny = pageHeight - y;
+        const nx = tx(x, y), ny = pageHeight - ty(x, y);
         segments.push({ x1: curX, y1: curY, x2: nx, y2: ny });
         curX = nx; curY = ny;
         break;
@@ -84,22 +91,24 @@ function parseDrawOps(
         const x1 = data[i++], y1 = data[i++];
         const x2 = data[i++], y2 = data[i++];
         const x3 = data[i++], y3 = data[i++];
+        // Affine transforms map Bezier control points directly.
+        const ex3 = tx(x3, y3), ey3 = pageHeight - ty(x3, y3);
         subdivideCubic(
           curX, curY,
-          x1, pageHeight - y1,
-          x2, pageHeight - y2,
-          x3, pageHeight - y3,
+          tx(x1, y1), pageHeight - ty(x1, y1),
+          tx(x2, y2), pageHeight - ty(x2, y2),
+          ex3, ey3,
           segments
         );
-        curX = x3; curY = pageHeight - y3;
+        curX = ex3; curY = ey3;
         break;
       }
       case DRAW_QUAD_CURVETO: {
         // Approximate quadratic as 3 linear steps
         const cx = data[i++], cy = data[i++];
         const x2 = data[i++], y2 = data[i++];
-        const ex = x2, ey = pageHeight - y2;
-        const cpx = cx, cpy = pageHeight - cy;
+        const ex = tx(x2, y2), ey = pageHeight - ty(x2, y2);
+        const cpx = tx(cx, cy), cpy = pageHeight - ty(cx, cy);
         // Elevate to cubic: cp1 = start + 2/3*(cp-start), cp2 = end + 2/3*(cp-end)
         subdivideCubic(
           curX, curY,
@@ -134,7 +143,11 @@ export async function extractPdfSegments(
   page: pdfjsLib.PDFPageProxy
 ): Promise<PdfSegment[]> {
   const ops = await page.getOperatorList();
-  const viewport = page.getViewport({ scale: 1 });
+  // rotation: 0 pins the viewport to the UNROTATED page box. getViewport with
+  // no rotation applies the page's inherent /Rotate, whose height is the wrong
+  // flip axis for CTM-applied (MediaBox-space) path coordinates - segments
+  // came out shifted by the width/height difference on rotated pages.
+  const viewport = page.getViewport({ scale: 1, rotation: 0 });
   const pageHeight = viewport.height;
 
   const segments: PdfSegment[] = [];
@@ -159,12 +172,57 @@ export async function extractPdfSegments(
       // The path data is args[1][0] — a Float32Array with DrawOPS codes interleaved with coords.
       const pathData = (args as unknown as [number, ArrayLike<number>[], Float32Array])[1]?.[0];
       if (pathData && pathData.length > 0) {
-        parseDrawOps(pathData, pageHeight, segments);
+        parseDrawOps(pathData, pageHeight, segments, ctm);
       }
     }
   }
 
   return segments;
+}
+
+/**
+ * Map a point from ROTATED page space (what the canvas displays) to the
+ * UNROTATED space segments are extracted in. `w`/`h` are the UNROTATED page
+ * dimensions; rotation is pdf.js viewport rotation (0/90/180/270, clockwise).
+ * Both spaces are top-left origin.
+ */
+export function rotatedToUnrotated(
+  x: number,
+  y: number,
+  rotation: number,
+  w: number,
+  h: number
+): { x: number; y: number } {
+  switch (((rotation % 360) + 360) % 360) {
+    case 90:
+      return { x: y, y: h - x };
+    case 180:
+      return { x: w - x, y: h - y };
+    case 270:
+      return { x: w - y, y: x };
+    default:
+      return { x, y };
+  }
+}
+
+/** Inverse of rotatedToUnrotated: unrotated page space to rotated display space. */
+export function unrotatedToRotated(
+  x: number,
+  y: number,
+  rotation: number,
+  w: number,
+  h: number
+): { x: number; y: number } {
+  switch (((rotation % 360) + 360) % 360) {
+    case 90:
+      return { x: h - y, y: x };
+    case 180:
+      return { x: w - x, y: h - y };
+    case 270:
+      return { x: y, y: w - x };
+    default:
+      return { x, y };
+  }
 }
 
 /** Closest point on segment (x1,y1)→(x2,y2) to point (px,py). Returns distance² and point. */
