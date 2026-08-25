@@ -23,6 +23,8 @@ interface UseCanvasInteractionsParams {
   currentPage: number;
   currentScale: number | null;
   isShiftPressed: boolean;
+  /** Persistent ortho toggle: angle-snap every segment without holding Shift. */
+  orthoEnabled?: boolean;
   stageScale: number;
   imageScale: number;
   spatialIndexRef: RefObject<SpatialIndex>;
@@ -55,6 +57,7 @@ export const useCanvasInteractions = ({
   currentPage,
   currentScale,
   isShiftPressed,
+  orthoEnabled,
   stageScale,
   imageScale,
   spatialIndexRef,
@@ -212,7 +215,7 @@ if (pdfSnap) {
 
   const getAngleSnappedPoint = useCallback(
     (point: Point, lastPoint: Point): Point => {
-      if (!isShiftPressed) return point;
+      if (!isShiftPressed && !orthoEnabled) return point;
       const dx = point.x - lastPoint.x;
       const dy = point.y - lastPoint.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
@@ -228,7 +231,7 @@ if (pdfSnap) {
         y: lastPoint.y + Math.sin(snappedAngle) * distance,
       };
     },
-    [isShiftPressed]
+    [isShiftPressed, orthoEnabled]
   );
 
   const formatDistance = useCallback((val: number): string => {

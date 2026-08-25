@@ -1,55 +1,33 @@
 import React from "react";
 import {
-  ZoomIn,
-  ZoomOut,
-  ChevronLeft,
-  ChevronRight,
-  Check,
-  AlertCircle,
   Move,
   MousePointer2,
   Undo2,
   RotateCcw,
   Magnet,
-  Maximize2,
 } from "lucide-react";
 
 interface CanvasOverlaysProps {
-  stageScale: number;
-  setStageScale: (scale: number) => void;
-  numPages: number;
-  currentPage: number;
-  currentScale: number | null;
   isPanningMode: boolean;
   isSelectMode: boolean;
   isShiftPressed: boolean;
-  onChangePage: (delta: number) => void;
   onTogglePan: () => void;
   onToggleSelect: () => void;
   onUndoPoint: () => void;
   onClearAll: () => void;
   snapEnabled: boolean;
   onToggleSnap: () => void;
-  /** Re-fit the plan to the view using the current fit mode. */
-  onFit: () => void;
 }
 
 const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
-  stageScale,
-  setStageScale,
-  numPages,
-  currentPage,
-  currentScale,
   isPanningMode,
   isSelectMode,
-  onChangePage,
   onTogglePan,
   onToggleSelect,
   onUndoPoint,
   onClearAll,
   snapEnabled,
   onToggleSnap,
-  onFit,
 }) => {
   return (
     <>
@@ -103,90 +81,6 @@ const CanvasOverlays: React.FC<CanvasOverlaysProps> = ({
           <RotateCcw className="w-4 h-4" />
         </button>
       </div>
-
-      {/* Zoom — bottom right */}
-      <div className="absolute bottom-6 right-4 flex items-center gap-px bg-white/85 backdrop-blur-sm py-1 px-1 rounded-lg shadow-md border border-gray-200/60 z-20">
-        <button
-          type="button"
-          onClick={onFit}
-          title="Fit plan to view"
-          className="p-1.5 hover:bg-gray-100 rounded-md cursor-pointer"
-        >
-          <Maximize2 className="w-4 h-4 text-gray-600" />
-        </button>
-        <div className="h-5 w-px bg-gray-200 mx-0.5" />
-        <button
-          type="button"
-          onClick={() => {
-            const newScale = Math.min(20, stageScale * 1.12);
-            setStageScale(newScale);
-          }}
-          className="p-1.5 hover:bg-gray-100 rounded-md cursor-pointer"
-        >
-          <ZoomIn className="w-4 h-4 text-gray-600" />
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const newScale = Math.max(0.2, stageScale / 1.12);
-            setStageScale(newScale);
-          }}
-          className="p-1.5 hover:bg-gray-100 rounded-md cursor-pointer"
-        >
-          <ZoomOut className="w-4 h-4 text-gray-600" />
-        </button>
-      </div>
-
-      {/* Show whenever the plan has multiple pages. Keyed on numPages (the
-          stable page count) rather than pdfDocLoaded, which can flip false
-          transiently while a page re-renders and would hide the panel. */}
-      {numPages > 1 && (
-        <div className="absolute bottom-6 left-6 flex items-center space-x-4 bg-white/80 backdrop-blur p-2 rounded-xl shadow-xl border border-white/50 z-20">
-          <button
-            type="button"
-            onClick={() => onChangePage(-1)}
-            disabled={currentPage === 1}
-            className="p-1 hover:bg-gray-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <div className="flex flex-col items-center">
-            <span className="text-[10px] text-gray-500 uppercase font-bold">
-              Page
-            </span>
-            <span className="text-sm font-bold">
-              {currentPage} / {numPages}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => onChangePage(1)}
-            disabled={currentPage === numPages}
-            className="p-1 hover:bg-gray-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-          <div className="h-8 w-px bg-gray-200" />
-          <div
-            className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] font-bold ${
-              currentScale
-                ? "bg-green-100 text-green-700"
-                : "bg-red-100 text-red-700"
-            }`}
-          >
-            {currentScale ? (
-              <Check className="w-3 h-3" />
-            ) : (
-              <AlertCircle className="w-3 h-3" />
-            )}
-            <span>
-              {currentScale
-                ? `CALIBRATED (1m = ${currentScale.toFixed(1)}px)`
-                : "UNSCALED"}
-            </span>
-          </div>
-        </div>
-      )}
 
       {/* All three floating banners (Select Mode Active, Precision Mode
           Active, Arrow keys nudge…) are commented out — they overlapped the

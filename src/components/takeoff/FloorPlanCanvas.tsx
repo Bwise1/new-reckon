@@ -26,6 +26,7 @@ import { useCanvasInteractions } from "@/components/takeoff/hooks/useCanvasInter
 import CanvasToolbar from "@/components/takeoff/CanvasToolbar";
 import CalibrationDialog from "@/components/takeoff/CalibrationDialog";
 import CanvasOverlays from "@/components/takeoff/CanvasOverlays";
+import CanvasStatusBar from "@/components/takeoff/CanvasStatusBar";
 import CanvasViewport from "@/components/takeoff/CanvasViewport";
 import { ratioToPxPerMeter } from "@/utils/pdfScaleDetector";
 import { generateClientId } from "@/utils/id";
@@ -192,12 +193,53 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     currentPage,
   });
   const [snapEnabled, setSnapEnabled] = useState(true);
+  // Drafting toggles, persisted like other canvas prefs. Ortho makes angle
+  // snapping permanent (Shift still works as a momentary hold); Auto Scroll
+  // pans the sheet when the cursor reaches the pane edge mid-measurement.
+  const [orthoEnabled, setOrthoEnabled] = useState(() => {
+    try {
+      return localStorage.getItem("reckon_ortho") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(() => {
+    try {
+      return localStorage.getItem("reckon_autoscroll") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const handleToggleOrtho = useCallback(() => {
+    setOrthoEnabled((prev) => {
+      try {
+        localStorage.setItem("reckon_ortho", prev ? "0" : "1");
+      } catch {
+        // ignore storage failures
+      }
+      return !prev;
+    });
+  }, []);
+  const handleToggleAutoScroll = useCallback(() => {
+    setAutoScrollEnabled((prev) => {
+      try {
+        localStorage.setItem("reckon_autoscroll", prev ? "0" : "1");
+      } catch {
+        // ignore storage failures
+      }
+      return !prev;
+    });
+  }, []);
   const [isPdfSnap, setIsPdfSnap] = useState(false);
   const [uncalibratedWarning, setUncalibratedWarning] = useState(false);
   // Raw stage-relative CSS pixel position, kept separate from the
   // image-pixel `mousePos` used for drawing — this is what positions the
   // hover tooltip without needing to re-derive screen coords from it.
   const [screenPointerPos, setScreenPointerPos] = useState<{ x: number; y: number } | null>(null);
+  const screenPointerPosRef = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    screenPointerPosRef.current = screenPointerPos;
+  }, [screenPointerPos]);
 
   useEffect(() => {
     if (!uncalibratedWarning) return;
@@ -289,6 +331,10 @@ if (!prev && activeTool) {
   // container dims into stageSize here made the "sheet" briefly equal the pane
   // on every resize — two writers, two meanings.
 
+  const activePlanName = useTakeoffStore((s) => {
+    const plan = s.plans.find((pl) => pl.id === s.activePlanId);
+    return plan?.name ?? "";
+  });
   const rotatePage = useTakeoffStore((s) => s.rotatePage);
   const rotateAllPages = useTakeoffStore((s) => s.rotateAllPages);
   const activeRealWidthLive = useTakeoffStore((s) => s.activeRealWidth);
@@ -472,6 +518,7 @@ if (!prev && activeTool) {
       pdfDisplaySize && pdfNaturalSize && pdfNaturalSize.width > 0
         ? pdfDisplaySize.width / pdfNaturalSize.width
         : 1,
+    orthoEnabled,
     pdfRotation: currentRotation,
     // naturalSize is the ROTATED viewport; segments live in unrotated space.
     pdfUnrotatedSize: pdfNaturalSize
@@ -1840,6 +1887,64 @@ if (!prev && activeTool) {
     },
     [containerRef, stageSize.width, stageSize.height, stageScale]
   );
+
+  // Auto Scroll: while a measuring tool is armed and the cursor sits in the
+  // edge band of the pane, pan the sheet toward that edge so long runs can be
+  // traced without stopping to pan. Drives the Konva node directly (like the
+  // drag path) and keeps the in-progress preview glued to the cursor by
+  // recomputing the image-space mouse point after each nudge.
+  useEffect(() => {
+    if (!autoScrollEnabled) return;
+    if (!activeTool && !calibrationMode) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const onLeave = () => {
+      screenPointerPosRef.current = null;
+    };
+    container.addEventListener("mouseleave", onLeave);
+
+    const EDGE = 28;
+    const SPEED = 14; // max px per tick at full edge penetration
+    const id = window.setInterval(() => {
+      const stage = stageRef.current;
+      const sp = screenPointerPosRef.current;
+      if (!stage || !sp || !containerRef.current) return;
+      const w = containerRef.current.offsetWidth;
+      const h = containerRef.current.offsetHeight;
+      let vx = 0;
+      let vy = 0;
+      if (sp.x < EDGE) vx = ((EDGE - sp.x) / EDGE) * SPEED;
+      else if (sp.x > w - EDGE) vx = -((sp.x - (w - EDGE)) / EDGE) * SPEED;
+      if (sp.y < EDGE) vy = ((EDGE - sp.y) / EDGE) * SPEED;
+      else if (sp.y > h - EDGE) vy = -((sp.y - (h - EDGE)) / EDGE) * SPEED;
+      if (!vx && !vy) return;
+      const cur = stage.position();
+      const next = clampStagePos({ x: cur.x + vx, y: cur.y + vy }, stage.scaleX());
+      if (next.x === cur.x && next.y === cur.y) return;
+      stage.position(next);
+      setStagePos(next);
+      const safeImageScale = imageScale > 0 ? imageScale : 1;
+      setMousePos({
+        x: (sp.x - next.x) / stage.scaleX() / safeImageScale,
+        y: (sp.y - next.y) / stage.scaleY() / safeImageScale,
+      });
+    }, 16);
+    return () => {
+      window.clearInterval(id);
+      container.removeEventListener("mouseleave", onLeave);
+    };
+  }, [
+    autoScrollEnabled,
+    activeTool,
+    calibrationMode,
+    clampStagePos,
+    imageScale,
+    setStagePos,
+    setMousePos,
+    stageRef,
+    containerRef,
+  ]);
 
   // Handle zoom
   const handleWheel = useCallback(
@@ -3418,15 +3523,9 @@ if (!prev && activeTool) {
       )}
 
       <CanvasOverlays
-        stageScale={stageScale}
-        setStageScale={setStageScale}
-        numPages={numPages}
-        currentPage={currentPage}
-        currentScale={currentScale}
         isPanningMode={isPanningMode}
         isSelectMode={isSelectMode}
         isShiftPressed={isShiftPressed}
-        onChangePage={changePage}
         onTogglePan={() => {
           const newMode = !isPanningMode;
           setIsPanningMode(newMode);
@@ -3455,7 +3554,22 @@ if (!prev && activeTool) {
         }}
         snapEnabled={snapEnabled}
         onToggleSnap={handleToggleSnap}
+      />
+
+      <CanvasStatusBar
+        numPages={numPages}
+        currentPage={currentPage}
+        onChangePage={changePage}
+        planName={activePlanName}
+        currentScale={currentScale}
+        stageScale={stageScale}
+        setStageScale={setStageScale}
         onFit={() => refitToView(image)}
+        orthoEnabled={orthoEnabled}
+        onToggleOrtho={handleToggleOrtho}
+        autoScrollEnabled={autoScrollEnabled}
+        onToggleAutoScroll={handleToggleAutoScroll}
+        mousePos={mousePos}
       />
       {(() => {
         // Slim status pill — top-center of viewport. Only appears when a
