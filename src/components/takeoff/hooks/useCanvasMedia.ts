@@ -12,6 +12,10 @@ import { getCanvasFitMode } from "@/utils/canvasPrefs";
 import { isDxfFile } from "@/utils/dxfRasterizer";
 import { rotateImageElement } from "@/utils/imageRotate";
 
+/** Fit-page leaves a 5% breathing margin so the plan doesn't touch the viewport
+ *  edges — matches the ratio measured in comparable takeoff viewers. */
+const FIT_PAGE_MARGIN = 0.95;
+
 interface UseCanvasMediaParams {
     containerRef: React.RefObject<HTMLDivElement | null>;
     backgroundImage: string | null;
@@ -115,22 +119,28 @@ export const useCanvasMedia = ({
 
                 const mode = getCanvasFitMode();
                 let initialScale = 1;
-                if (mode === "page" && baseStageHeight > 0 && containerHeight > 0) {
-                    // Fit-page: scale up (or down) so the whole plan fits the box,
-                    // limited by whichever dimension runs out first.
-                    initialScale = Math.min(
+                const isPageFit = mode === "page" && baseStageHeight > 0 && containerHeight > 0;
+                if (isPageFit) {
+                    // Fit-page: scale so the whole plan fits the box, limited by
+                    // whichever dimension runs out first, then pull back by
+                    // FIT_PAGE_MARGIN so the plan doesn't touch the viewport edges.
+                    initialScale = FIT_PAGE_MARGIN * Math.min(
                         containerWidth / baseStageWidth,
                         containerHeight / baseStageHeight,
                     );
                 }
 
-                // Center the (scaled) plan in the container. In width mode this
-                // just balances the leftover height above/below instead of
-                // dumping it all below; in page mode it centers the enlarged plan.
+                // Center the (scaled) plan in the container. In page mode the plan
+                // always fits, so centering is a plain halving of the leftover.
+                // Width mode keeps the legacy clamp: a plan taller than the
+                // container stays pinned to the top rather than being pushed above
+                // the viewport, which would hide the top of the sheet.
                 const scaledWidth = baseStageWidth * initialScale;
                 const scaledHeight = baseStageHeight * initialScale;
-                const posX = Math.max(0, (containerWidth - scaledWidth) / 2);
-                const posY = Math.max(0, (containerHeight - scaledHeight) / 2);
+                const centerX = (containerWidth - scaledWidth) / 2;
+                const centerY = (containerHeight - scaledHeight) / 2;
+                const posX = isPageFit ? centerX : Math.max(0, centerX);
+                const posY = isPageFit ? centerY : Math.max(0, centerY);
 
                 setStageScale(initialScale);
                 setStagePos({ x: posX, y: posY });

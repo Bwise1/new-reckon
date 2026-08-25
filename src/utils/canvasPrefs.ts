@@ -10,9 +10,11 @@ const FIT_MODE_KEY = "reckon_canvas_fit_mode";
 export const getCanvasFitMode = (): CanvasFitMode => {
   try {
     const v = localStorage.getItem(FIT_MODE_KEY);
-    return v === "page" ? "page" : "width"; // default: fit width (legacy behavior)
+    // Default: fit the whole page. Width-fit ignores height entirely, so tall
+    // plans opened past the bottom of the viewport and had to be scrolled.
+    return v === "width" ? "width" : "page";
   } catch {
-    return "width";
+    return "page";
   }
 };
 

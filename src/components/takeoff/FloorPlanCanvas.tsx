@@ -275,20 +275,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   // listener (run → session → tool). A second window listener here used to
   // double-handle it and immediately put the tool down, defeating the stages.
 
-  // Handle window resize
-  useEffect(() => {
-    const updateSize = () => {
-      if (containerRef.current) {
-        setStageSize({
-          width: containerRef.current.offsetWidth,
-          height: containerRef.current.offsetHeight,
-        });
-      }
-    };
-    updateSize();
-    window.addEventListener("resize", updateSize);
-    return () => window.removeEventListener("resize", updateSize);
-  }, []);
+  // Window resize is handled where each size now lives: CanvasViewport observes
+  // the pane for the Stage dimensions, and useCanvasMedia's ResizeObserver
+  // recomputes the sheet (stageSize) from the plan's natural size. Writing
+  // container dims into stageSize here made the "sheet" briefly equal the pane
+  // on every resize — two writers, two meanings.
 
   const rotatePage = useTakeoffStore((s) => s.rotatePage);
   const rotateAllPages = useTakeoffStore((s) => s.rotateAllPages);

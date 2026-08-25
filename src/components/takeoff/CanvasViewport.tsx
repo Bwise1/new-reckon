@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useLayoutEffect, useState } from "react";
 import { Stage, Layer, Group, Image as KonvaImage, Rect } from "react-konva";
 import type Konva from "konva";
 
@@ -45,6 +45,22 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
   draftChildren,
   overlayChildren,
 }) => {
+  // The Stage is sized to the PANE, not the plan. stageSize is the sheet
+  // (plan aspect box) drawn inside it as the white Rect below — decoupling the
+  // two is what lets the sheet pan/zoom past every pane edge instead of the
+  // canvas surface ending where the plan ends (grey band below the drawing).
+  const [viewportSize, setViewportSize] = useState({ width: 800, height: 600 });
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () =>
+      setViewportSize({ width: el.offsetWidth, height: el.offsetHeight });
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [containerRef]);
+
   return (
     <div
       id="canvas-container"
@@ -57,8 +73,8 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
     >
       <Stage
         ref={stageRef}
-        width={stageSize.width}
-        height={stageSize.height}
+        width={viewportSize.width}
+        height={viewportSize.height}
         scaleX={stageScale}
         scaleY={stageScale}
         x={stagePos.x}
@@ -72,15 +88,23 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
         onContextMenu={onStageContextMenu}
         onDragEnd={onStageDragEnd}
       >
-        {/* Layer 1: static background — never redraws after plan load */}
+        {/* Layer 1: static background — never redraws after plan load.
+            The Rect is the SHEET (stageSize = plan aspect box), deliberately
+            not the pane: it travels with pan/zoom like paper on a desk. */}
         <Layer listening={false}>
-          <Rect
-            x={0}
-            y={0}
-            width={stageSize.width}
-            height={stageSize.height}
-            fill="white"
-          />
+          {image && (
+            <Rect
+              x={0}
+              y={0}
+              width={stageSize.width}
+              height={stageSize.height}
+              fill="white"
+              shadowColor="black"
+              shadowBlur={12}
+              shadowOpacity={0.12}
+              shadowOffsetY={2}
+            />
+          )}
           {image && <KonvaImage image={image} scaleX={imageScale} scaleY={imageScale} />}
         </Layer>
 
