@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Wand2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import type { TakeoffMode } from '@/types/takeoff';
 import { MARKUP_COLORS, MEASUREMENT_TOOLS } from '@/constants/takeoffDesign';
@@ -14,6 +15,9 @@ interface CanvasToolbarProps {
   selectedMeasurementId?: string | null;
   onToggleCalibration: () => void;
   onSelectTool: (type: TakeoffMode) => void;
+  /** Single-click area detection mode (magic wand). */
+  autoAreaMode: boolean;
+  onToggleAutoArea: () => void;
   /** Put the active tool down (clicking the active tool button, or Esc). */
   onFinishTool: () => void;
   onColorChange: (color: string) => void;
@@ -60,6 +64,8 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   selectedMeasurementId,
   onToggleCalibration,
   onSelectTool,
+  autoAreaMode,
+  onToggleAutoArea,
   onFinishTool,
   onColorChange,
   onRealWidthChange,
@@ -158,6 +164,18 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             </React.Fragment>
           );
         })}
+        <div className="w-px h-4 bg-gray-200" />
+        <button
+          type="button"
+          onClick={onToggleAutoArea}
+          title="Auto area — click once inside a room and its boundary is detected automatically"
+          aria-pressed={autoAreaMode}
+          className={`flex items-center justify-center w-8 h-6 rounded transition cursor-pointer outline-none ${
+            autoAreaMode ? 'bg-secondary text-white outline-2 outline-secondary/30' : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <Wand2 className="w-3.5 h-3.5" />
+        </button>
         {/* No "Done" button: a measurement finishes on double-click (or by
             clicking near the first vertex), and clicking outside puts the tool
             down and dismisses the toolbox. */}

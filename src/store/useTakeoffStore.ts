@@ -2448,3 +2448,8 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   },
   };
 });
+
+// Debug handle for development sessions only.
+if (import.meta.env.DEV) {
+  (window as unknown as Record<string, unknown>).__takeoffStore = useTakeoffStore;
+}

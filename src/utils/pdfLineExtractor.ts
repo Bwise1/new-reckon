@@ -273,6 +273,19 @@ export class SegmentIndex {
     }
   }
 
+  /** Visit every indexed segment once (cells share references). */
+  forEachSegment(cb: (seg: PdfSegment) => void) {
+    const seen = new Set<PdfSegment>();
+    for (const cell of this.cells.values()) {
+      for (const seg of cell) {
+        if (!seen.has(seg)) {
+          seen.add(seg);
+          cb(seg);
+        }
+      }
+    }
+  }
+
   /** Find the best snap target within `radius` of (px,py). Priority follows
    *  CAD convention: segment endpoints beat midpoints beat points on the line,
    *  so corners win even when the cursor is fractionally closer to an edge. */

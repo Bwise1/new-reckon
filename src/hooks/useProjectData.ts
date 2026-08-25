@@ -205,40 +205,62 @@ export const useProjectData = (
             nextBoqElements = preMigrationLocalTree;
           } else if (serverBoqTree && serverBoqTree.length > 0) {
             const allElements = boqElementsFromApiTree(serverBoqTree);
-            const billForElement = new Map(
-              serverBoqTree.map((el) => [el.client_uuid, el.bill_client_uuid ?? null])
-            );
-            const bills =
-              serverBills.length > 0
-                ? serverBills.map((b) => ({ id: b.client_uuid, name: b.name }))
-                : [{ id: generateClientId(), name: 'Bill No. 1' }];
-            const firstBillId = bills[0].id;
-            const grouped: Record<string, typeof allElements> = {};
-            for (const el of allElements) {
-              const billId = billForElement.get(el.id) ?? firstBillId;
-              const target = bills.some((b) => b.id === billId) ? billId : firstBillId;
-              (grouped[target] = grouped[target] ?? []).push(el);
-            }
-            const activeBillId =
-              state.activeBillId && bills.some((b) => b.id === state.activeBillId)
-                ? state.activeBillId
-                : firstBillId;
-            nextBoqElements = grouped[activeBillId] ?? [];
-            const stash = { ...grouped };
-            delete stash[activeBillId];
-            billsPatch = {
-              bills,
-              activeBillId,
-              billElements: stash,
-            } as Partial<typeof state>;
-            // A project that predates bills has none on the server yet —
-            // registering the default bill makes it durable.
-            if (serverBills.length === 0) {
+            if (serverBills.length > 0) {
+              // Server knows bills: its grouping is the source of truth.
+              const billForElement = new Map(
+                serverBoqTree.map((el) => [el.client_uuid, el.bill_client_uuid ?? null])
+              );
+              const bills = serverBills.map((b) => ({ id: b.client_uuid, name: b.name }));
+              const firstBillId = bills[0].id;
+              const grouped: Record<string, typeof allElements> = {};
+              for (const el of allElements) {
+                const billId = billForElement.get(el.id) ?? firstBillId;
+                const target = bills.some((b) => b.id === billId) ? billId : firstBillId;
+                (grouped[target] = grouped[target] ?? []).push(el);
+              }
+              const activeBillId =
+                state.activeBillId && bills.some((b) => b.id === state.activeBillId)
+                  ? state.activeBillId
+                  : firstBillId;
+              nextBoqElements = grouped[activeBillId] ?? [];
+              const stash = { ...grouped };
+              delete stash[activeBillId];
+              billsPatch = {
+                bills,
+                activeBillId,
+                billElements: stash,
+              } as Partial<typeof state>;
+            } else if (state.bills.length > 1) {
+              // The server doesn't know bills yet (route not deployed, or a
+              // pre-bills backend) but LOCAL has a multi-bill structure.
+              // Local is authoritative — replacing it with a fresh default
+              // bill here is exactly the clobber that crossed bill
+              // identities. Keep local trees; re-register the bills so the
+              // server learns them once it can.
+              nextBoqElements = state.boqElements;
+              state.bills.forEach((bill, idx) => {
+                syncQueue.enqueue({
+                  kind: 'boq.bill.upsert',
+                  projectId,
+                  clientUuid: bill.id,
+                  body: { name: bill.name, sort_order: idx },
+                });
+              });
+            } else {
+              // Single (or no) local bill: adopt the server tree into it.
+              const billId = state.activeBillId ?? generateClientId();
+              const billName = state.bills[0]?.name ?? 'Bill No. 1';
+              nextBoqElements = allElements;
+              billsPatch = {
+                bills: [{ id: billId, name: billName }],
+                activeBillId: billId,
+                billElements: {},
+              } as Partial<typeof state>;
               syncQueue.enqueue({
                 kind: 'boq.bill.upsert',
                 projectId,
-                clientUuid: firstBillId,
-                body: { name: bills[0].name, sort_order: 0 },
+                clientUuid: billId,
+                body: { name: billName, sort_order: 0 },
               });
             }
           }

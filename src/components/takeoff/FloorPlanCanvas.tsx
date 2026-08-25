@@ -29,6 +29,8 @@ import CanvasOverlays from "@/components/takeoff/CanvasOverlays";
 import CanvasStatusBar from "@/components/takeoff/CanvasStatusBar";
 import CanvasViewport from "@/components/takeoff/CanvasViewport";
 import { ratioToPxPerMeter } from "@/utils/pdfScaleDetector";
+import { detectRoomPolygon } from "@/utils/areaDetection";
+import { unrotatedToRotated } from "@/utils/pdfLineExtractor";
 import { generateClientId } from "@/utils/id";
 import {
   getMeasurementColor,
@@ -193,6 +195,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     currentPage,
   });
   const [snapEnabled, setSnapEnabled] = useState(true);
+  // Single-click area detection ("magic wand"): while on, a click with the
+  // area tool runs flood-fill room detection instead of placing a vertex.
+  const [autoAreaMode, setAutoAreaMode] = useState(false);
+  const [autoAreaError, setAutoAreaError] = useState<string | null>(null);
+  const autoCommitRef = useRef(false);
   // Drafting toggles, persisted like other canvas prefs. Ortho makes angle
   // snapping permanent (Shift still works as a momentary hold); Auto Scroll
   // pans the sheet when the cursor reaches the pane edge mid-measurement.
@@ -260,6 +267,16 @@ if (!prev && activeTool) {
       setCurrentPoints([]);
     }
   }, [activeTool, isPanningMode, setIsPanningMode, isSelectMode, setIsSelectMode]);
+
+  useEffect(() => {
+    if (activeTool !== "area" && autoAreaMode) setAutoAreaMode(false);
+  }, [activeTool, autoAreaMode]);
+
+  useEffect(() => {
+    if (!autoAreaError) return;
+    const timer = window.setTimeout(() => setAutoAreaError(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [autoAreaError]);
 
   const confirm = useConfirm();
   const snapSettings = useMemo(
@@ -581,6 +598,75 @@ if (!prev && activeTool) {
   }, []);
 
   // Handle canvas click
+  /** Run single-click room detection at a click point (display-bitmap px)
+   *  and commit the result through the normal area pipeline. */
+  const runAutoArea = useCallback(
+    (clickPoint: { x: number; y: number }) => {
+      if (!image) return;
+      const dispW = pdfDisplaySize?.width ?? image.width;
+      const dispH = pdfDisplaySize?.height ?? image.height;
+      if (dispW <= 0 || dispH <= 0) return;
+
+      // Work at a bounded resolution: detection quality doesn't need the full
+      // 300-DPI bitmap, and the downscale also closes hairline gaps.
+      const workScale = Math.min(1, 2200 / Math.max(dispW, dispH));
+      const w = Math.max(1, Math.round(dispW * workScale));
+      const h = Math.max(1, Math.round(dispH * workScale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(image, 0, 0, w, h);
+
+      // Stroke the extracted vector walls on top: they are gap-free and
+      // anti-aliasing-free, so the fill leaks far less than on pixels alone.
+      const index = pdfSegmentIndexRef?.current;
+      const natural = pdfNaturalSize;
+      if (index && natural && natural.width > 0) {
+        const displayScale = dispW / natural.width;
+        const rot = currentRotation % 360;
+        const unrotW = rot % 180 !== 0 ? natural.height : natural.width;
+        const unrotH = rot % 180 !== 0 ? natural.width : natural.height;
+        const k = displayScale * workScale;
+        ctx.strokeStyle = "#000000";
+        ctx.lineWidth = Math.max(1.25, 2 * workScale);
+        ctx.beginPath();
+        index.forEachSegment((seg) => {
+          const a = unrotatedToRotated(seg.x1, seg.y1, rot, unrotW, unrotH);
+          const b = unrotatedToRotated(seg.x2, seg.y2, rot, unrotW, unrotH);
+          ctx.moveTo(a.x * k, a.y * k);
+          ctx.lineTo(b.x * k, b.y * k);
+        });
+        ctx.stroke();
+      }
+
+      const detected = detectRoomPolygon(
+        ctx.getImageData(0, 0, w, h),
+        clickPoint.x * workScale,
+        clickPoint.y * workScale
+      );
+      if (!detected) {
+        setAutoAreaError(
+          "No enclosed room found there — the boundary has a gap, or you clicked a line. Try another spot or trace it manually."
+        );
+        return;
+      }
+      const polygon = detected.points.map((pt) => ({
+        x: pt.x / workScale,
+        y: pt.y / workScale,
+      }));
+      // Hand the polygon to the ordinary area pipeline: prefill the draft and
+      // let the standard finish path (handleDblClick) commit it.
+      autoCommitRef.current = true;
+      setCurrentPoints(polygon);
+    },
+    [image, pdfDisplaySize, pdfNaturalSize, pdfSegmentIndexRef, currentRotation, setCurrentPoints]
+  );
+
   const handleStageClick = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
     if (isPanningMode) return;
@@ -634,6 +720,14 @@ if (!prev && activeTool) {
       x: Math.max(0, Math.min(boundsW, point.x)),
       y: Math.max(0, Math.min(boundsH, point.y)),
     };
+
+    // Magic wand: a single click detects the enclosed room instead of
+    // placing a vertex. Uses the raw (unsnapped) point — snapping to a wall
+    // line would start the fill ON the wall and abort.
+    if (activeTool === "area" && autoAreaMode && !calibrationMode && !deductionTarget) {
+      runAutoArea(point);
+      return;
+    }
 
     // Apply advanced snapping — but Shift-lock takes priority for active drawing
     // tools so the user can always force an axis-constrained segment.
@@ -936,6 +1030,8 @@ if (!prev && activeTool) {
       stagePos,
       stageScale,
       getSnappedPoint,
+      autoAreaMode,
+      runAutoArea,
       getAngleSnappedPoint,
       calculateAreaFromPoints,
       currentScale,
@@ -1938,6 +2034,15 @@ if (!prev && activeTool) {
     containerRef,
   ]);
 
+  // Commit a wand-detected polygon through the exact hand-drawn finish path.
+  // Runs as an effect so handleDblClick sees the freshly set currentPoints.
+  useEffect(() => {
+    if (!autoCommitRef.current) return;
+    if (activeTool !== "area" || currentPoints.length < 3) return;
+    autoCommitRef.current = false;
+    handleDblClick();
+  }, [currentPoints, activeTool, handleDblClick]);
+
   // Handle zoom
   const handleWheel = useCallback(
     (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -2083,6 +2188,15 @@ if (!prev && activeTool) {
         }
         selectedMeasurementId={selectedMeasurement?.measurementId ?? null}
         onSelectTool={onSelectTool}
+        autoAreaMode={autoAreaMode}
+        onToggleAutoArea={() => {
+          if (autoAreaMode) {
+            setAutoAreaMode(false);
+            return;
+          }
+          if ((activeToolProp ?? activeTool) !== "area") onSelectTool("area");
+          setAutoAreaMode(true);
+        }}
         onFinishTool={onFinishTool}
         onColorChange={(color) => {
           // Mirror the width control: with a measurement selected, recolor
@@ -3482,6 +3596,12 @@ if (!prev && activeTool) {
             <span>Scale 1:{detectedScale.ratio} detected on this sheet — click to apply</span>
           </button>
         )}
+
+      {autoAreaError && (
+        <div className="absolute top-32 left-1/2 -translate-x-1/2 z-20 max-w-md rounded-full bg-gray-900/90 text-white px-4 py-1.5 shadow-lg text-xs font-semibold">
+          {autoAreaError}
+        </div>
+      )}
 
       {uncalibratedWarning && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-red-600 text-white px-3 py-1.5 shadow-lg text-xs font-semibold">
