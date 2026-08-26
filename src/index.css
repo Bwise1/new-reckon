@@ -92,6 +92,24 @@
     "Helvetica Neue", Arial, sans-serif;
 }
 
+/* Explicit light values so a light scope can nest INSIDE a dark one (the
+   canvas viewport is paper and stays light in every theme). */
+[data-theme="light"] {
+  --color-ink: #f8fafc;
+  --color-ink-elevated: #eef2f6;
+  --color-canvas: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-body: #0f172a;
+  --color-muted: #64748b;
+  --color-overlay: #0f172a;
+  --color-primary: #0f172a;
+  --color-primary-fg: #ffffff;
+  --color-accent-strong: #1b6f6c;
+  --color-navy-soft: #003566;
+}
+
 /* Dark theme — inert until a data-theme switch ships (design-system §6 P5). */
 [data-theme="dark"] {
   --color-ink: #18181b;

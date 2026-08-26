@@ -1,13 +1,11 @@
 import React, { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { FiUser } from "react-icons/fi";
 import EstimationCard from "./EstimationCard";
 import BillsOverview from "./BillsOverview";
 import { ArrowLeft } from "lucide-react";
 import BoqExportModal from "./BoqExportModal";
 import { useShallow } from "zustand/react/shallow";
 import { useTakeoffStore } from "@/store/useTakeoffStore";
-import { useAuthStore } from "@/stores/auth.store";
 import { useBoqExport } from "@/hooks/useBoqExport";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import type { EstimationCardData } from "@/types/takeoff";
@@ -20,7 +18,6 @@ interface TakeoffRightSidebarProps {
 const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
   className = "",
 }) => {
-  const user = useAuthStore((state) => state.user);
   const {
     exportModalMode,
     setExportModalMode,
@@ -161,21 +158,17 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
     updateElementItem(elementId, itemId, updates);
   };
 
-  const displayName = user?.name || user?.email?.split("@")[0] || "User";
-
   return (
     <div
       className={`w-[380px] min-w-[380px] max-w-[380px] shrink-0 h-full flex flex-col bg-surface border-l border-border overflow-hidden ${className}`}
     >
       <div className="shrink-0 px-4 py-3 border-b border-border flex items-center gap-3">
-        <div
-          className="w-11 h-11 rounded-full bg-brandGold flex items-center justify-center shrink-0 overflow-hidden"
-          title={displayName}
-        >
-          <FiUser className="text-secondary text-xl" />
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-base font-bold text-body">Bill of Quantities</h2>
+          <p className="mt-0.5 text-xs font-medium text-muted">
+            {bills.length} Active Bill{bills.length === 1 ? '' : 's'}
+          </p>
         </div>
-
-        <span className="flex-1" />
 
         <button
           type="button"
@@ -183,7 +176,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
           onClick={() => setExportModalMode("export")}
           disabled={busyAction || !isOnline}
           title={!isOnline ? "Export requires an internet connection" : undefined}
-          className="shrink-0 px-5 py-2 rounded-lg bg-secondary text-white text-sm font-bold hover:bg-[#002847] disabled:opacity-50 shadow-sm cursor-pointer disabled:cursor-not-allowed"
+          className="shrink-0 px-5 py-2 rounded-lg bg-primary text-primary-fg text-sm font-bold hover:bg-primary/90 disabled:opacity-50 shadow-sm cursor-pointer disabled:cursor-not-allowed"
         >
           Export
         </button>

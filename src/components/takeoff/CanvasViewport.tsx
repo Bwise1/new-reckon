@@ -80,6 +80,8 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
   return (
     <div
       id="canvas-container"
+      // Paper, not chrome: the drawing surface stays light in every theme.
+      data-theme="light"
       ref={containerRef}
       // overflow-hidden (not auto): the plan is moved by Konva pan (stagePos),
       // clamped symmetrically in all directions. With overflow-auto, browser

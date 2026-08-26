@@ -187,7 +187,7 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
       <button
         type="button"
         onClick={() => addBill()}
-        className="w-full flex items-center justify-center gap-2 rounded-xl bg-secondary text-white py-3 text-sm font-bold hover:bg-[#002847] transition-colors cursor-pointer"
+        className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-fg py-3 text-sm font-bold hover:bg-primary/90 transition-colors cursor-pointer"
       >
         <Plus className="w-4 h-4" />
         Add Bill

@@ -466,6 +466,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           <div
             ref={calMenuRef}
             style={{ position: 'fixed', top: calPos.top, left: calPos.left, zIndex: 99999 }}
+            data-theme="dark"
             className="w-56 bg-surface border border-border rounded-xl shadow-xl py-1.5 text-sm"
           >
             <p className="px-3 pb-1.5 pt-0.5 text-[10px] font-semibold text-muted/70 uppercase tracking-wide border-b border-border">
@@ -517,6 +518,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           <div
             ref={colorMenuRef}
             style={{ position: 'fixed', top: colorPos.top, left: colorPos.left, zIndex: 99999 }}
+            data-theme="dark"
             className="bg-surface border border-border rounded-xl shadow-xl p-3"
           >
             <p className="text-[10px] font-semibold text-muted/70 uppercase tracking-wide mb-2">

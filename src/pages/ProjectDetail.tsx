@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRef, useCallback, useEffect, useState } from 'react';
 import PlanNavigator from '@/components/takeoff/PlanNavigator';
+import SidebarRail from '@/components/takeoff/SidebarRail';
 import FloorPlanCanvas from '@/components/takeoff/FloorPlanCanvas';
 import TakeoffRightSidebar from '@/components/takeoff/TakeoffRightSidebar';
 import TakeoffTour from '@/components/tutorial/TakeoffTour';
@@ -253,15 +254,18 @@ const ProjectDetail = () => {
   }
 
   return (
-    <div className="relative flex h-screen bg-[#f0f2f5] overflow-hidden">
+    // The project shell runs the DARK token set (Reckon-Bill prototype look);
+    // the canvas viewport re-scopes itself light because the sheet is paper.
+    <div data-theme="dark" className="relative flex h-screen bg-ink text-body overflow-hidden">
       {!isPlanReady && (
-        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-[#f0f2f5]">
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-ink">
           <div className="rounded-lg bg-surface px-5 py-4 shadow-lg border border-border text-center">
             <p className="text-sm font-medium text-body">Loading project…</p>
           </div>
         </div>
       )}
 
+      <SidebarRail />
       <PlanNavigator
         projectTitle={projectTitle}
         plans={plans}
