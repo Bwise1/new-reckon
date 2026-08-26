@@ -9,6 +9,7 @@ import {
   Redo2,
   RotateCcw,
   RotateCw,
+  CopyCheck,
   Trash2,
   Maximize,
   Minimize,
@@ -231,6 +232,10 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   const liveColor = useTakeoffStore((s) => s.activeColor);
   const fullscreen = useFullscreen();
 
+  // Rotate applies to the current page, or to every page while the
+  // Apply-to-All toggle is on (Reckon-Bill behaviour).
+  const [applyToAll, setApplyToAll] = useState(false);
+
   // Local input state so the field stays editable mid-type.
   const [widthInput, setWidthInput] = useState(Number(activeRealWidth).toFixed(3));
   const widthSeed = `${selectedMeasurementId ?? ''}:${activeRealWidth}`;
@@ -418,10 +423,27 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         <Divider />
 
         <ToolGroup title="Page">
-          <IconButton icon={RotateCcw} label="Rotate L" onClick={onRotateCCW} />
-          <IconButton icon={RotateCw} label="Rotate R" onClick={onRotateCW} />
-          <IconButton icon={RotateCcw} label="All L" onClick={onRotateAllCCW} />
-          <IconButton icon={RotateCw} label="All R" onClick={onRotateAllCW} />
+          <IconButton
+            icon={RotateCcw}
+            label="Rotate Left"
+            title={applyToAll ? 'Rotate every page left' : 'Rotate this page left'}
+            onClick={() => (applyToAll ? onRotateAllCCW() : onRotateCCW())}
+          />
+          <IconButton
+            icon={RotateCw}
+            label="Rotate Right"
+            title={applyToAll ? 'Rotate every page right' : 'Rotate this page right'}
+            onClick={() => (applyToAll ? onRotateAllCW() : onRotateCW())}
+          />
+          <IconButton
+            icon={CopyCheck}
+            label="Apply to All"
+            active={applyToAll}
+            activeBg="bg-emerald-600 text-white"
+            activeLabelColor="text-emerald-700"
+            title="When on, rotations apply to every page of the plan"
+            onClick={() => setApplyToAll((prev) => !prev)}
+          />
         </ToolGroup>
 
         {fullscreen.supported && (
