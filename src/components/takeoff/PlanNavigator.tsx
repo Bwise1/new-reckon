@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Eye, EyeOff, FileText, Link2, Trash2 } from 'lucide-react';
+import { ChevronRight, Eye, EyeOff, FileText, Link2, Trash2, X } from 'lucide-react';
+import { AreaIcon, LinearIcon, CountIcon } from './icons/ToolIcons';
 import ReckonLogo from '@/assets/images/logo.svg';
 import type { PlanDiscipline, TakeoffItem, TakeoffMode, ProjectPlan } from '@/types/takeoff';
 import {
@@ -63,9 +64,6 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
   const setPlanDiscipline = useTakeoffStore((s) => s.setPlanDiscipline);
   const toggleMeasurementHidden = useTakeoffStore((s) => s.toggleMeasurementHidden);
   const renameMeasurement = useTakeoffStore((s) => s.renameMeasurement);
-  // Which measurement row is being renamed inline, and its draft text.
-  const [renaming, setRenaming] = useState<{ itemId: string; measurementId: string } | null>(null);
-  const [renameDraft, setRenameDraft] = useState('');
   const removePlan = useTakeoffStore((s) => s.removePlan);
   const boqElements = useTakeoffStore((s) => s.boqElements);
   const bindMeasurementToItem = useTakeoffStore((s) => s.bindMeasurementToItem);
@@ -195,18 +193,6 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
       .map((key) => ({ key, ...groups.get(key)! }));
   }, [plans, takeoffItems]);
 
-  const typeLetter = (type: TakeoffMode): string => {
-    switch (type) {
-      case 'linear':
-        return 'L';
-      case 'polyline':
-        return 'G'; // Girth (QS term for perimeter)
-      case 'area':
-        return 'A';
-      case 'count':
-        return 'C';
-    }
-  };
 
   const unitLabel = (type: TakeoffMode) => {
     switch (type) {
@@ -393,132 +379,136 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                     <span className="truncate text-left">{group.label}</span>
                   </button>
                   {!isCollapsed && (
-                    <div className="pl-5 space-y-0.5">
+                    <div className="pl-3 space-y-1.5">
                       {group.entries.map((entry) => {
                         const { base, sup } = unitLabel(entry.type);
                         const value =
                           entry.type === 'count'
                             ? String(Math.round(entry.quantity))
                             : entry.quantity.toFixed(2);
+                        const TypeIcon =
+                          entry.type === 'area'
+                            ? AreaIcon
+                            : entry.type === 'count'
+                              ? CountIcon
+                              : LinearIcon;
                         return (
                           <div
                             key={entry.measurementId}
-                            className="group flex items-center gap-2 px-2 py-1 rounded hover:bg-overlay/5 cursor-pointer"
+                            className="group flex items-center gap-2 rounded-lg border border-overlay/5 bg-overlay/5 px-2.5 py-2 hover:bg-overlay/10 transition-colors cursor-pointer"
                             onClick={() =>
                               onSelectMeasurement(entry.itemId, entry.measurementId)
                             }
                           >
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleMeasurementHidden(entry.itemId, entry.measurementId);
-                              }}
-                              className="p-0.5 text-muted hover:text-body cursor-pointer"
-                              title={entry.hidden ? 'Show markup' : 'Hide markup'}
-                            >
-                              {entry.hidden ? (
-                                <EyeOff className="w-3.5 h-3.5" />
-                              ) : (
-                                <Eye className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                            {renaming?.measurementId === entry.measurementId ? (
-                              <input
-                                autoFocus
-                                value={renameDraft}
-                                onClick={(e) => e.stopPropagation()}
-                                onChange={(e) => setRenameDraft(e.target.value)}
-                                onBlur={() => {
-                                  renameMeasurement(entry.itemId, entry.measurementId, renameDraft);
-                                  setRenaming(null);
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    renameMeasurement(entry.itemId, entry.measurementId, renameDraft);
-                                    setRenaming(null);
-                                  } else if (e.key === 'Escape') {
-                                    // Own this Escape: cancel the rename only,
-                                    // don't let the canvas discard the session.
-                                    e.stopPropagation();
-                                    setRenaming(null);
-                                  }
-                                }}
-                                placeholder={`${entry.label}`}
-                                className="flex-1 min-w-0 text-[11px] bg-overlay/10 border border-white/20 rounded px-1 py-0.5 text-body outline-none"
-                              />
-                            ) : (
-                              <span
-                                className={`flex-1 min-w-0 flex flex-col leading-tight ${
-                                  entry.hidden ? 'text-muted' : 'text-body'
-                                }`}
-                                title="Double-click to rename"
-                                onDoubleClick={(e) => {
-                                  e.stopPropagation();
-                                  setRenameDraft(entry.label);
-                                  setRenaming({
-                                    itemId: entry.itemId,
-                                    measurementId: entry.measurementId,
-                                  });
-                                }}
-                              >
-                                {/* Name on top, full measured value below so it
-                                    is never truncated. */}
-                                <span className="text-[11px] text-muted truncate">
-                                  {entry.label}
-                                </span>
-                                <span className="text-[12px] font-medium">
-                                  {value}
-                                  {base}
-                                  {sup && <sup className="text-[8px]">{sup}</sup>}
-                                </span>
-                              </span>
-                            )}
                             <span
-                              className="w-4 h-4 rounded-sm shrink-0 flex items-center justify-center text-[9px] font-bold text-body"
-                              style={{ backgroundColor: entry.color }}
+                              className={`flex h-4 w-4 shrink-0 items-center justify-center ${
+                                entry.hidden ? 'opacity-40' : ''
+                              }`}
                             >
-                              {typeLetter(entry.type)}
+                              <TypeIcon className="h-4 w-4" />
                             </span>
-                            {entry.boqElementId && entry.boqItemId ? (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  unbindMeasurement(entry.measurementId);
-                                }}
-                                className="p-0.5 text-warn hover:text-[#c2410c] cursor-pointer"
-                                title="Bound to a BOQ line — click to unlink"
-                              >
-                                <Link2 className="w-3 h-3" />
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setBindPickerFor({
-                                    measurementId: entry.measurementId,
-                                    type: entry.type,
-                                  });
-                                }}
-                                className="opacity-0 group-hover:opacity-100 p-0.5 text-muted hover:text-warn cursor-pointer"
-                                title="Bind to a BOQ line"
-                              >
-                                <Link2 className="w-3 h-3" />
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onDeleteMeasurement(entry.itemId, entry.measurementId);
+                            {/* Always-editable name (prototype pattern): click
+                                and type; commits on blur/Enter, Escape reverts.
+                                Keyed on the label so external renames re-seed. */}
+                            <input
+                              key={`${entry.measurementId}:${entry.label}`}
+                              defaultValue={entry.label}
+                              placeholder="Untitled"
+                              onClick={(e) => e.stopPropagation()}
+                              onBlur={(e) => {
+                                if (e.target.value !== entry.label) {
+                                  renameMeasurement(
+                                    entry.itemId,
+                                    entry.measurementId,
+                                    e.target.value
+                                  );
+                                }
                               }}
-                              className="opacity-0 group-hover:opacity-100 p-0.5 text-muted hover:text-danger cursor-pointer"
-                              title="Delete measurement"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.currentTarget.blur();
+                                } else if (e.key === 'Escape') {
+                                  // Own this Escape: revert the rename only,
+                                  // don't let the canvas discard the session.
+                                  e.stopPropagation();
+                                  e.currentTarget.value = entry.label;
+                                  e.currentTarget.blur();
+                                }
+                              }}
+                              className={`min-w-0 flex-1 rounded bg-transparent px-1 -mx-1 text-[11px] font-medium outline-none transition-colors hover:bg-overlay/10 focus:bg-overlay/10 focus:ring-1 focus:ring-accent/50 ${
+                                entry.hidden ? 'text-muted' : 'text-body'
+                              }`}
+                            />
+                            <span
+                              className="h-2 w-2 rounded-full shrink-0"
+                              style={{ backgroundColor: entry.color }}
+                              title="Markup color"
+                            />
+                            <span
+                              className={`shrink-0 whitespace-nowrap text-[10px] font-medium tabular-nums ${
+                                entry.hidden ? 'text-muted/50' : 'text-muted'
+                              }`}
                             >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
+                              {value}
+                              {base}
+                              {sup && <sup className="text-[8px]">{sup}</sup>}
+                            </span>
+                            <span className="flex shrink-0 items-center gap-0.5">
+                              {entry.boqElementId && entry.boqItemId ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    unbindMeasurement(entry.measurementId);
+                                  }}
+                                  className="flex h-5 w-5 items-center justify-center rounded-md text-warn transition-colors hover:bg-overlay/10 cursor-pointer"
+                                  title="Bound to a BOQ line — click to unlink"
+                                >
+                                  <Link2 className="h-3 w-3" />
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setBindPickerFor({
+                                      measurementId: entry.measurementId,
+                                      type: entry.type,
+                                    });
+                                  }}
+                                  className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay/10 hover:text-warn cursor-pointer"
+                                  title="Bind to a BOQ line"
+                                >
+                                  <Link2 className="h-3 w-3" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleMeasurementHidden(entry.itemId, entry.measurementId);
+                                }}
+                                className="flex h-5 w-5 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay/10 hover:text-body cursor-pointer"
+                                title={entry.hidden ? 'Show markup' : 'Hide markup'}
+                              >
+                                {entry.hidden ? (
+                                  <EyeOff className="h-3 w-3" />
+                                ) : (
+                                  <Eye className="h-3 w-3" />
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteMeasurement(entry.itemId, entry.measurementId);
+                                }}
+                                className="flex h-5 w-5 items-center justify-center rounded-md text-danger transition-colors hover:bg-danger/10 cursor-pointer"
+                                title="Delete measurement"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
                           </div>
                         );
                       })}
