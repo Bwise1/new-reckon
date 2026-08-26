@@ -37,14 +37,14 @@ const Signup = () => {
       <div className="flex flex-col gap-3">
         <button
           type="button"
-          className="w-full border border-gray-300 rounded-lg px-4 py-3 font-normal text-sm flex items-center justify-center hover:bg-gray-50 transition-colors"
+          className="w-full border border-border rounded-lg px-4 py-3 font-normal text-sm flex items-center justify-center hover:bg-overlay/5 transition-colors"
         >
           <img src={GoogleIcon} className="h-5 w-5 mr-3" alt="Google" />
           Continue with Google
         </button>
         <button
           type="button"
-          className="w-full border border-gray-300 rounded-lg px-4 py-3 font-normal text-sm flex items-center justify-center hover:bg-gray-50 transition-colors"
+          className="w-full border border-border rounded-lg px-4 py-3 font-normal text-sm flex items-center justify-center hover:bg-overlay/5 transition-colors"
         >
           <img src={AppleIcon} className="h-5 w-5 mr-3" alt="Apple" />
           Continue with Apple
@@ -52,11 +52,11 @@ const Signup = () => {
       </div>
 
       <div className="my-6 grid grid-cols-3 items-center gap-4">
-        <hr className="border-gray-300" />
+        <hr className="border-border" />
         <p className="text-center font-normal text-sm text-[#616161]">
           Or set up with email
         </p>
-        <hr className="border-gray-300" />
+        <hr className="border-border" />
       </div>
 
       <form onSubmit={handleSignup}>
@@ -76,7 +76,7 @@ const Signup = () => {
         </div>
 
         {(error || validationError) && (
-          <div className="text-red-500 text-sm font-medium mb-2">
+          <div className="text-danger text-sm font-medium mb-2">
             {validationError || error?.message}
           </div>
         )}

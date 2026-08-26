@@ -59,7 +59,7 @@ const Dashboard = () => {
 
         <div style={{ width: "470px" }}>
           <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-gray-900">Welcome {firstName}</h2>
+            <h2 className="text-xl font-bold text-body">Welcome {firstName}</h2>
             <button
               onClick={() => setShowNewProject(true)}
               className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-gray-800 transition-colors"
@@ -68,13 +68,13 @@ const Dashboard = () => {
             </button>
           </div>
 
-          <div className="flex border-b border-gray-200 mb-4">
+          <div className="flex border-b border-border mb-4">
             <button
               onClick={() => setActiveTab("files")}
               className={`flex-1 pb-3 text-sm text-center transition-colors ${
                 activeTab === "files"
-                  ? "text-gray-900 font-medium border-b-2 border-gray-900 -mb-px"
-                  : "text-gray-400"
+                  ? "text-body font-medium border-b-2 border-gray-900 -mb-px"
+                  : "text-muted/70"
               }`}
             >
               My Files
@@ -83,8 +83,8 @@ const Dashboard = () => {
               onClick={() => setActiveTab("community")}
               className={`flex-1 pb-3 text-sm text-center transition-colors ${
                 activeTab === "community"
-                  ? "text-gray-900 font-medium border-b-2 border-gray-900 -mb-px"
-                  : "text-gray-400"
+                  ? "text-body font-medium border-b-2 border-gray-900 -mb-px"
+                  : "text-muted/70"
               }`}
             >
               Community
@@ -94,7 +94,7 @@ const Dashboard = () => {
           <div className="pb-16 min-h-screen">
             {activeTab === "files" && <ProjectList />}
             {activeTab === "community" && (
-              <div className="text-center text-gray-400 py-12 text-sm">
+              <div className="text-center text-muted/70 py-12 text-sm">
                 Community projects coming soon
               </div>
             )}

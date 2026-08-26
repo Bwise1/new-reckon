@@ -443,7 +443,7 @@ if (!prev && activeTool) {
         const ok = await confirm({
           title: "Rotate page with drawings?",
           message: (
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted">
               This page has measurements drawn on it. They will be rotated to match
               the new orientation. This cannot be undone.
             </p>
@@ -471,7 +471,7 @@ if (!prev && activeTool) {
         const ok = await confirm({
           title: "Rotate all pages with drawings?",
           message: (
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted">
               Some pages have measurements drawn on them. All drawings will be
               rotated to match the new orientation. This cannot be undone.
             </p>
@@ -3650,7 +3650,7 @@ if (!prev && activeTool) {
               const displayScale = pdfNaturalSize.width > 0 ? pdfDisplaySize.width / pdfNaturalSize.width : 1;
               setScale(currentPage, ratioToPxPerMeter(detectedScale.ratio, displayScale));
             }}
-            className="absolute top-32 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-1.5 shadow-lg text-xs font-semibold transition-colors cursor-pointer"
+            className="absolute top-32 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-accent-strong hover:bg-accent text-white px-4 py-1.5 shadow-lg text-xs font-semibold transition-colors cursor-pointer"
           >
             <span>Scale 1:{detectedScale.ratio} detected on this sheet — click to apply</span>
           </button>
@@ -3663,7 +3663,7 @@ if (!prev && activeTool) {
       )}
 
       {uncalibratedWarning && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-red-600 text-white px-3 py-1.5 shadow-lg text-xs font-semibold">
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-danger text-white px-3 py-1.5 shadow-lg text-xs font-semibold">
           <span>Calibrate this page before taking measurements</span>
         </div>
       )}
@@ -3673,21 +3673,21 @@ if (!prev && activeTool) {
           to advertise. */}
 
       {activePlanId && !hasLoadedPlan && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gray-200/80 z-5">
-          <div className="pointer-events-auto max-w-sm mx-4 rounded-lg bg-white px-5 py-4 shadow-lg border border-gray-200 text-center">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-border/80 z-5">
+          <div className="pointer-events-auto max-w-sm mx-4 rounded-lg bg-surface px-5 py-4 shadow-lg border border-border text-center">
             {planLoadStatus === "loading" && (
-              <p className="text-sm font-medium text-gray-700">Loading plan…</p>
+              <p className="text-sm font-medium text-body">Loading plan…</p>
             )}
             {planLoadStatus === "error" && (
               <>
-                <p className="text-sm font-semibold text-red-600">Could not load plan</p>
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="text-sm font-semibold text-danger">Could not load plan</p>
+                <p className="mt-1 text-xs text-muted">
                   {planLoadError ?? "Check your connection or re-upload the drawing."}
                 </p>
               </>
             )}
             {planLoadStatus !== "loading" && planLoadStatus !== "error" && (
-              <p className="text-sm text-gray-600">Preparing drawing…</p>
+              <p className="text-sm text-muted">Preparing drawing…</p>
             )}
           </div>
         </div>
@@ -3722,7 +3722,7 @@ if (!prev && activeTool) {
           accent = "bg-orange-600/90";
         } else if (deductionTarget && activeTool === "area") {
           text = "Deducting — double-click / Enter to finish, Esc to cancel";
-          accent = "bg-red-600/90";
+          accent = "bg-danger/90";
         } else if (activeTool === "linear") {
           text = "Linear — click points, double-click / Enter to finish";
         } else if (activeTool === "area") {
@@ -3807,7 +3807,7 @@ if (!prev && activeTool) {
               }}
             />
             <div
-              className="fixed z-[9999] bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-[180px] text-sm"
+              className="fixed z-[9999] bg-surface border border-border rounded-lg shadow-xl py-1 min-w-[180px] text-sm"
               style={{ left: areaContextMenu.x, top: areaContextMenu.y }}
             >
               <button
@@ -3831,7 +3831,7 @@ if (!prev && activeTool) {
                   setActiveTool("area");
                   setAreaContextMenu(null);
                 }}
-                className="w-full text-left px-3 py-1.5 hover:bg-gray-100 cursor-pointer"
+                className="w-full text-left px-3 py-1.5 hover:bg-overlay/10 cursor-pointer"
               >
                 Deduct
               </button>
@@ -3847,11 +3847,11 @@ if (!prev && activeTool) {
                   );
                   setAreaContextMenu(null);
                 }}
-                className="w-full text-left px-3 py-1.5 hover:bg-gray-100 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full text-left px-3 py-1.5 hover:bg-overlay/10 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Remove last deduction {deductionCount > 0 ? `(${deductionCount})` : ''}
               </button>
-              <div className="h-px bg-gray-200 my-1" />
+              <div className="h-px bg-border my-1" />
               <button
                 type="button"
                 onClick={() => {
@@ -3862,7 +3862,7 @@ if (!prev && activeTool) {
                   setSelectedMeasurement(null);
                   setAreaContextMenu(null);
                 }}
-                className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600 cursor-pointer"
+                className="w-full text-left px-3 py-1.5 hover:bg-danger/10 text-danger cursor-pointer"
               >
                 Delete area
               </button>

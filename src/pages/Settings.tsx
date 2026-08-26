@@ -23,9 +23,9 @@ function CanvasPrefsCard() {
     setCanvasFitMode(m); // persists + notifies any open canvas to re-fit
   };
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-      <p className="text-sm font-medium text-gray-700 mb-1">Plan fit</p>
-      <p className="text-xs text-gray-400 mb-3">How a plan sizes itself when you open it.</p>
+    <div className="bg-surface rounded-2xl border border-border p-5 shadow-sm">
+      <p className="text-sm font-medium text-body mb-1">Plan fit</p>
+      <p className="text-xs text-muted/70 mb-3">How a plan sizes itself when you open it.</p>
       <div className="grid grid-cols-2 gap-2">
         {options.map((o) => (
           <button
@@ -35,13 +35,13 @@ function CanvasPrefsCard() {
             className={`text-left rounded-xl border p-3 transition-colors ${
               mode === o.value
                 ? "border-secondary bg-secondary/5"
-                : "border-gray-200 hover:border-gray-300"
+                : "border-border hover:border-border"
             }`}
           >
-            <span className={`block text-sm font-semibold ${mode === o.value ? "text-secondary" : "text-gray-800"}`}>
+            <span className={`block text-sm font-semibold ${mode === o.value ? "text-secondary" : "text-body"}`}>
               {o.label}
             </span>
-            <span className="block text-[11px] text-gray-400 mt-0.5">{o.hint}</span>
+            <span className="block text-[11px] text-muted/70 mt-0.5">{o.hint}</span>
           </button>
         ))}
       </div>
@@ -58,20 +58,20 @@ const LEVELS = ["Student", "Professional", "Others"];
 type Section = "profile" | "password" | "storage" | null;
 
 function StorageBar({ used, quota, percent }: { used: string; quota: string; percent: number }) {
-  const color = percent >= 90 ? "bg-red-500" : percent >= 70 ? "bg-amber-500" : "bg-secondary";
+  const color = percent >= 90 ? "bg-danger/100" : percent >= 70 ? "bg-amber-500" : "bg-secondary";
   return (
     <div className="space-y-2">
       <div className="flex justify-between text-sm">
-        <span className="text-gray-600">{used} used</span>
-        <span className="text-gray-400">{quota}</span>
+        <span className="text-muted">{used} used</span>
+        <span className="text-muted/70">{quota}</span>
       </div>
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+      <div className="h-2 bg-surface-muted rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all ${color}`}
           style={{ width: `${Math.min(percent, 100)}%` }}
         />
       </div>
-      <p className="text-xs text-gray-400">{percent}% of your storage used</p>
+      <p className="text-xs text-muted/70">{percent}% of your storage used</p>
     </div>
   );
 }
@@ -82,7 +82,7 @@ function Toast({ message, type, onDone }: { message: string; type: "success" | "
     return () => clearTimeout(t);
   }, [onDone]);
   return (
-    <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white ${type === "success" ? "bg-gray-900" : "bg-red-500"}`}>
+    <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white ${type === "success" ? "bg-gray-900" : "bg-danger/100"}`}>
       {type === "success" ? <FiCheck className="shrink-0" /> : <FiAlertCircle className="shrink-0" />}
       {message}
     </div>
@@ -182,7 +182,7 @@ export default function Settings() {
     const ok = await confirm({
       title: "Delete account?",
       message: (
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-muted">
           This will permanently delete your account and all projects. This cannot be undone.
         </p>
       ),
@@ -225,14 +225,14 @@ export default function Settings() {
           {activeSection ? (
             <button
               onClick={() => setActiveSection(null)}
-              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-500"
+              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-overlay/10 transition-colors text-muted"
             >
               <FiArrowLeft className="text-lg" />
             </button>
           ) : (
             <button
               onClick={() => navigate(-1)}
-              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors text-gray-500"
+              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-overlay/10 transition-colors text-muted"
             >
               <FiArrowLeft className="text-lg" />
             </button>
@@ -250,7 +250,7 @@ export default function Settings() {
           <div className="space-y-4">
 
             {/* Avatar + name card */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center gap-4 shadow-sm">
+            <div className="bg-surface rounded-2xl border border-border p-5 flex items-center gap-4 shadow-sm">
               <div className="relative shrink-0">
                 {profile?.profilePicture ? (
                   <img
@@ -268,16 +268,16 @@ export default function Settings() {
                 <p className="font-semibold text-brandColor truncate">
                   {[profile?.firstName, profile?.lastName].filter(Boolean).join(" ") || "Complete your profile"}
                 </p>
-                <p className="text-sm text-gray-400 truncate">{profile?.email}</p>
+                <p className="text-sm text-muted/70 truncate">{profile?.email}</p>
                 {/* Profile completion bar */}
                 <div className="mt-2 flex items-center gap-2">
-                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="flex-1 h-1.5 bg-surface-muted rounded-full overflow-hidden">
                     <div
                       className="h-full bg-brandGold rounded-full"
                       style={{ width: `${completion}%` }}
                     />
                   </div>
-                  <span className="text-xs text-gray-400 shrink-0">{completion}%</span>
+                  <span className="text-xs text-muted/70 shrink-0">{completion}%</span>
                 </div>
               </div>
             </div>
@@ -286,13 +286,13 @@ export default function Settings() {
             {(isGoogleAccount || isAppleAccount) && (
               <div className="flex gap-2 px-1">
                 {isGoogleAccount && (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-surface-muted text-muted">
                     <svg className="w-3.5 h-3.5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
                     Google linked
                   </span>
                 )}
                 {isAppleAccount && (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-surface-muted text-muted">
                     <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
                     Apple linked
                   </span>
@@ -303,15 +303,15 @@ export default function Settings() {
             {/* Storage mini-bar */}
             {storage && (
               <div
-                className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm cursor-pointer hover:border-gray-200 transition-colors"
+                className="bg-surface rounded-2xl border border-border p-5 shadow-sm cursor-pointer hover:border-border transition-colors"
                 onClick={() => setActiveSection("storage")}
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <FiHardDrive className="text-secondary" />
-                    <span className="text-sm font-medium text-gray-700">Storage</span>
+                    <span className="text-sm font-medium text-body">Storage</span>
                   </div>
-                  <FiChevronRight className="text-gray-400 text-sm" />
+                  <FiChevronRight className="text-muted/70 text-sm" />
                 </div>
                 <StorageBar
                   used={storage.used_formatted}
@@ -325,7 +325,7 @@ export default function Settings() {
             <CanvasPrefsCard />
 
             {/* Nav items */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-surface rounded-2xl border border-border shadow-sm overflow-hidden">
               {[
                 { id: "profile" as Section, icon: <FiUser />, label: "Edit Profile" },
                 ...(!isSocialOnly ? [{ id: "password" as Section, icon: <FiLock />, label: "Change Password" }] : []),
@@ -333,28 +333,28 @@ export default function Settings() {
                 <button
                   key={item.id}
                   onClick={() => setActiveSection(item.id)}
-                  className="w-full flex items-center gap-3 px-5 py-4 text-sm text-gray-700 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0"
+                  className="w-full flex items-center gap-3 px-5 py-4 text-sm text-body hover:bg-overlay/5 transition-colors border-b border-border last:border-0"
                 >
                   <span className="text-secondary">{item.icon}</span>
                   <span className="flex-1 text-left font-medium">{item.label}</span>
-                  <FiChevronRight className="text-gray-400" />
+                  <FiChevronRight className="text-muted/70" />
                 </button>
               ))}
             </div>
 
             {/* Danger zone */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-surface rounded-2xl border border-border shadow-sm overflow-hidden">
               <button
                 onClick={() => logout()}
-                className="w-full flex items-center gap-3 px-5 py-4 text-sm text-gray-700 hover:bg-gray-50 transition-colors border-b border-gray-100"
+                className="w-full flex items-center gap-3 px-5 py-4 text-sm text-body hover:bg-overlay/5 transition-colors border-b border-border"
               >
-                <FiLogOut className="text-gray-500" />
+                <FiLogOut className="text-muted" />
                 <span className="flex-1 text-left font-medium">Log out</span>
               </button>
               <button
                 onClick={handleDeleteAccount}
                 disabled={deletingAccount}
-                className="w-full flex items-center gap-3 px-5 py-4 text-sm text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                className="w-full flex items-center gap-3 px-5 py-4 text-sm text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
               >
                 <FiTrash2 />
                 <span className="flex-1 text-left font-medium">Delete Account</span>
@@ -397,73 +397,73 @@ export default function Settings() {
                   onChange={handlePictureChange}
                 />
               </div>
-              <p className="text-xs text-gray-400">Tap to change photo</p>
+              <p className="text-xs text-muted/70">Tap to change photo</p>
             </div>
 
             {/* Fields */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+            <div className="bg-surface rounded-2xl border border-border shadow-sm p-5 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">First Name</label>
+                  <label className="text-xs font-medium text-muted mb-1.5 block">First Name</label>
                   <input
                     value={firstName}
                     onChange={e => setFirstName(e.target.value)}
                     placeholder="First name"
-                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-secondary placeholder-gray-300"
+                    className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-secondary placeholder-gray-300"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">Last Name</label>
+                  <label className="text-xs font-medium text-muted mb-1.5 block">Last Name</label>
                   <input
                     value={lastName}
                     onChange={e => setLastName(e.target.value)}
                     placeholder="Last name"
-                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-secondary placeholder-gray-300"
+                    className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-secondary placeholder-gray-300"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Email</label>
+                <label className="text-xs font-medium text-muted mb-1.5 block">Email</label>
                 <input
                   value={profile?.email ?? ""}
                   disabled
-                  className="w-full px-3 py-2.5 text-sm border border-gray-100 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"
+                  className="w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-surface-muted text-muted/70 cursor-not-allowed"
                 />
                 {(isGoogleAccount || isAppleAccount) && (
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-muted/70 mt-1">
                     Signed in with {isGoogleAccount ? "Google" : "Apple"} — email cannot be changed
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Phone Number</label>
+                <label className="text-xs font-medium text-muted mb-1.5 block">Phone Number</label>
                 <input
                   value={phoneNumber}
                   onChange={e => setPhoneNumber(e.target.value)}
                   type="tel"
                   placeholder="+234 000 000 0000"
-                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-secondary placeholder-gray-300"
+                  className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-secondary placeholder-gray-300"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Date of Birth</label>
+                <label className="text-xs font-medium text-muted mb-1.5 block">Date of Birth</label>
                 <input
                   value={dateOfBirth}
                   onChange={e => setDateOfBirth(e.target.value)}
                   type="date"
-                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-secondary text-gray-700"
+                  className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-secondary text-body"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Profession</label>
+                <label className="text-xs font-medium text-muted mb-1.5 block">Profession</label>
                 <select
                   value={profession}
                   onChange={e => setProfession(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-secondary text-gray-700 bg-white"
+                  className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-secondary text-body bg-surface"
                 >
                   <option value="">Select profession</option>
                   {PROFESSIONS.map(p => <option key={p} value={p}>{p}</option>)}
@@ -471,11 +471,11 @@ export default function Settings() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Level</label>
+                <label className="text-xs font-medium text-muted mb-1.5 block">Level</label>
                 <select
                   value={level}
                   onChange={e => setLevel(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-secondary text-gray-700 bg-white"
+                  className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-secondary text-body bg-surface"
                 >
                   <option value="">Select level</option>
                   {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
@@ -499,40 +499,40 @@ export default function Settings() {
         {activeSection === "password" && (
           <div className="space-y-5">
             {isSocialOnly ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-800">
+              <div className="bg-amber-50 border border-warn/30 rounded-2xl p-5 text-sm text-amber-800">
                 Your account uses {isGoogleAccount ? "Google" : "Apple"} sign-in. Password management is handled by your {isGoogleAccount ? "Google" : "Apple"} account.
               </div>
             ) : (
               <>
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+                <div className="bg-surface rounded-2xl border border-border shadow-sm p-5 space-y-4">
                   <div>
-                    <label className="text-xs font-medium text-gray-500 mb-1.5 block">Current Password</label>
+                    <label className="text-xs font-medium text-muted mb-1.5 block">Current Password</label>
                     <input
                       type="password"
                       value={currentPassword}
                       onChange={e => setCurrentPassword(e.target.value)}
                       placeholder="Enter current password"
-                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-secondary placeholder-gray-300"
+                      className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-secondary placeholder-gray-300"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-gray-500 mb-1.5 block">New Password</label>
+                    <label className="text-xs font-medium text-muted mb-1.5 block">New Password</label>
                     <input
                       type="password"
                       value={newPassword}
                       onChange={e => setNewPassword(e.target.value)}
                       placeholder="Min. 8 characters"
-                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-secondary placeholder-gray-300"
+                      className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-secondary placeholder-gray-300"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-gray-500 mb-1.5 block">Confirm New Password</label>
+                    <label className="text-xs font-medium text-muted mb-1.5 block">Confirm New Password</label>
                     <input
                       type="password"
                       value={confirmPassword}
                       onChange={e => setConfirmPassword(e.target.value)}
                       placeholder="Repeat new password"
-                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-secondary placeholder-gray-300"
+                      className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-secondary placeholder-gray-300"
                     />
                   </div>
                 </div>
@@ -556,13 +556,13 @@ export default function Settings() {
           <div className="space-y-5">
             {storage ? (
               <>
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
+                <div className="bg-surface rounded-2xl border border-border shadow-sm p-6 space-y-5">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-2xl font-bold text-brandColor">{storage.used_formatted}</p>
-                      <p className="text-sm text-gray-400 mt-0.5">of {storage.quota_formatted} used</p>
+                      <p className="text-sm text-muted/70 mt-0.5">of {storage.quota_formatted} used</p>
                     </div>
-                    <div className="w-14 h-14 rounded-full border-4 border-gray-100 flex items-center justify-center relative">
+                    <div className="w-14 h-14 rounded-full border-4 border-border flex items-center justify-center relative">
                       <svg className="absolute inset-0 w-14 h-14 -rotate-90" viewBox="0 0 56 56">
                         <circle cx="28" cy="28" r="22" fill="none" stroke="#f3f4f6" strokeWidth="4" />
                         <circle
@@ -585,22 +585,22 @@ export default function Settings() {
                   />
 
                   {storage.percent_used >= 90 && (
-                    <div className="flex items-start gap-2.5 bg-red-50 border border-red-100 rounded-xl p-3.5 text-sm text-red-700">
+                    <div className="flex items-start gap-2.5 bg-danger/10 border border-red-100 rounded-xl p-3.5 text-sm text-danger-strong">
                       <FiAlertCircle className="shrink-0 mt-0.5" />
                       <span>You're almost out of storage. Delete unused plans to free up space.</span>
                     </div>
                   )}
                 </div>
 
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Breakdown</p>
+                <div className="bg-surface rounded-2xl border border-border shadow-sm p-5 space-y-3">
+                  <p className="text-xs font-semibold text-muted/70 uppercase tracking-wide">Breakdown</p>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Plan files (PDFs & images)</span>
+                    <span className="text-muted">Plan files (PDFs & images)</span>
                     <span className="font-medium text-brandColor">{storage.used_formatted}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Available</span>
-                    <span className="font-medium text-gray-500">
+                    <span className="text-muted">Available</span>
+                    <span className="font-medium text-muted">
                       {storage.available_bytes === null ? "Unlimited" : storage.quota_formatted.replace(storage.used_formatted, "")}
                       {storage.available_bytes !== null && (() => {
                         const avail = storage.quota_bytes - storage.used_bytes;
@@ -611,12 +611,12 @@ export default function Settings() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Your plan</span>
+                    <span className="text-muted">Your plan</span>
                     <span className="font-medium text-brandColor">Free (500 MB)</span>
                   </div>
                 </div>
 
-                <p className="text-xs text-center text-gray-400 px-4">
+                <p className="text-xs text-center text-muted/70 px-4">
                   Storage is counted from your uploaded PDF and image plan files. Upgrade your plan to get more storage.
                 </p>
               </>

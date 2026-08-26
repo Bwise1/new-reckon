@@ -227,9 +227,9 @@ const ProjectDetail = () => {
         : "You're signed in, but this project belongs to someone else.";
     return (
       <div className="flex h-screen items-center justify-center bg-[#f0f2f5]">
-        <div className="max-w-sm rounded-lg bg-white px-6 py-5 shadow-lg border border-gray-200 text-center">
-          <h2 className="text-base font-semibold text-gray-900">{heading}</h2>
-          <p className="mt-2 text-sm text-gray-600">{body}</p>
+        <div className="max-w-sm rounded-lg bg-surface px-6 py-5 shadow-lg border border-border text-center">
+          <h2 className="text-base font-semibold text-body">{heading}</h2>
+          <p className="mt-2 text-sm text-muted">{body}</p>
           <button
             type="button"
             onClick={() => navigate('/dashboard')}
@@ -245,8 +245,8 @@ const ProjectDetail = () => {
   if (isProjectLoading || !isProjectDataReady) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#f0f2f5]">
-        <div className="rounded-lg bg-white px-5 py-4 shadow-lg border border-gray-200 text-center">
-          <p className="text-sm font-medium text-gray-700">Loading project…</p>
+        <div className="rounded-lg bg-surface px-5 py-4 shadow-lg border border-border text-center">
+          <p className="text-sm font-medium text-body">Loading project…</p>
         </div>
       </div>
     );
@@ -256,8 +256,8 @@ const ProjectDetail = () => {
     <div className="relative flex h-screen bg-[#f0f2f5] overflow-hidden">
       {!isPlanReady && (
         <div className="absolute inset-0 z-[100] flex items-center justify-center bg-[#f0f2f5]">
-          <div className="rounded-lg bg-white px-5 py-4 shadow-lg border border-gray-200 text-center">
-            <p className="text-sm font-medium text-gray-700">Loading project…</p>
+          <div className="rounded-lg bg-surface px-5 py-4 shadow-lg border border-border text-center">
+            <p className="text-sm font-medium text-body">Loading project…</p>
           </div>
         </div>
       )}
