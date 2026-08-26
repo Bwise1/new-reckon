@@ -6,9 +6,9 @@ const SyncStatusBadge = () => {
 
   if (!isOnline) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-red-200 text-sm">
-        <FiWifiOff className="w-4 h-4 text-red-500" />
-        <span className="text-gray-600">
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-surface rounded-lg border border-danger/30 text-sm">
+        <FiWifiOff className="w-4 h-4 text-danger" />
+        <span className="text-muted">
           Offline{pendingCount > 0 ? ` — ${pendingCount} pending` : ''}
         </span>
       </div>
@@ -17,17 +17,17 @@ const SyncStatusBadge = () => {
 
   if (pendingCount > 0) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-amber-200 text-sm">
-        <FiLoader className="w-4 h-4 text-amber-500 animate-spin" />
-        <span className="text-gray-600">Syncing… ({pendingCount})</span>
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-surface rounded-lg border border-warn/30 text-sm">
+        <FiLoader className="w-4 h-4 text-warn animate-spin" />
+        <span className="text-muted">Syncing… ({pendingCount})</span>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-gray-200 text-sm">
-      <FiCheck className="w-4 h-4 text-green-500" />
-      <span className="text-gray-600">Synced</span>
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-surface rounded-lg border border-border text-sm">
+      <FiCheck className="w-4 h-4 text-accent" />
+      <span className="text-muted">Synced</span>
     </div>
   );
 };

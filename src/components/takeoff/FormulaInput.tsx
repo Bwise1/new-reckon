@@ -200,18 +200,18 @@ const FormulaInput = forwardRef<FormulaInputHandle, FormulaInputProps>(({
             onFocusProp?.();
           }}
           placeholder={placeholder}
-          className={`w-full px-4 py-2.5 bg-white border rounded-xl shadow-sm outline-none transition-all placeholder:text-gray-400 font-medium text-gray-700 ${
+          className={`w-full px-4 py-2.5 bg-surface border rounded-xl shadow-sm outline-none transition-all placeholder:text-muted/70 font-medium text-body ${
             !isValid && value.length > 0
               ? "border-red-500 focus:ring-2 focus:ring-red-100"
-              : "border-[#D9D9D9] focus:ring-1 focus:ring-[#289693]/25 focus:border-[#289693]"
+              : "border-[#D9D9D9] focus:ring-1 focus:ring-accent/25 focus:border-accent"
           }`}
         />
 
         {/* Error Tooltip */}
         {!isValid && value.length > 0 && isFocused && (
-          <div className="absolute top-full left-0 mt-2 px-3 py-1 bg-red-600 text-white text-[10px] font-bold rounded shadow-lg z-[60]">
+          <div className="absolute top-full left-0 mt-2 px-3 py-1 bg-danger text-white text-[10px] font-bold rounded shadow-lg z-[60]">
             {error}
-            <div className="absolute -top-1 left-4 w-2 h-2 bg-red-600 rotate-45" />
+            <div className="absolute -top-1 left-4 w-2 h-2 bg-danger rotate-45" />
           </div>
         )}
       </div>

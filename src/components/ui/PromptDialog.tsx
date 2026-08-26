@@ -22,8 +22,8 @@ export interface PromptDialogProps {
 }
 
 const VARIANT_CLASSES: Record<PromptVariant, string> = {
-  danger: 'bg-red-600 hover:bg-red-700 text-white',
-  primary: 'bg-[#f97316] hover:bg-[#ea580c] text-white',
+  danger: 'bg-danger hover:bg-red-700 text-white',
+  primary: 'bg-warn hover:bg-warn-strong text-white',
 };
 
 const PromptDialog: React.FC<PromptDialogProps> = ({
@@ -100,17 +100,17 @@ const PromptDialog: React.FC<PromptDialogProps> = ({
       }}
     >
       <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-5"
+        className="bg-surface rounded-lg shadow-xl w-full max-w-sm mx-4 p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+        <h2 className="text-base font-semibold text-body">{title}</h2>
         {message && (
-          <div className="mt-1 text-sm text-gray-600">{message}</div>
+          <div className="mt-1 text-sm text-muted">{message}</div>
         )}
 
         <div className="mt-4">
           {label && (
-            <label className="block text-xs font-medium text-gray-600 mb-1">
+            <label className="block text-xs font-medium text-muted mb-1">
               {label}
             </label>
           )}
@@ -132,11 +132,11 @@ const PromptDialog: React.FC<PromptDialogProps> = ({
             className={`w-full px-3 py-2 text-sm border rounded-md outline-none transition-colors ${
               error
                 ? 'border-red-400 focus:ring-2 focus:ring-red-100'
-                : 'border-gray-300 focus:ring-2 focus:ring-[#f97316]/25 focus:border-[#f97316]'
+                : 'border-border focus:ring-2 focus:ring-[#f97316]/25 focus:border-[#f97316]'
             }`}
           />
           {error && (
-            <p className="mt-1 text-xs text-red-600">{error}</p>
+            <p className="mt-1 text-xs text-danger">{error}</p>
           )}
         </div>
 
@@ -145,7 +145,7 @@ const PromptDialog: React.FC<PromptDialogProps> = ({
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-sm rounded-md border border-border text-body hover:bg-overlay/5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {cancelLabel}
           </button>

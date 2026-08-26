@@ -14,8 +14,8 @@ export interface ConfirmDialogProps {
 }
 
 const VARIANT_CLASSES: Record<ConfirmVariant, string> = {
-  danger: 'bg-red-600 hover:bg-red-700 text-white',
-  primary: 'bg-[#f97316] hover:bg-[#ea580c] text-white',
+  danger: 'bg-danger hover:bg-red-700 text-white',
+  primary: 'bg-warn hover:bg-warn-strong text-white',
 };
 
 const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -70,18 +70,18 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       }}
     >
       <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-5"
+        className="bg-surface rounded-lg shadow-xl w-full max-w-sm mx-4 p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-base font-semibold text-gray-900">{title}</h2>
-        <div className="mt-1 text-sm text-gray-600">{message}</div>
+        <h2 className="text-base font-semibold text-body">{title}</h2>
+        <div className="mt-1 text-sm text-muted">{message}</div>
 
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-sm rounded-md border border-border text-body hover:bg-overlay/5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {cancelLabel}
           </button>

@@ -38,7 +38,7 @@ const FormulaToolbar = ({
         Deduct
       </button>
 
-      <div className="w-px h-5 bg-white/15 shrink-0 mx-0.5" />
+      <div className="w-px h-5 bg-surface/15 shrink-0 mx-0.5" />
 
       {symbols.map((symbol) => (
         <button
@@ -48,7 +48,7 @@ const FormulaToolbar = ({
           // and the symbol inserts at the caret rather than the end.
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => onSymbolClick?.(symbol)}
-            className="flex items-center justify-center w-8 h-8 shrink-0 bg-white text-[#3d3d3d] font-bold text-xs rounded-md hover:bg-gray-100 active:scale-90 transition-transform shadow-sm cursor-pointer"
+            className="flex items-center justify-center w-8 h-8 shrink-0 bg-surface text-[#3d3d3d] font-bold text-xs rounded-md hover:bg-overlay/10 active:scale-90 transition-transform shadow-sm cursor-pointer"
         >
           {symbol}
         </button>

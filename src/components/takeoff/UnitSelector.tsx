@@ -23,16 +23,16 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({
   className = "",
 }) => {
   return (
-    <div className={`flex border border-gray-200 rounded-md overflow-hidden bg-white w-full ${className}`}>
+    <div className={`flex border border-border rounded-md overflow-hidden bg-surface w-full ${className}`}>
       {units.map((unit, i) => (
         <button
           key={unit.value}
           onClick={() => onChange(unit.value)}
           className={`flex-1 py-1.5 px-2 text-sm font-medium transition-all duration-200 cursor-pointer ${
             selectedUnit === unit.value
-              ? "bg-[#289693] text-white"
-              : "text-gray-600 hover:bg-gray-50 bg-white"
-          } ${i !== units.length - 1 ? "border-r border-gray-200" : ""}`}
+              ? "bg-accent text-white"
+              : "text-muted hover:bg-overlay/5 bg-surface"
+          } ${i !== units.length - 1 ? "border-r border-border" : ""}`}
         >
           {unit.label}
         </button>

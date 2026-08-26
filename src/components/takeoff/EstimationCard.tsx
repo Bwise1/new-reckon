@@ -233,10 +233,10 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
       }}
       className={`rounded-[10px] border px-4 pb-4 pt-0 space-y-3 transition-all cursor-pointer overflow-visible ${
         isTargeting
-          ? "border-[#f97316] bg-[#f97316]/5 shadow-md ring-2 ring-[#f97316]/40"
+          ? "border-[#f97316] bg-warn/5 shadow-md ring-2 ring-[#f97316]/40"
           : isActive
-          ? "border-[#289693] bg-[#289693]/5 shadow-sm"
-          : "border-gray-200 bg-gray-50 opacity-55 hover:opacity-80"
+          ? "border-accent bg-accent/5 shadow-sm"
+          : "border-border bg-surface-muted opacity-55 hover:opacity-80"
       } ${className}`}
     >
       <div onClick={(e) => e.stopPropagation()} className="space-y-3 pt-2">
@@ -304,9 +304,9 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                     <div
                       className={`flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] ${
                         isDeduct
-                          ? "bg-red-50/80 border-red-100 text-red-500"
+                          ? "bg-danger/10/80 border-red-100 text-danger"
                           : idx === 0
-                            ? "bg-gray-50 border-gray-200 text-gray-600"
+                            ? "bg-surface-muted border-border text-muted"
                             : "bg-amber-50/80 border-amber-100 text-amber-700"
                       }`}
                       title={
@@ -332,19 +332,19 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
         )}
 
         <div className="grid grid-cols-2 gap-2 min-w-0">
-          <div className="min-w-0 flex items-center gap-1.5 rounded-lg border border-[#D9D9D9] bg-white px-2.5 py-2 overflow-hidden">
-            <span className="text-[11px] text-gray-400 shrink-0">Qty</span>
-            <span className="flex-1 min-w-0 text-right text-[13px] font-bold text-[#003566] tabular-nums truncate">
+          <div className="min-w-0 flex items-center gap-1.5 rounded-lg border border-[#D9D9D9] bg-surface px-2.5 py-2 overflow-hidden">
+            <span className="text-[11px] text-muted/70 shrink-0">Qty</span>
+            <span className="flex-1 min-w-0 text-right text-[13px] font-bold text-navy-soft tabular-nums truncate">
               {qty}
             </span>
-            <span className="text-gray-300 shrink-0 text-[11px]">|</span>
-            <span className="text-[11px] font-medium text-gray-500 shrink-0">
+            <span className="text-muted/50 shrink-0 text-[11px]">|</span>
+            <span className="text-[11px] font-medium text-muted shrink-0">
               {unit === 'm2' ? 'm²' : unit === 'm3' ? 'm³' : unit}
             </span>
           </div>
-          <div className="min-w-0 flex items-center gap-1 rounded-lg border border-[#D9D9D9] bg-white px-2.5 py-2 overflow-hidden">
-            <span className="text-[11px] text-gray-400 shrink-0">Rate</span>
-            <span className="text-[13px] font-bold text-[#003566] shrink-0">₦</span>
+          <div className="min-w-0 flex items-center gap-1 rounded-lg border border-[#D9D9D9] bg-surface px-2.5 py-2 overflow-hidden">
+            <span className="text-[11px] text-muted/70 shrink-0">Rate</span>
+            <span className="text-[13px] font-bold text-navy-soft shrink-0">₦</span>
             <input
               type="text"
               inputMode="decimal"
@@ -366,13 +366,13 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 syncToParent({ rate: formatted });
               }}
               placeholder="0.00"
-              className="flex-1 min-w-0 w-0 text-right text-[13px] font-bold text-[#003566] outline-none bg-transparent"
+              className="flex-1 min-w-0 w-0 text-right text-[13px] font-bold text-navy-soft outline-none bg-transparent"
             />
           </div>
         </div>
 
         <div className="flex items-center justify-between pt-1">
-          <div className="flex items-center gap-1 text-[11px] font-bold text-gray-400">
+          <div className="flex items-center gap-1 text-[11px] font-bold text-muted/70">
             <span className="opacity-70">Add:</span>
             <button
               type="button"
@@ -380,7 +380,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 e.stopPropagation();
                 onAddElement?.();
               }}
-              className="underline hover:text-[#289693] transition-colors cursor-pointer"
+              className="underline hover:text-accent transition-colors cursor-pointer"
             >
               Element
             </button>
@@ -390,7 +390,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 e.stopPropagation();
                 onAddItem?.();
               }}
-              className="underline hover:text-[#289693] transition-colors cursor-pointer"
+              className="underline hover:text-accent transition-colors cursor-pointer"
             >
               Item
             </button>
@@ -405,7 +405,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 pushHistory([]);
                 onClearPendingMeasured?.();
               }}
-              className="p-1.5 text-gray-400 hover:text-amber-600 transition-colors cursor-pointer"
+              className="p-1.5 text-muted/70 hover:text-warn-strong transition-colors cursor-pointer"
               title="Reset takeoff (clear history)"
             >
               <RotateCcw className="w-4 h-4" />
@@ -416,7 +416,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 e.stopPropagation();
                 onCopy?.(data?.id || "");
               }}
-              className="p-1.5 text-gray-400 hover:text-[#289693] transition-colors cursor-pointer"
+              className="p-1.5 text-muted/70 hover:text-accent transition-colors cursor-pointer"
               title="Duplicate"
             >
               <Copy className="w-4 h-4" />
@@ -427,7 +427,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 e.stopPropagation();
                 onDelete?.(data?.id || "");
               }}
-              className="p-1.5 text-red-400 hover:text-red-600 transition-colors cursor-pointer"
+              className="p-1.5 text-red-400 hover:text-danger transition-colors cursor-pointer"
               title="Delete"
             >
               <Trash2 className="w-4 h-4" />

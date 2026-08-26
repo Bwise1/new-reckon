@@ -79,22 +79,22 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
   return (
     <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden custom-scrollbar px-4 py-4 space-y-4">
       {/* Grand total */}
-      <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-3">
-        <p className="text-[11px] font-bold tracking-wide text-gray-400 uppercase">
+      <div className="rounded-xl bg-surface-muted border border-border px-4 py-3">
+        <p className="text-[11px] font-bold tracking-wide text-muted/70 uppercase">
           Grand Total Project Cost
         </p>
-        <p className="text-2xl font-extrabold text-gray-900">
+        <p className="text-2xl font-extrabold text-body">
           ₦ {formatAmount(grandTotal)}
         </p>
       </div>
 
       {/* Bill rows */}
-      <div className="rounded-xl border border-gray-100 divide-y divide-gray-100 overflow-visible">
+      <div className="rounded-xl border border-border divide-y divide-border overflow-visible">
         {withElements.map((bill, idx) => (
           <div key={bill.id} className="relative">
             {editingId === bill.id ? (
               <div className="px-4 py-3">
-                <p className="text-[11px] font-bold tracking-wide text-gray-400 uppercase">
+                <p className="text-[11px] font-bold tracking-wide text-muted/70 uppercase">
                   Bill {idx + 1}
                 </p>
                 <input
@@ -113,16 +113,16 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
               <button
                 type="button"
                 onClick={() => onOpenBill(bill.id)}
-                className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer"
+                className="w-full text-left px-4 py-3 hover:bg-overlay/5 transition-colors cursor-pointer"
               >
-                <p className="text-[11px] font-bold tracking-wide text-gray-400 uppercase">
+                <p className="text-[11px] font-bold tracking-wide text-muted/70 uppercase">
                   Bill {idx + 1}
                 </p>
                 <span className="flex items-center justify-between gap-2">
-                  <span className="text-lg font-bold text-gray-900 truncate">
+                  <span className="text-lg font-bold text-body truncate">
                     {bill.name}
                   </span>
-                  <span className="shrink-0 text-base font-bold text-gray-900">
+                  <span className="shrink-0 text-base font-bold text-body">
                     ₦ {formatAmount(billTotal(bill.elements))}
                   </span>
                 </span>
@@ -133,7 +133,7 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
               type="button"
               aria-label={`Actions for ${bill.name}`}
               onClick={() => setMenuFor(menuFor === bill.id ? null : bill.id)}
-              className="absolute top-2.5 right-2 p-1 rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100 cursor-pointer"
+              className="absolute top-2.5 right-2 p-1 rounded text-muted/50 hover:text-body hover:bg-overlay/10 cursor-pointer"
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
@@ -141,7 +141,7 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
             {menuFor === bill.id && (
               <div
                 ref={menuRef}
-                className="absolute right-2 top-9 z-40 w-36 rounded-lg border border-gray-200 bg-white py-1 shadow-lg text-xs font-medium"
+                className="absolute right-2 top-9 z-40 w-36 rounded-lg border border-border bg-surface py-1 shadow-lg text-xs font-medium"
               >
                 <button
                   type="button"
@@ -150,7 +150,7 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
                     setEditingId(bill.id);
                     setDraftName(bill.name);
                   }}
-                  className="block w-full px-3 py-1.5 text-left hover:bg-gray-50 cursor-pointer"
+                  className="block w-full px-3 py-1.5 text-left hover:bg-overlay/5 cursor-pointer"
                 >
                   Rename
                 </button>
@@ -160,7 +160,7 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
                     setMenuFor(null);
                     duplicateBill(bill.id);
                   }}
-                  className="block w-full px-3 py-1.5 text-left hover:bg-gray-50 cursor-pointer"
+                  className="block w-full px-3 py-1.5 text-left hover:bg-overlay/5 cursor-pointer"
                 >
                   Duplicate
                 </button>
@@ -173,7 +173,7 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
                       deleteBill(bill.id);
                     }
                   }}
-                  className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-default cursor-pointer"
+                  className="block w-full px-3 py-1.5 text-left text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-default cursor-pointer"
                 >
                   Delete
                 </button>
