@@ -83,7 +83,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
       message: (
         <>
           <p>
-            <span className="font-medium text-gray-900">
+            <span className="font-medium text-primary-fg">
               {decodeMojibake(plan.name)}
             </span>
             {measurementCount > 0 && (
@@ -94,7 +94,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
             )}{' '}
             will be removed.
           </p>
-          <p className="mt-1 text-xs text-gray-500">This cannot be undone.</p>
+          <p className="mt-1 text-xs text-muted">This cannot be undone.</p>
         </>
       ),
       confirmLabel: 'Delete',
@@ -248,7 +248,13 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
 
 
   return (
-    <aside className="w-[260px] min-w-[260px] max-w-[260px] shrink-0 h-full flex flex-col bg-[#0a0a0a] text-gray-200 border-r border-black/60">
+    // data-theme="dark": the plan rail keeps its dark chrome by re-scoping the
+    // semantic tokens for this subtree — same classes as light surfaces, dark
+    // values here, and it follows a future global theme switch automatically.
+    <aside
+      data-theme="dark"
+      className="w-[260px] min-w-[260px] max-w-[260px] shrink-0 h-full flex flex-col bg-ink text-body border-r border-border"
+    >
       <div className="shrink-0 px-5 pt-5 pb-4 flex items-center gap-2">
         {/* The logo doubles as "back to projects" — no separate back button. */}
         <button
@@ -256,27 +262,27 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
           onClick={() => navigate('/dashboard')}
           title="Go to projects"
           aria-label="Go to projects"
-          className="rounded-md hover:bg-white/10 transition-colors cursor-pointer p-0.5"
+          className="rounded-md hover:bg-overlay/10 transition-colors cursor-pointer p-0.5"
         >
           <img src={ReckonLogo} alt="Reckon" className="h-9 w-9" />
         </button>
       </div>
 
-      <div className="shrink-0 px-5 pb-4 border-b border-white/10">
-        <h2 className="text-[15px] font-semibold text-white leading-snug line-clamp-2">
+      <div className="shrink-0 px-5 pb-4 border-b border-overlay/10">
+        <h2 className="text-[15px] font-semibold text-body leading-snug line-clamp-2">
           {projectTitle}
         </h2>
       </div>
 
-      <div className="shrink-0 px-5 py-4 border-b border-white/10">
-        <div className="inline-flex items-center gap-1 bg-[#1a1a1a] rounded-md p-1">
+      <div className="shrink-0 px-5 py-4 border-b border-overlay/10">
+        <div className="inline-flex items-center gap-1 bg-ink-elevated rounded-md p-1">
           <button
             type="button"
             onClick={() => setActiveTab('plan')}
             className={`px-3 py-1 text-xs rounded transition-colors cursor-pointer ${
               activeTab === 'plan'
-                ? 'bg-white text-black font-medium'
-                : 'text-gray-400 hover:text-gray-200'
+                ? 'bg-primary text-primary-fg font-medium'
+                : 'text-muted hover:text-body'
             }`}
           >
             Plan
@@ -286,8 +292,8 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
             onClick={() => setActiveTab('history')}
             className={`px-3 py-1 text-xs rounded transition-colors cursor-pointer ${
               activeTab === 'history'
-                ? 'bg-white text-black font-medium'
-                : 'text-gray-400 hover:text-gray-200'
+                ? 'bg-primary text-primary-fg font-medium'
+                : 'text-muted hover:text-body'
             }`}
           >
             History
@@ -299,7 +305,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
         {activeTab === 'plan' ? (
           <div className="py-1 px-2">
             {plans.length === 0 ? (
-              <p className="px-3 py-6 text-xs text-gray-500 text-center">
+              <p className="px-3 py-6 text-xs text-muted text-center">
                 Upload a plan to start marking up measurements.
               </p>
             ) : (
@@ -310,7 +316,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                     <button
                       type="button"
                       onClick={() => toggleGroup(group.key)}
-                      className="w-full flex items-center gap-1 px-2 py-1.5 text-[13px] font-semibold text-white hover:bg-white/5 rounded cursor-pointer"
+                      className="w-full flex items-center gap-1 px-2 py-1.5 text-[13px] font-semibold text-body hover:bg-overlay/5 rounded cursor-pointer"
                     >
                       <ChevronRight
                         className={`w-3 h-3 transition-transform ${
@@ -335,8 +341,8 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                             }}
                             className={`group w-full px-2 py-1 flex items-center gap-2 text-[13px] rounded transition-colors cursor-pointer ${
                               activePlanId === plan.id
-                                ? 'bg-white/10 text-white'
-                                : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
+                                ? 'bg-overlay/10 text-body'
+                                : 'text-muted hover:bg-overlay/5 hover:text-body'
                             }`}
                           >
                             <FileText className="w-3 h-3 shrink-0 opacity-60" />
@@ -349,7 +355,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                                 e.stopPropagation();
                                 void handleDeletePlan(plan);
                               }}
-                              className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-500 hover:text-red-400 cursor-pointer"
+                              className="opacity-0 group-hover:opacity-100 p-0.5 text-muted hover:text-danger cursor-pointer"
                               title="Delete plan"
                             >
                               <Trash2 className="w-3 h-3" />
@@ -365,7 +371,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
 
           </div>
         ) : historyGroups.length === 0 ? (
-          <p className="px-4 py-6 text-xs text-gray-500 text-center">
+          <p className="px-4 py-6 text-xs text-muted text-center">
             No measurements yet.
           </p>
         ) : (
@@ -377,7 +383,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                   <button
                     type="button"
                     onClick={() => toggleGroup(`history:${group.key}`)}
-                    className="w-full flex items-center gap-1 px-2 py-1.5 text-[13px] font-semibold text-white hover:bg-white/5 rounded cursor-pointer"
+                    className="w-full flex items-center gap-1 px-2 py-1.5 text-[13px] font-semibold text-body hover:bg-overlay/5 rounded cursor-pointer"
                   >
                     <ChevronRight
                       className={`w-3 h-3 transition-transform ${
@@ -397,7 +403,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                         return (
                           <div
                             key={entry.measurementId}
-                            className="group flex items-center gap-2 px-2 py-1 rounded hover:bg-white/5 cursor-pointer"
+                            className="group flex items-center gap-2 px-2 py-1 rounded hover:bg-overlay/5 cursor-pointer"
                             onClick={() =>
                               onSelectMeasurement(entry.itemId, entry.measurementId)
                             }
@@ -408,7 +414,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                                 e.stopPropagation();
                                 toggleMeasurementHidden(entry.itemId, entry.measurementId);
                               }}
-                              className="p-0.5 text-gray-400 hover:text-white cursor-pointer"
+                              className="p-0.5 text-muted hover:text-body cursor-pointer"
                               title={entry.hidden ? 'Show markup' : 'Hide markup'}
                             >
                               {entry.hidden ? (
@@ -439,12 +445,12 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                                   }
                                 }}
                                 placeholder={`${entry.label}`}
-                                className="flex-1 min-w-0 text-[11px] bg-white/10 border border-white/20 rounded px-1 py-0.5 text-white outline-none"
+                                className="flex-1 min-w-0 text-[11px] bg-overlay/10 border border-white/20 rounded px-1 py-0.5 text-body outline-none"
                               />
                             ) : (
                               <span
                                 className={`flex-1 min-w-0 flex flex-col leading-tight ${
-                                  entry.hidden ? 'text-gray-500' : 'text-gray-200'
+                                  entry.hidden ? 'text-muted' : 'text-body'
                                 }`}
                                 title="Double-click to rename"
                                 onDoubleClick={(e) => {
@@ -458,7 +464,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                               >
                                 {/* Name on top, full measured value below so it
                                     is never truncated. */}
-                                <span className="text-[11px] text-gray-400 truncate">
+                                <span className="text-[11px] text-muted truncate">
                                   {entry.label}
                                 </span>
                                 <span className="text-[12px] font-medium">
@@ -469,7 +475,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                               </span>
                             )}
                             <span
-                              className="w-4 h-4 rounded-sm shrink-0 flex items-center justify-center text-[9px] font-bold text-white"
+                              className="w-4 h-4 rounded-sm shrink-0 flex items-center justify-center text-[9px] font-bold text-body"
                               style={{ backgroundColor: entry.color }}
                             >
                               {typeLetter(entry.type)}
@@ -481,7 +487,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                                   e.stopPropagation();
                                   unbindMeasurement(entry.measurementId);
                                 }}
-                                className="p-0.5 text-[#f97316] hover:text-[#c2410c] cursor-pointer"
+                                className="p-0.5 text-warn hover:text-[#c2410c] cursor-pointer"
                                 title="Bound to a BOQ line — click to unlink"
                               >
                                 <Link2 className="w-3 h-3" />
@@ -496,7 +502,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                                     type: entry.type,
                                   });
                                 }}
-                                className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-500 hover:text-[#f97316] cursor-pointer"
+                                className="opacity-0 group-hover:opacity-100 p-0.5 text-muted hover:text-warn cursor-pointer"
                                 title="Bind to a BOQ line"
                               >
                                 <Link2 className="w-3 h-3" />
@@ -508,7 +514,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                                 e.stopPropagation();
                                 onDeleteMeasurement(entry.itemId, entry.measurementId);
                               }}
-                              className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-500 hover:text-red-400 cursor-pointer"
+                              className="opacity-0 group-hover:opacity-100 p-0.5 text-muted hover:text-danger cursor-pointer"
                               title="Delete measurement"
                             >
                               <Trash2 className="w-3 h-3" />
@@ -525,26 +531,26 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
         )}
       </div>
 
-      <div className="shrink-0 border-t border-white/5">
+      <div className="shrink-0 border-t border-overlay/5">
         {/* Storage indicator */}
         {storage && (
           <div className="px-3 pt-2.5 pb-1">
             <div className="flex justify-between items-center mb-1">
-              <span className="text-[10px] text-gray-500">{storage.used_formatted} / {storage.quota_formatted}</span>
-              <span className={`text-[10px] font-medium ${storage.percent_used >= 90 ? 'text-red-400' : 'text-gray-500'}`}>
+              <span className="text-[10px] text-muted">{storage.used_formatted} / {storage.quota_formatted}</span>
+              <span className={`text-[10px] font-medium ${storage.percent_used >= 90 ? 'text-danger' : 'text-muted'}`}>
                 {storage.percent_used}%
               </span>
             </div>
-            <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+            <div className="h-1 bg-overlay/10 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all ${storage.percent_used >= 90 ? 'bg-red-400' : storage.percent_used >= 70 ? 'bg-amber-400' : 'bg-brandGold'}`}
+                className={`h-full rounded-full transition-all ${storage.percent_used >= 90 ? 'bg-danger' : storage.percent_used >= 70 ? 'bg-warn' : 'bg-brandGold'}`}
                 style={{ width: `${Math.min(storage.percent_used, 100)}%` }}
               />
             </div>
           </div>
         )}
         <div className="p-3 flex items-center justify-between gap-3">
-          <span className="text-xs text-gray-400">Add more project file</span>
+          <span className="text-xs text-muted">Add more project file</span>
           <input
             ref={uploadRef}
             type="file"
@@ -556,7 +562,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
             type="button"
             data-tour="upload-plan"
             onClick={handleUploadClick}
-            className="px-3 py-1.5 rounded-md bg-white text-black text-xs font-semibold hover:bg-gray-200 transition-colors cursor-pointer"
+            className="px-3 py-1.5 rounded-md bg-primary text-primary-fg text-xs font-semibold hover:bg-primary/90 transition-colors cursor-pointer"
           >
             Upload
           </button>
@@ -569,17 +575,17 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
           onClick={() => setShowUploadPicker(false)}
         >
           <div
-            className="bg-[#111] border border-white/10 rounded-lg p-4 w-[280px] shadow-xl"
+            className="bg-surface border border-overlay/10 rounded-lg p-4 w-[280px] shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-sm text-white font-medium mb-3">Choose drawing type</p>
+            <p className="text-sm text-body font-medium mb-3">Choose drawing type</p>
             <div className="space-y-1">
               {DISCIPLINE_ORDER.map((key) => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => handlePickDiscipline(key)}
-                  className="w-full text-left px-3 py-2 text-sm text-gray-200 rounded hover:bg-white/10 cursor-pointer"
+                  className="w-full text-left px-3 py-2 text-sm text-body rounded hover:bg-overlay/10 cursor-pointer"
                 >
                   {DISCIPLINE_LABEL[key]}
                 </button>
@@ -588,7 +594,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
             <button
               type="button"
               onClick={() => setShowUploadPicker(false)}
-              className="mt-3 w-full text-xs text-gray-500 hover:text-gray-300 cursor-pointer"
+              className="mt-3 w-full text-xs text-muted hover:text-body cursor-pointer"
             >
               Cancel
             </button>
@@ -635,15 +641,15 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
             onClick={() => setBindPickerFor(null)}
           >
             <div
-              className="bg-[#111] border border-white/10 rounded-lg p-4 w-[320px] max-h-[70vh] overflow-y-auto shadow-xl"
+              className="bg-surface border border-overlay/10 rounded-lg p-4 w-[320px] max-h-[70vh] overflow-y-auto shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <p className="text-sm text-white font-medium mb-1">Bind to BOQ line</p>
-              <p className="text-[11px] text-gray-500 mb-3">
+              <p className="text-sm text-body font-medium mb-1">Bind to BOQ line</p>
+              <p className="text-[11px] text-muted mb-3">
                 Only items whose unit matches the measurement are shown.
               </p>
               {options.length === 0 ? (
-                <p className="px-2 py-3 text-xs text-gray-500 text-center">
+                <p className="px-2 py-3 text-xs text-muted text-center">
                   No BOQ items with a matching unit. Add or change a card's unit first.
                 </p>
               ) : (
@@ -660,13 +666,13 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                         );
                         setBindPickerFor(null);
                       }}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-200 rounded hover:bg-white/10 cursor-pointer flex items-center gap-2"
+                      className="w-full text-left px-3 py-2 text-sm text-body rounded hover:bg-overlay/10 cursor-pointer flex items-center gap-2"
                     >
-                      <span className="text-[10px] font-bold text-[#f97316] w-10 shrink-0">
+                      <span className="text-[10px] font-bold text-warn w-10 shrink-0">
                         {opt.elementIndex + 1}·{opt.itemLetter}
                       </span>
                       <span className="flex-1 truncate">{opt.elementTitle}</span>
-                      <span className="text-[10px] text-gray-500">{opt.itemUnit}</span>
+                      <span className="text-[10px] text-muted">{opt.itemUnit}</span>
                     </button>
                   ))}
                 </div>
@@ -674,7 +680,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
               <button
                 type="button"
                 onClick={() => setBindPickerFor(null)}
-                className="mt-3 w-full text-xs text-gray-500 hover:text-gray-300 cursor-pointer"
+                className="mt-3 w-full text-xs text-muted hover:text-body cursor-pointer"
               >
                 Cancel
               </button>

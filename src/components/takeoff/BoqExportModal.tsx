@@ -43,7 +43,7 @@ const BoqExportModal: React.FC<BoqExportModalProps> = ({
                 className={`flex-1 py-2 text-sm font-semibold rounded-lg border transition ${
                   format === "pdf"
                     ? "bg-navy-soft text-white border-navy-soft"
-                    : "border-border text-muted hover:border-gray-400"
+                    : "border-border text-muted hover:border-muted/60"
                 }`}
               >
                 PDF
@@ -54,7 +54,7 @@ const BoqExportModal: React.FC<BoqExportModalProps> = ({
                 className={`flex-1 py-2 text-sm font-semibold rounded-lg border transition ${
                   format === "excel"
                     ? "bg-navy-soft text-white border-navy-soft"
-                    : "border-border text-muted hover:border-gray-400"
+                    : "border-border text-muted hover:border-muted/60"
                 }`}
               >
                 Excel (.xlsx)

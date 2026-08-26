@@ -3613,11 +3613,11 @@ if (!prev && activeTool) {
               return (
                 <div className="absolute inset-0 z-20 pointer-events-none" aria-hidden>
                   <div
-                    className="absolute top-0 bottom-0 w-px bg-gray-900/45"
+                    className="absolute top-0 bottom-0 w-px bg-overlay/45"
                     style={{ left: pos.x }}
                   />
                   <div
-                    className="absolute left-0 right-0 h-px bg-gray-900/45"
+                    className="absolute left-0 right-0 h-px bg-overlay/45"
                     style={{ top: pos.y }}
                   />
                 </div>
@@ -3625,7 +3625,7 @@ if (!prev && activeTool) {
             })()}
             {hoveredMeasurement && hoverTooltipText && screenPointerPos ? (
               <div
-                className="absolute z-30 pointer-events-none rounded-md bg-gray-900/90 px-2 py-1 text-xs font-semibold text-white shadow-lg"
+                className="absolute z-30 pointer-events-none rounded-md bg-charcoal/90 px-2 py-1 text-xs font-semibold text-white shadow-lg"
                 style={{
                   left: screenPointerPos.x + 14,
                   top: screenPointerPos.y + 14,
@@ -3657,7 +3657,7 @@ if (!prev && activeTool) {
         )}
 
       {autoAreaError && (
-        <div className="absolute top-32 left-1/2 -translate-x-1/2 z-20 max-w-md rounded-full bg-gray-900/90 text-white px-4 py-1.5 shadow-lg text-xs font-semibold">
+        <div className="absolute top-32 left-1/2 -translate-x-1/2 z-20 max-w-md rounded-full bg-charcoal/90 text-white px-4 py-1.5 shadow-lg text-xs font-semibold">
           {autoAreaError}
         </div>
       )}
@@ -3716,7 +3716,7 @@ if (!prev && activeTool) {
         // "Measuring for..." pill occupies the same slot and takes priority.
         if (boqTargeting) return null;
         let text: string | null = null;
-        let accent = "bg-gray-800/85";
+        let accent = "bg-charcoal/85";
         if (calibrationMode) {
           text = "Calibration — click two points, then enter the real distance";
           accent = "bg-orange-600/90";

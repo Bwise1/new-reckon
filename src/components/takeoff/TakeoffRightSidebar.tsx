@@ -205,7 +205,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
       )}
 
       {statusMessage && (
-        <p className="shrink-0 px-4 py-1.5 text-[11px] text-muted border-b border-gray-50 bg-surface-muted">
+        <p className="shrink-0 px-4 py-1.5 text-[11px] text-muted border-b border-border bg-surface-muted">
           {statusMessage}
         </p>
       )}

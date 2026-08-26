@@ -71,7 +71,7 @@ const NewProjectModal = ({
             onChange={(e) => setTitle(e.target.value)}
             autoFocus
             onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-gray-400 placeholder-gray-400"
+            className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-muted/60 placeholder-muted/70"
           />
 
           <input
@@ -80,7 +80,7 @@ const NewProjectModal = ({
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-gray-400 placeholder-gray-400"
+            className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-muted/60 placeholder-muted/70"
           />
 
         </div>
@@ -95,7 +95,7 @@ const NewProjectModal = ({
           <button
             onClick={handleSubmit}
             disabled={!title.trim() || isPending}
-            className="flex-1 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
+            className="flex-1 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
             {isPending
               ? isEdit

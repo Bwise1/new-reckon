@@ -82,7 +82,7 @@ function Toast({ message, type, onDone }: { message: string; type: "success" | "
     return () => clearTimeout(t);
   }, [onDone]);
   return (
-    <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white ${type === "success" ? "bg-gray-900" : "bg-danger/100"}`}>
+    <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white ${type === "success" ? "bg-charcoal" : "bg-danger/100"}`}>
       {type === "success" ? <FiCheck className="shrink-0" /> : <FiAlertCircle className="shrink-0" />}
       {message}
     </div>

@@ -62,7 +62,7 @@ const Dashboard = () => {
             <h2 className="text-xl font-bold text-body">Welcome {firstName}</h2>
             <button
               onClick={() => setShowNewProject(true)}
-              className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-gray-800 transition-colors"
+              className="px-4 py-2 bg-primary text-primary-fg text-sm font-medium rounded-md hover:bg-primary/90 transition-colors"
             >
               New Project
             </button>
@@ -73,7 +73,7 @@ const Dashboard = () => {
               onClick={() => setActiveTab("files")}
               className={`flex-1 pb-3 text-sm text-center transition-colors ${
                 activeTab === "files"
-                  ? "text-body font-medium border-b-2 border-gray-900 -mb-px"
+                  ? "text-body font-medium border-b-2 border-primary -mb-px"
                   : "text-muted/70"
               }`}
             >
@@ -83,7 +83,7 @@ const Dashboard = () => {
               onClick={() => setActiveTab("community")}
               className={`flex-1 pb-3 text-sm text-center transition-colors ${
                 activeTab === "community"
-                  ? "text-body font-medium border-b-2 border-gray-900 -mb-px"
+                  ? "text-body font-medium border-b-2 border-primary -mb-px"
                   : "text-muted/70"
               }`}
             >
