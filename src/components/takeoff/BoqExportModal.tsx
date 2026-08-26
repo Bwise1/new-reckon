@@ -29,21 +29,21 @@ const BoqExportModal: React.FC<BoqExportModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-sm rounded-xl bg-white shadow-xl p-5">
-        <h3 className="text-base font-bold text-[#003566] mb-4">
+      <div className="w-full max-w-sm rounded-xl bg-surface shadow-xl p-5">
+        <h3 className="text-base font-bold text-navy-soft mb-4">
           {mode === "preview" ? "Preview BOQ" : "Export BOQ"}
         </h3>
         <div className="space-y-3">
           <div>
-            <p className="text-sm font-semibold text-gray-700 mb-1.5">Format</p>
+            <p className="text-sm font-semibold text-body mb-1.5">Format</p>
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => setFormat("pdf")}
                 className={`flex-1 py-2 text-sm font-semibold rounded-lg border transition ${
                   format === "pdf"
-                    ? "bg-[#003566] text-white border-[#003566]"
-                    : "border-gray-300 text-gray-600 hover:border-gray-400"
+                    ? "bg-navy-soft text-white border-navy-soft"
+                    : "border-border text-muted hover:border-gray-400"
                 }`}
               >
                 PDF
@@ -53,33 +53,33 @@ const BoqExportModal: React.FC<BoqExportModalProps> = ({
                 onClick={() => setFormat("excel")}
                 className={`flex-1 py-2 text-sm font-semibold rounded-lg border transition ${
                   format === "excel"
-                    ? "bg-[#003566] text-white border-[#003566]"
-                    : "border-gray-300 text-gray-600 hover:border-gray-400"
+                    ? "bg-navy-soft text-white border-navy-soft"
+                    : "border-border text-muted hover:border-gray-400"
                 }`}
               >
                 Excel (.xlsx)
               </button>
             </div>
           </div>
-          <label className="block text-sm font-semibold text-gray-700">
+          <label className="block text-sm font-semibold text-body">
             Add Contingency
             <input
               type="number"
               min={0}
               value={contingency}
               onChange={(e) => setContingency(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
               placeholder="0.00"
             />
           </label>
-          <label className="block text-sm font-semibold text-gray-700">
+          <label className="block text-sm font-semibold text-body">
             VAT percentage
             <input
               type="number"
               min={0}
               value={vat}
               onChange={(e) => setVat(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
               placeholder="0%"
             />
           </label>
@@ -89,7 +89,7 @@ const BoqExportModal: React.FC<BoqExportModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="px-4 py-2 text-sm rounded-lg border border-gray-300 disabled:opacity-50"
+            className="px-4 py-2 text-sm rounded-lg border border-border disabled:opacity-50"
           >
             Cancel
           </button>
@@ -99,7 +99,7 @@ const BoqExportModal: React.FC<BoqExportModalProps> = ({
             onClick={() =>
               onConfirm(Number.parseFloat(vat) || 0, Number.parseFloat(contingency) || 0, format)
             }
-            className="px-4 py-2 text-sm rounded-lg bg-[#003566] text-white font-semibold disabled:opacity-50"
+            className="px-4 py-2 text-sm rounded-lg bg-navy-soft text-white font-semibold disabled:opacity-50"
           >
             {busy ? "Working..." : mode === "preview" ? "Preview" : "Export"}
           </button>

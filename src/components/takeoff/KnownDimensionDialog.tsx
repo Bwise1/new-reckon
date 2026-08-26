@@ -49,15 +49,15 @@ const KnownDimensionDialog: React.FC<KnownDimensionDialogProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-5">
-        <h2 className="text-base font-semibold text-gray-900">Known dimension</h2>
-        <p className="mt-1 text-xs text-gray-500">
+      <div className="bg-surface rounded-lg shadow-xl w-full max-w-sm mx-4 p-5">
+        <h2 className="text-base font-semibold text-body">Known dimension</h2>
+        <p className="mt-1 text-xs text-muted">
           Enter a real-world measurement you can identify on the plan (a printed
           dimension line, a standard door). Next, you will draw that exact
           distance on the plan and the scale is set automatically.
         </p>
 
-        <div className="mt-4 flex items-stretch rounded-md border border-gray-300 overflow-hidden focus-within:ring-2 focus-within:ring-orange-200">
+        <div className="mt-4 flex items-stretch rounded-md border border-border overflow-hidden focus-within:ring-2 focus-within:ring-warn/30">
           <input
             ref={inputRef}
             type="number"
@@ -75,24 +75,24 @@ const KnownDimensionDialog: React.FC<KnownDimensionDialogProps> = ({
             }}
             className="flex-1 px-3 py-2 text-sm outline-none"
           />
-          <span className="px-3 flex items-center text-xs text-gray-500 bg-gray-50 border-l border-gray-200">
+          <span className="px-3 flex items-center text-xs text-muted bg-surface-muted border-l border-border">
             m
           </span>
         </div>
-        {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
+        {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
 
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="px-3 py-1.5 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 cursor-pointer"
+            className="px-3 py-1.5 rounded-md text-sm font-medium text-muted hover:bg-overlay/10 cursor-pointer"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={submit}
-            className="px-4 py-1.5 rounded-md bg-[#f97316] text-white text-sm font-semibold hover:bg-[#ea580c] cursor-pointer"
+            className="px-4 py-1.5 rounded-md bg-warn text-white text-sm font-semibold hover:bg-warn-strong cursor-pointer"
           >
             Start drawing
           </button>

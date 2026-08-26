@@ -76,7 +76,7 @@ function ToolGroup({
 }) {
   return (
     <div data-tour={tour} className="flex shrink-0 flex-col items-center gap-1">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 whitespace-nowrap">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted/70 whitespace-nowrap">
         {title}
       </span>
       <div className="flex items-end gap-0.5">{children}</div>
@@ -85,7 +85,7 @@ function ToolGroup({
 }
 
 function Divider() {
-  return <div className="mb-0.5 self-stretch w-px shrink-0 bg-gray-200" />;
+  return <div className="mb-0.5 self-stretch w-px shrink-0 bg-border" />;
 }
 
 function IconButton({
@@ -93,8 +93,8 @@ function IconButton({
   label,
   active,
   disabled,
-  activeBg = 'bg-gray-200/70',
-  activeLabelColor = 'text-gray-800',
+  activeBg = 'bg-overlay/10',
+  activeLabelColor = 'text-body',
   title,
   onClick,
 }: {
@@ -119,14 +119,14 @@ function IconButton({
     >
       <span
         className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
-          active ? activeBg : 'text-gray-600 hover:bg-gray-100'
+          active ? activeBg : 'text-muted hover:bg-overlay/10'
         }`}
       >
         <Icon className="h-4 w-4" strokeWidth={1.5} />
       </span>
       <span
         className={`whitespace-nowrap text-[9.5px] font-medium leading-none ${
-          active ? activeLabelColor : 'text-gray-500'
+          active ? activeLabelColor : 'text-muted'
         }`}
       >
         {label}
@@ -175,8 +175,8 @@ const MEASURE_TOOLS: {
     type: 'linear',
     label: 'Linear',
     icon: LinearIcon,
-    activeBg: 'bg-[#003566]/10',
-    activeLabelColor: 'text-[#003566]',
+    activeBg: 'bg-navy-soft/10',
+    activeLabelColor: 'text-navy-soft',
     tooltip:
       'Linear — click points; double-click, Enter, or right-click to finish. Click first point (≥4 pts) to close as area.',
   },
@@ -184,16 +184,16 @@ const MEASURE_TOOLS: {
     type: 'area',
     label: 'Area',
     icon: AreaIcon,
-    activeBg: 'bg-emerald-600/10',
-    activeLabelColor: 'text-emerald-700',
+    activeBg: 'bg-accent/10',
+    activeLabelColor: 'text-accent-strong',
     tooltip: 'Area — click points; double-click or Enter to close. Right-click a finished area to deduct.',
   },
   {
     type: 'count',
     label: 'Count',
     icon: CountIcon,
-    activeBg: 'bg-red-600/10',
-    activeLabelColor: 'text-red-600',
+    activeBg: 'bg-danger/10',
+    activeLabelColor: 'text-danger',
     tooltip: 'Count — click to place count markers.',
   },
 ];
@@ -272,7 +272,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   } = usePortalDropdown();
 
   return (
-    <div className="shrink-0 flex w-full overflow-x-auto bg-white border-b border-gray-200 z-10 h-[76px]">
+    <div className="shrink-0 flex w-full overflow-x-auto bg-surface border-b border-border z-10 h-[76px]">
       <div className="flex items-stretch gap-1.5 mx-auto px-3 py-1.5">
         <ToolGroup title="Pointer">
           <IconButton icon={Hand} label="Pan" active={isPanningMode} onClick={onTogglePan} />
@@ -301,17 +301,17 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               active
               activeBg={
                 calibrationMode
-                  ? 'bg-orange-500/20 animate-pulse'
+                  ? 'bg-warn/20 animate-pulse'
                   : currentScale
-                    ? 'bg-emerald-600/10'
-                    : 'bg-orange-500/15'
+                    ? 'bg-accent/10'
+                    : 'bg-warn/15'
               }
               activeLabelColor={
                 calibrationMode
-                  ? 'text-orange-600'
+                  ? 'text-warn-strong'
                   : currentScale
-                    ? 'text-emerald-700'
-                    : 'text-orange-600'
+                    ? 'text-accent-strong'
+                    : 'text-warn-strong'
               }
               title="Scale / calibration options"
               onClick={toggleCal}
@@ -337,8 +337,8 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             icon={Wand2}
             label="Auto Area"
             active={autoAreaMode}
-            activeBg="bg-emerald-600/10"
-            activeLabelColor="text-emerald-700"
+            activeBg="bg-accent/10"
+            activeLabelColor="text-accent-strong"
             title="Auto area — click once inside a room and its boundary is detected automatically"
             onClick={onToggleAutoArea}
           />
@@ -356,13 +356,13 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               onClick={toggleColor}
               className="flex flex-col items-center gap-[2px] rounded-lg px-1 py-0.5 cursor-pointer"
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-overlay/10 transition-colors">
                 <span
                   className="h-4 w-4 rounded-full border border-black/10"
                   style={{ backgroundColor: liveColor }}
                 />
               </span>
-              <span className="whitespace-nowrap text-[9.5px] font-medium leading-none text-gray-500">
+              <span className="whitespace-nowrap text-[9.5px] font-medium leading-none text-muted">
                 Color
               </span>
             </button>
@@ -383,7 +383,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               className={`flex h-8 items-center gap-1 rounded-lg px-2 transition-colors ${
                 selectedMeasurementId && currentScale
                   ? 'bg-secondary/10 ring-1 ring-secondary/30'
-                  : 'bg-gray-100 hover:bg-gray-200/70'
+                  : 'bg-surface-muted hover:bg-overlay/15'
               }`}
             >
               <input
@@ -397,11 +397,11 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') e.currentTarget.blur();
                 }}
-                className="w-9 bg-transparent text-right text-[10px] font-semibold text-gray-800 outline-none disabled:text-gray-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                className="w-9 bg-transparent text-right text-[10px] font-semibold text-body outline-none disabled:text-muted/70 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
-              <span className="text-[9.5px] font-medium text-gray-500">m</span>
+              <span className="text-[9.5px] font-medium text-muted">m</span>
             </div>
-            <span className="whitespace-nowrap text-[9.5px] font-medium leading-none text-gray-500">
+            <span className="whitespace-nowrap text-[9.5px] font-medium leading-none text-muted">
               {selectedMeasurementId && currentScale ? 'Edit Width' : 'Width'}
             </span>
           </div>
@@ -439,8 +439,8 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             icon={CopyCheck}
             label="Apply to All"
             active={applyToAll}
-            activeBg="bg-emerald-600 text-white"
-            activeLabelColor="text-emerald-700"
+            activeBg="bg-accent text-white"
+            activeLabelColor="text-accent-strong"
             title="When on, rotations apply to every page of the plan"
             onClick={() => setApplyToAll((prev) => !prev)}
           />
@@ -466,9 +466,9 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           <div
             ref={calMenuRef}
             style={{ position: 'fixed', top: calPos.top, left: calPos.left, zIndex: 99999 }}
-            className="w-56 bg-white border border-gray-200 rounded-xl shadow-xl py-1.5 text-sm"
+            className="w-56 bg-surface border border-border rounded-xl shadow-xl py-1.5 text-sm"
           >
-            <p className="px-3 pb-1.5 pt-0.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100">
+            <p className="px-3 pb-1.5 pt-0.5 text-[10px] font-semibold text-muted/70 uppercase tracking-wide border-b border-border">
               {currentScale ? `Scale set — 1m = ${currentScale.toFixed(1)}px` : 'Not scaled'}
             </p>
             <button
@@ -477,10 +477,10 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                 setCalOpen(false);
                 onStartKnownCalibration();
               }}
-              className="block w-full px-3 py-2 text-left hover:bg-gray-50 cursor-pointer"
+              className="block w-full px-3 py-2 text-left hover:bg-overlay/5 cursor-pointer"
             >
-              <span className="font-medium text-gray-800">Use known dimension</span>
-              <span className="block text-[11px] text-gray-500">
+              <span className="font-medium text-body">Use known dimension</span>
+              <span className="block text-[11px] text-muted">
                 Type a measurement, then draw it on the plan
               </span>
             </button>
@@ -490,10 +490,10 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                 setCalOpen(false);
                 onStartCalibration();
               }}
-              className="block w-full px-3 py-2 text-left hover:bg-gray-50 cursor-pointer"
+              className="block w-full px-3 py-2 text-left hover:bg-overlay/5 cursor-pointer"
             >
-              <span className="font-medium text-gray-800">Draw, then enter distance</span>
-              <span className="block text-[11px] text-gray-500">
+              <span className="font-medium text-body">Draw, then enter distance</span>
+              <span className="block text-[11px] text-muted">
                 Trace a line first, type its real length after
               </span>
             </button>
@@ -504,7 +504,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                 setCalOpen(false);
                 onClearScale();
               }}
-              className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-default cursor-pointer border-t border-gray-100"
+              className="block w-full px-3 py-2 text-left text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-default cursor-pointer border-t border-border"
             >
               Clear scale
             </button>
@@ -517,9 +517,9 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           <div
             ref={colorMenuRef}
             style={{ position: 'fixed', top: colorPos.top, left: colorPos.left, zIndex: 99999 }}
-            className="bg-white border border-gray-200 rounded-xl shadow-xl p-3"
+            className="bg-surface border border-border rounded-xl shadow-xl p-3"
           >
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
+            <p className="text-[10px] font-semibold text-muted/70 uppercase tracking-wide mb-2">
               Markup Color
             </p>
             <div className="grid grid-cols-4 gap-2">

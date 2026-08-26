@@ -48,13 +48,13 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-5">
-        <h2 className="text-base font-semibold text-gray-900">Set calibration distance</h2>
-        <p className="mt-1 text-xs text-gray-500">
+      <div className="bg-surface rounded-lg shadow-xl w-full max-w-sm mx-4 p-5">
+        <h2 className="text-base font-semibold text-body">Set calibration distance</h2>
+        <p className="mt-1 text-xs text-muted">
           Line length: {pixelDistance.toFixed(1)} px. Enter the real-world distance this line represents.
         </p>
 
-        <div className="mt-4 flex items-stretch rounded-md border border-gray-300 overflow-hidden focus-within:ring-2 focus-within:ring-orange-200">
+        <div className="mt-4 flex items-stretch rounded-md border border-border overflow-hidden focus-within:ring-2 focus-within:ring-warn/30">
           <input
             ref={inputRef}
             type="number"
@@ -79,25 +79,25 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
             placeholder="e.g. 2.5"
             className="flex-1 px-3 py-2 text-sm outline-none"
           />
-          <span className="px-3 py-2 bg-gray-50 text-sm text-gray-600 border-l border-gray-300">
+          <span className="px-3 py-2 bg-surface-muted text-sm text-muted border-l border-border">
             m
           </span>
         </div>
 
-        {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+        {error && <p className="mt-2 text-xs text-danger">{error}</p>}
 
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+            className="px-3 py-1.5 text-sm rounded-md border border-border text-body hover:bg-overlay/5"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={submit}
-            className="px-3 py-1.5 text-sm rounded-md bg-[#f97316] text-white hover:bg-[#ea580c] font-semibold"
+            className="px-3 py-1.5 text-sm rounded-md bg-warn text-white hover:bg-warn-strong font-semibold"
           >
             Confirm
           </button>

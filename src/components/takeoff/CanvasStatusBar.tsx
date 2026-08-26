@@ -42,22 +42,22 @@ const ToggleChip: React.FC<{
     title={title}
     className={`px-1.5 py-0.5 rounded border text-[11px] font-medium transition-colors cursor-pointer ${
       on
-        ? "border-gray-300 bg-gray-100 text-gray-800"
-        : "border-gray-200 bg-white text-gray-400 hover:text-gray-600"
+        ? "border-border bg-surface-muted text-body"
+        : "border-border bg-surface text-muted/70 hover:text-body"
     }`}
   >
     {label} : {on ? "On" : "Off"}
   </button>
 );
 
-const Divider: React.FC = () => <span className="h-3 w-px bg-gray-200" />;
+const Divider: React.FC = () => <span className="h-3 w-px bg-border" />;
 
 /** Inline sync state for the status strip: Synced / Syncing (n) / Offline. */
 const SyncSegment: React.FC = () => {
   const { isOnline, pendingCount } = useSyncStatus();
   if (!isOnline) {
     return (
-      <span className="inline-flex items-center gap-1 text-red-500">
+      <span className="inline-flex items-center gap-1 text-danger">
         <WifiOff className="h-3 w-3" />
         Offline{pendingCount > 0 ? ` (${pendingCount})` : ""}
       </span>
@@ -65,14 +65,14 @@ const SyncSegment: React.FC = () => {
   }
   if (pendingCount > 0) {
     return (
-      <span className="inline-flex items-center gap-1 text-amber-600">
+      <span className="inline-flex items-center gap-1 text-warn-strong">
         <Loader2 className="h-3 w-3 animate-spin" />
         Syncing ({pendingCount})
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-green-700">
+    <span className="inline-flex items-center gap-1 text-accent-strong">
       <Check className="h-3 w-3" strokeWidth={2.5} />
       Synced
     </span>
@@ -105,7 +105,7 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
     : "X: –, Y: –";
 
   return (
-    <div className="shrink-0 flex flex-nowrap items-center gap-2.5 overflow-hidden whitespace-nowrap border-t border-gray-200 bg-white px-3 py-1 text-[11px] font-medium text-gray-500 select-none">
+    <div className="shrink-0 flex flex-nowrap items-center gap-2.5 overflow-hidden whitespace-nowrap border-t border-border bg-surface px-3 py-1 text-[11px] font-medium text-muted select-none">
       {/* Page navigation */}
       <div className="flex items-center gap-0.5">
         <button
@@ -114,7 +114,7 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
           title="Previous page"
           disabled={currentPage <= 1}
           onClick={() => onChangePage(-1)}
-          className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-gray-100 hover:text-gray-800 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default"
+          className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-overlay/10 hover:text-body disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
         </button>
@@ -127,7 +127,7 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
           title="Next page"
           disabled={currentPage >= numPages}
           onClick={() => onChangePage(1)}
-          className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-gray-100 hover:text-gray-800 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default"
+          className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-overlay/10 hover:text-body disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default"
         >
           <ChevronRight className="h-3.5 w-3.5" />
         </button>
@@ -145,7 +145,7 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
       <Divider />
       <span
         className={`inline-flex items-center gap-1 ${
-          currentScale ? "text-green-700" : "text-red-500"
+          currentScale ? "text-accent-strong" : "text-danger"
         }`}
       >
         {currentScale ? (
@@ -178,7 +178,7 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
           aria-label="Zoom out"
           title="Zoom out"
           onClick={() => setStageScale(Math.max(0.2, stageScale / 1.12))}
-          className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-gray-100 hover:text-gray-800 cursor-pointer"
+          className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-overlay/10 hover:text-body cursor-pointer"
         >
           <ZoomOut className="h-3.5 w-3.5" />
         </button>
@@ -190,7 +190,7 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
           aria-label="Zoom in"
           title="Zoom in"
           onClick={() => setStageScale(Math.min(20, stageScale * 1.12))}
-          className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-gray-100 hover:text-gray-800 cursor-pointer"
+          className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-overlay/10 hover:text-body cursor-pointer"
         >
           <ZoomIn className="h-3.5 w-3.5" />
         </button>
@@ -199,7 +199,7 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
           aria-label="Fit plan to view"
           title="Fit plan to view"
           onClick={onFit}
-          className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-gray-100 hover:text-gray-800 cursor-pointer"
+          className="flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-overlay/10 hover:text-body cursor-pointer"
         >
           <Maximize2 className="h-3.5 w-3.5" />
         </button>
