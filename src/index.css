@@ -1,18 +1,118 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
-@theme {
-  --color-primary: #D7D7D7;
-  --color-secondary: #003566;
-  --color-brandColor: #11253E;
-  --color-brandGold: #E9C268;
+/* ── General Sans (local, 4 weights) — the app face. ──────────────────────── */
+@font-face {
+  font-family: "General Sans";
+  src: url("./assets/fonts/GeneralSans-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "General Sans";
+  src: url("./assets/fonts/GeneralSans-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "General Sans";
+  src: url("./assets/fonts/GeneralSans-Semibold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "General Sans";
+  src: url("./assets/fonts/GeneralSans-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
-  --font-family-sans: Inter, sans-serif;
+/*
+ * Design tokens — see docs/design-system.md (extracted from the Reckon-Bill
+ * prototype). Light values are the defaults because Reckon ships light-first;
+ * the dark set below waits behind [data-theme="dark"] until a switch exists.
+ *
+ * Rule: new code uses semantic tokens only — no raw grays, no hex literals.
+ */
+@theme {
+  /* Brand accents — micro-interactions only (status, ticks, destructive),
+     never chrome fills. */
+  --color-charcoal: #0f172a;
+  --color-navy-soft: #003566;
+  --color-teal: #289693;
+  --color-gold: #e9c268;
+  --color-coral: #fc7750;
+
+  /* Neutral chrome — sidebars, rails, floating panel bars. */
+  --color-ink: #f8fafc;
+  --color-ink-elevated: #eef2f6;
+
+  /* App background behind the plan sheet. */
+  --color-canvas: #ffffff;
+
+  /* Cards, modal bodies, dropdowns. */
+  --color-surface: #ffffff;
+  --color-surface-muted: #f1f5f9;
+
+  /* Hairline dividers. */
+  --color-border: #e2e8f0;
+
+  /* Text. */
+  --color-body: #0f172a;
+  --color-muted: #64748b;
+
+  /* Hover/active tint — always with opacity (bg-overlay/10 etc.); flips with
+     the theme so one class works in both. */
+  --color-overlay: #0f172a;
+
+  /* Solid CTA buttons (theme-inverted). */
+  --color-primary: #0f172a;
+  --color-primary-fg: #ffffff;
+
+  --color-accent: var(--color-teal);
+  --color-accent-strong: #1b6f6c;
+
+  /* Calibration/caution currently orange in Reckon; the prototype's gold
+     family is a phase-3 decision (see docs/design-system.md §6). */
+  --color-warn: #f97316;
+  --color-warn-strong: #ea580c;
+
+  --color-danger: #dc2626;
+  --color-danger-strong: #b91c1c;
+
+  /* Legacy aliases — heavily used; migrate off during the token sweep. */
+  --color-secondary: #003566;
+  --color-brandColor: #11253e;
+  --color-brandGold: #e9c268;
+
+  --font-family-sans: "General Sans", -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Dark theme — inert until a data-theme switch ships (design-system §6 P5). */
+[data-theme="dark"] {
+  --color-ink: #18181b;
+  --color-ink-elevated: #232327;
+  --color-canvas: #121212;
+  --color-surface: #1e1e1e;
+  --color-surface-muted: #27272a;
+  --color-border: #27272a;
+  --color-body: #f4f4f5;
+  --color-muted: #a1a1aa;
+  --color-overlay: #ffffff;
+  --color-primary: #ffffff;
+  --color-primary-fg: #18181b;
+  --color-accent-strong: #1f7875;
+  --color-navy-soft: #4a7fa8;
 }
 
 @layer base {
   html {
-    font-family: "Inter", "sans-serif";
+    font-family: "General Sans", -apple-system, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
   }
 
   body {
@@ -36,11 +136,34 @@
   }
 }
 
-/* Tool icon palette (ported with the Reckon-Bill toolbar icons). */
-:root {
-  --color-warn: #f97316;
-  --color-accent: #059669;
-  --color-muted: #4b5563;
-  --color-navy-soft: #003566;
-  --color-danger: #dc2626;
+/* Thin, token-tinted scrollbars (prototype convention). */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-overlay) 18%, transparent) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--color-overlay) 18%, transparent);
+  border-radius: 9999px;
+}
+
+/* One entrance animation for dropdowns/popovers (prototype convention). */
+@keyframes float-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-float-in {
+  animation: float-in 120ms ease-out;
 }
