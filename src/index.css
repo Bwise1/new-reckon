@@ -35,3 +35,12 @@
     @apply transition-opacity duration-500 ease-in-out hover:opacity-75 transform hover:-translate-y-1 hover:scale-110 cursor-pointer;
   }
 }
+
+/* Tool icon palette (ported with the Reckon-Bill toolbar icons). */
+:root {
+  --color-warn: #f97316;
+  --color-accent: #059669;
+  --color-muted: #4b5563;
+  --color-navy-soft: #003566;
+  --color-danger: #dc2626;
+}

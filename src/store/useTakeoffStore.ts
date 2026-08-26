@@ -247,6 +247,7 @@ interface TakeoffStore {
   unbindMeasurement: (measurementId: string) => void;
 
   setScale: (page: number, scale: number) => void;
+  clearScale: (page: number) => void;
   setCalibrationLine: (page: number, line: CalibrationLine) => void;
   setCalibrationMode: (mode: boolean) => void;
   /** Rotate a page by delta degrees (90 or -90).
@@ -1967,6 +1968,24 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       },
       description: 'Remove deduction',
     });
+  },
+
+  clearScale: (page) => {
+    const state = get();
+    if (state.scales[page] === undefined && !state.calibrationLines[page]) return;
+    set((st) => {
+      const scales = { ...st.scales };
+      const calibrationLines = { ...st.calibrationLines };
+      delete scales[page];
+      delete calibrationLines[page];
+      return { scales, calibrationLines };
+    });
+    get().triggerAutoSave();
+    const projectId = state.currentProjectId;
+    const planUuid = state.activePlanId;
+    if (projectId && planUuid) {
+      syncQueue.enqueue({ kind: 'calibration.delete', projectId, planUuid, page });
+    }
   },
 
   setScale: (page, scale) => {

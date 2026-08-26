@@ -25,8 +25,8 @@ import { useCanvasMedia } from "@/components/takeoff/hooks/useCanvasMedia";
 import { useCanvasInteractions } from "@/components/takeoff/hooks/useCanvasInteractions";
 import CanvasToolbar from "@/components/takeoff/CanvasToolbar";
 import CalibrationDialog from "@/components/takeoff/CalibrationDialog";
-import CanvasOverlays from "@/components/takeoff/CanvasOverlays";
 import CanvasStatusBar from "@/components/takeoff/CanvasStatusBar";
+import KnownDimensionDialog from "@/components/takeoff/KnownDimensionDialog";
 import CanvasViewport from "@/components/takeoff/CanvasViewport";
 import { ratioToPxPerMeter } from "@/utils/pdfScaleDetector";
 import { detectRoomPolygon } from "@/utils/areaDetection";
@@ -200,6 +200,11 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   const [autoAreaMode, setAutoAreaMode] = useState(false);
   const [autoAreaError, setAutoAreaError] = useState<string | null>(null);
   const autoCommitRef = useRef(false);
+  // Known-dimension calibration: the distance is typed BEFORE drawing; when
+  // set, finishing the calibration line applies the scale with no second
+  // dialog. null = legacy draw-first flow.
+  const [knownCalibration, setKnownCalibration] = useState<number | null>(null);
+  const [showKnownDialog, setShowKnownDialog] = useState(false);
   // Drafting toggles, persisted like other canvas prefs. Ortho makes angle
   // snapping permanent (Shift still works as a momentary hold); Auto Scroll
   // pans the sheet when the cursor reaches the pane edge mid-measurement.
@@ -344,6 +349,7 @@ if (!prev && activeTool) {
     const plan = s.plans.find((pl) => pl.id === s.activePlanId);
     return plan?.name ?? "";
   });
+  const clearScale = useTakeoffStore((s) => s.clearScale);
   const rotatePage = useTakeoffStore((s) => s.rotatePage);
   const rotateAllPages = useTakeoffStore((s) => s.rotateAllPages);
   const activeRealWidthLive = useTakeoffStore((s) => s.activeRealWidth);
@@ -754,6 +760,26 @@ if (!prev && activeTool) {
       const pixelDist = calculateDistance(calibrationPoint1, finalPoint);
       if (pixelDist < MIN_DISTANCE) {
         // Same click as p1 — ignore and let the user click again.
+        return;
+      }
+      if (knownCalibration != null) {
+        // Known-dimension flow: the real distance was typed up front, so the
+        // scale applies the moment the line is drawn — no second dialog.
+        const newScale = pixelDist / knownCalibration;
+        const scaleValidation = validateScale(newScale);
+        if (scaleValidation.isValid) {
+          setScale(currentPage, newScale);
+          setCalibrationLine(currentPage, {
+            p1: calibrationPoint1,
+            p2: finalPoint,
+            distance: knownCalibration,
+          });
+        } else {
+          console.warn("Invalid scale:", scaleValidation.error);
+        }
+        setKnownCalibration(null);
+        setCalibrationPoint1(null);
+        setCalibrationMode(false);
         return;
       }
       setPendingCalibration({ p1: calibrationPoint1, p2: finalPoint });
@@ -2234,17 +2260,50 @@ if (!prev && activeTool) {
             useTakeoffStore.setState({ activeRealWidth: w });
           }
         }}
-        onToggleCalibration={() => {
-          const newMode = !calibrationMode;
-          setCalibrationMode(newMode);
+        onStartCalibration={() => {
+          setCalibrationMode(true);
+          setKnownCalibration(null);
           setCalibrationPoint1(null);
           setPendingCalibration(null);
+          setIsPanningMode(false);
+          setIsSelectMode(false);
+          setActiveTool(null);
+          setCurrentPoints([]);
+        }}
+        onStartKnownCalibration={() => {
+          setShowKnownDialog(true);
+        }}
+        onClearScale={() => clearScale(currentPage)}
+        isPanningMode={isPanningMode}
+        onTogglePan={() => {
+          const newMode = !isPanningMode;
+          setIsPanningMode(newMode);
           if (newMode) {
-            setIsPanningMode(false);
             setIsSelectMode(false);
+            setCalibrationMode(false);
             setActiveTool(null);
             setCurrentPoints([]);
           }
+        }}
+        isSelectMode={isSelectMode}
+        onToggleSelect={() => {
+          const newMode = !isSelectMode;
+          setIsSelectMode(newMode);
+          if (newMode) {
+            setIsPanningMode(false);
+            setCalibrationMode(false);
+            setActiveTool(null);
+            setCurrentPoints([]);
+          }
+        }}
+        snapEnabled={snapEnabled}
+        onToggleSnap={handleToggleSnap}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onClearAll={() => {
+          void handleClearAllMeasurements();
         }}
         onRotateCW={() => handleRotatePage(90)}
         onRotateCCW={() => handleRotatePage(-90)}
@@ -3634,39 +3693,8 @@ if (!prev && activeTool) {
         </div>
       )}
 
-      <CanvasOverlays
-        isPanningMode={isPanningMode}
-        isSelectMode={isSelectMode}
-        isShiftPressed={isShiftPressed}
-        onTogglePan={() => {
-          const newMode = !isPanningMode;
-          setIsPanningMode(newMode);
-          if (newMode) {
-            setIsSelectMode(false);
-            setCalibrationMode(false);
-            setActiveTool(null);
-            setCurrentPoints([]);
-          }
-        }}
-        onToggleSelect={() => {
-          const newMode = !isSelectMode;
-          setIsSelectMode(newMode);
-          if (newMode) {
-            setIsPanningMode(false);
-            setCalibrationMode(false);
-            setActiveTool(null);
-            setCurrentPoints([]);
-          }
-        }}
-        onUndoPoint={() =>
-          setCurrentPoints((prev) => (prev.length > 0 ? prev.slice(0, -1) : []))
-        }
-        onClearAll={() => {
-          void handleClearAllMeasurements();
-        }}
-        snapEnabled={snapEnabled}
-        onToggleSnap={handleToggleSnap}
-      />
+      {/* Pointer/snap/undo controls now live in the top toolbar (Reckon-Bill
+          layout); the floating pill is gone. */}
 
       <CanvasStatusBar
         numPages={numPages}
@@ -3711,6 +3739,21 @@ if (!prev && activeTool) {
           </div>
         );
       })()}
+      <KnownDimensionDialog
+        open={showKnownDialog}
+        onCancel={() => setShowKnownDialog(false)}
+        onConfirm={(distance) => {
+          setShowKnownDialog(false);
+          setKnownCalibration(distance);
+          setCalibrationMode(true);
+          setCalibrationPoint1(null);
+          setPendingCalibration(null);
+          setIsPanningMode(false);
+          setIsSelectMode(false);
+          setActiveTool(null);
+          setCurrentPoints([]);
+        }}
+      />
       <CalibrationDialog
         open={!!pendingCalibration}
         pixelDistance={

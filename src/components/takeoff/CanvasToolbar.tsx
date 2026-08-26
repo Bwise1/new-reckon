@@ -1,10 +1,30 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Wand2 } from 'lucide-react';
+import React, { useState, useRef, useEffect, type ComponentType, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import {
+  Hand,
+  MousePointer2,
+  Magnet,
+  Wand2,
+  Undo2,
+  Redo2,
+  RotateCcw,
+  RotateCw,
+  Trash2,
+  Maximize,
+  Minimize,
+} from 'lucide-react';
 import type { TakeoffMode } from '@/types/takeoff';
-import { MARKUP_COLORS, MEASUREMENT_TOOLS } from '@/constants/takeoffDesign';
+import { MARKUP_COLORS } from '@/constants/takeoffDesign';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useFullscreen } from '@/hooks/useFullscreen';
+import {
+  CalibrateIcon,
+  AreaIcon,
+  LinearIcon,
+  CountIcon,
+} from './icons/ToolIcons';
+
+type IconComponent = ComponentType<{ className?: string; strokeWidth?: number }>;
 
 interface CanvasToolbarProps {
   calibrationMode: boolean;
@@ -13,7 +33,11 @@ interface CanvasToolbarProps {
   activeColor: string;
   activeRealWidth: number;
   selectedMeasurementId?: string | null;
-  onToggleCalibration: () => void;
+  /** Calibration: draw the line first, then type its distance (legacy flow). */
+  onStartCalibration: () => void;
+  /** Calibration: type the known dimension first, then draw the line. */
+  onStartKnownCalibration: () => void;
+  onClearScale: () => void;
   onSelectTool: (type: TakeoffMode) => void;
   /** Single-click area detection mode (magic wand). */
   autoAreaMode: boolean;
@@ -26,6 +50,88 @@ interface CanvasToolbarProps {
   onRotateCCW: () => void;
   onRotateAllCW: () => void;
   onRotateAllCCW: () => void;
+  isPanningMode: boolean;
+  onTogglePan: () => void;
+  isSelectMode: boolean;
+  onToggleSelect: () => void;
+  snapEnabled: boolean;
+  onToggleSnap: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onClearAll: () => void;
+}
+
+/** Grouped toolbar section with a tiny uppercase title (Reckon-Bill layout). */
+function ToolGroup({
+  title,
+  children,
+  tour,
+}: {
+  title: string;
+  children: ReactNode;
+  tour?: string;
+}) {
+  return (
+    <div data-tour={tour} className="flex shrink-0 flex-col items-center gap-1">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 whitespace-nowrap">
+        {title}
+      </span>
+      <div className="flex items-end gap-0.5">{children}</div>
+    </div>
+  );
+}
+
+function Divider() {
+  return <div className="mb-0.5 self-stretch w-px shrink-0 bg-gray-200" />;
+}
+
+function IconButton({
+  icon: Icon,
+  label,
+  active,
+  disabled,
+  activeBg = 'bg-gray-200/70',
+  activeLabelColor = 'text-gray-800',
+  title,
+  onClick,
+}: {
+  icon: IconComponent;
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  activeBg?: string;
+  activeLabelColor?: string;
+  title?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={active}
+      disabled={disabled}
+      title={title ?? label}
+      onClick={onClick}
+      className="flex flex-col items-center gap-[2px] rounded-lg px-1 py-0.5 disabled:opacity-35 disabled:cursor-default cursor-pointer"
+    >
+      <span
+        className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+          active ? activeBg : 'text-gray-600 hover:bg-gray-100'
+        }`}
+      >
+        <Icon className="h-4 w-4" strokeWidth={1.5} />
+      </span>
+      <span
+        className={`whitespace-nowrap text-[9.5px] font-medium leading-none ${
+          active ? activeLabelColor : 'text-gray-500'
+        }`}
+      >
+        {label}
+      </span>
+    </button>
+  );
 }
 
 function usePortalDropdown() {
@@ -56,13 +162,50 @@ function usePortalDropdown() {
   return { open, setOpen, toggle, triggerRef, menuRef, pos };
 }
 
+const MEASURE_TOOLS: {
+  type: TakeoffMode;
+  label: string;
+  icon: IconComponent;
+  activeBg: string;
+  activeLabelColor: string;
+  tooltip: string;
+}[] = [
+  {
+    type: 'linear',
+    label: 'Linear',
+    icon: LinearIcon,
+    activeBg: 'bg-[#003566]/10',
+    activeLabelColor: 'text-[#003566]',
+    tooltip:
+      'Linear — click points; double-click, Enter, or right-click to finish. Click first point (≥4 pts) to close as area.',
+  },
+  {
+    type: 'area',
+    label: 'Area',
+    icon: AreaIcon,
+    activeBg: 'bg-emerald-600/10',
+    activeLabelColor: 'text-emerald-700',
+    tooltip: 'Area — click points; double-click or Enter to close. Right-click a finished area to deduct.',
+  },
+  {
+    type: 'count',
+    label: 'Count',
+    icon: CountIcon,
+    activeBg: 'bg-red-600/10',
+    activeLabelColor: 'text-red-600',
+    tooltip: 'Count — click to place count markers.',
+  },
+];
+
 const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   calibrationMode,
   currentScale,
   activeTool,
   activeRealWidth,
   selectedMeasurementId,
-  onToggleCalibration,
+  onStartCalibration,
+  onStartKnownCalibration,
+  onClearScale,
   onSelectTool,
   autoAreaMode,
   onToggleAutoArea,
@@ -73,24 +216,29 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onRotateCCW,
   onRotateAllCW,
   onRotateAllCCW,
+  isPanningMode,
+  onTogglePan,
+  isSelectMode,
+  onToggleSelect,
+  snapEnabled,
+  onToggleSnap,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
+  onClearAll,
 }) => {
-  const scaleDisplay = currentScale ? `1m = ${currentScale.toFixed(1)}px` : 'Unscaled';
-
   const liveColor = useTakeoffStore((s) => s.activeColor);
   const fullscreen = useFullscreen();
 
   // Local input state so the field stays editable mid-type.
   const [widthInput, setWidthInput] = useState(Number(activeRealWidth).toFixed(3));
-
-  // Re-seed when the selection or its width changes. Done during render rather
-  // than in an effect so the field never paints a stale value first.
   const widthSeed = `${selectedMeasurementId ?? ''}:${activeRealWidth}`;
   const [seededWidth, setSeededWidth] = useState(widthSeed);
   if (widthSeed !== seededWidth) {
     setSeededWidth(widthSeed);
     setWidthInput(Number(activeRealWidth).toFixed(3));
   }
-
   const commitWidth = (raw: string) => {
     const parsed = parseFloat(raw);
     if (isFinite(parsed) && parsed > 0) {
@@ -100,8 +248,6 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     }
   };
 
-  // Destructured rather than kept as `color.*`: reading ref properties off an
-  // object in JSX trips react-hooks' "cannot access refs during render" rule.
   const {
     open: colorOpen,
     setOpen: setColorOpen,
@@ -111,202 +257,282 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     pos: colorPos,
   } = usePortalDropdown();
 
-  return (
-    <div className="shrink-0 px-3 bg-white border-b border-gray-200 flex items-center gap-2 z-10 h-14">
+  const {
+    open: calOpen,
+    setOpen: setCalOpen,
+    toggle: toggleCal,
+    triggerRef: calTriggerRef,
+    menuRef: calMenuRef,
+    pos: calPos,
+  } = usePortalDropdown();
 
-      {/* Calibrate */}
-      <div data-tour="calibrate" className="flex items-stretch rounded-lg overflow-hidden border border-gray-200 shadow-sm shrink-0 h-10">
-        <button
-          type="button"
-          onClick={onToggleCalibration}
-          className={`px-3 text-sm font-bold transition cursor-pointer h-full ${
-            calibrationMode ? 'bg-[#f97316] text-white animate-pulse' : 'bg-[#f97316] text-white hover:bg-[#ea580c]'
-          }`}
-        >
-          {calibrationMode ? 'Calibrating…' : 'Calibrate'}
-        </button>
-        {!calibrationMode && (
-          <span className={`px-3 border-l border-gray-200 text-xs font-semibold tabular-nums min-w-[96px] text-center flex items-center justify-center ${
-            currentScale ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-          }`}>
-            {scaleDisplay}
-          </span>
+  return (
+    <div className="shrink-0 flex w-full overflow-x-auto bg-white border-b border-gray-200 z-10 h-[76px]">
+      <div className="flex items-stretch gap-1.5 mx-auto px-3 py-1.5">
+        <ToolGroup title="Pointer">
+          <IconButton icon={Hand} label="Pan" active={isPanningMode} onClick={onTogglePan} />
+          <IconButton
+            icon={MousePointer2}
+            label="Select"
+            active={isSelectMode}
+            onClick={onToggleSelect}
+          />
+          <IconButton
+            icon={Magnet}
+            label="Snap"
+            active={snapEnabled}
+            onClick={onToggleSnap}
+            title={snapEnabled ? 'Snap: on' : 'Snap: off'}
+          />
+        </ToolGroup>
+
+        <Divider />
+
+        <ToolGroup title="Measure" tour="tools">
+          <div ref={calTriggerRef} data-tour="calibrate">
+            <IconButton
+              icon={CalibrateIcon}
+              label={calibrationMode ? 'Calibrating…' : 'Scale'}
+              active
+              activeBg={
+                calibrationMode
+                  ? 'bg-orange-500/20 animate-pulse'
+                  : currentScale
+                    ? 'bg-emerald-600/10'
+                    : 'bg-orange-500/15'
+              }
+              activeLabelColor={
+                calibrationMode
+                  ? 'text-orange-600'
+                  : currentScale
+                    ? 'text-emerald-700'
+                    : 'text-orange-600'
+              }
+              title="Scale / calibration options"
+              onClick={toggleCal}
+            />
+          </div>
+          {MEASURE_TOOLS.map((tool) => {
+            const isActive =
+              activeTool === tool.type || (tool.type === 'linear' && activeTool === 'polyline');
+            return (
+              <IconButton
+                key={tool.type}
+                icon={tool.icon}
+                label={tool.label}
+                active={isActive}
+                activeBg={tool.activeBg}
+                activeLabelColor={tool.activeLabelColor}
+                title={isActive ? `${tool.label} — click again or Done to exit` : tool.tooltip}
+                onClick={() => (isActive ? onFinishTool() : onSelectTool(tool.type))}
+              />
+            );
+          })}
+          <IconButton
+            icon={Wand2}
+            label="Auto Area"
+            active={autoAreaMode}
+            activeBg="bg-emerald-600/10"
+            activeLabelColor="text-emerald-700"
+            title="Auto area — click once inside a room and its boundary is detected automatically"
+            onClick={onToggleAutoArea}
+          />
+        </ToolGroup>
+
+        <Divider />
+
+        <ToolGroup title="Style">
+          {/* Color */}
+          <div ref={colorTriggerRef}>
+            <button
+              type="button"
+              aria-label="Markup color"
+              title="Markup color"
+              onClick={toggleColor}
+              className="flex flex-col items-center gap-[2px] rounded-lg px-1 py-0.5 cursor-pointer"
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
+                <span
+                  className="h-4 w-4 rounded-full border border-black/10"
+                  style={{ backgroundColor: liveColor }}
+                />
+              </span>
+              <span className="whitespace-nowrap text-[9.5px] font-medium leading-none text-gray-500">
+                Color
+              </span>
+            </button>
+          </div>
+
+          {/* Width */}
+          <div
+            className="flex flex-col items-center gap-[2px] px-1 py-0.5"
+            title={
+              selectedMeasurementId && currentScale
+                ? 'Edit selected measurement line width'
+                : currentScale
+                  ? 'Line width in metres — scaled to plan calibration'
+                  : 'Calibrate first to use real-world width'
+            }
+          >
+            <div
+              className={`flex h-8 items-center gap-1 rounded-lg px-2 transition-colors ${
+                selectedMeasurementId && currentScale
+                  ? 'bg-secondary/10 ring-1 ring-secondary/30'
+                  : 'bg-gray-100 hover:bg-gray-200/70'
+              }`}
+            >
+              <input
+                type="number"
+                min="0.001"
+                step="0.01"
+                value={widthInput}
+                disabled={!currentScale}
+                onChange={(e) => setWidthInput(e.target.value)}
+                onBlur={(e) => commitWidth(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                }}
+                className="w-9 bg-transparent text-right text-[10px] font-semibold text-gray-800 outline-none disabled:text-gray-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <span className="text-[9.5px] font-medium text-gray-500">m</span>
+            </div>
+            <span className="whitespace-nowrap text-[9.5px] font-medium leading-none text-gray-500">
+              {selectedMeasurementId && currentScale ? 'Edit Width' : 'Width'}
+            </span>
+          </div>
+        </ToolGroup>
+
+        <Divider />
+
+        <ToolGroup title="Edit">
+          <IconButton icon={Undo2} label="Undo" disabled={!canUndo} onClick={onUndo} />
+          <IconButton icon={Redo2} label="Redo" disabled={!canRedo} onClick={onRedo} />
+          <IconButton
+            icon={Trash2}
+            label="Clear"
+            title="Clear all measurements on this page"
+            onClick={onClearAll}
+          />
+        </ToolGroup>
+
+        <Divider />
+
+        <ToolGroup title="Page">
+          <IconButton icon={RotateCcw} label="Rotate L" onClick={onRotateCCW} />
+          <IconButton icon={RotateCw} label="Rotate R" onClick={onRotateCW} />
+          <IconButton icon={RotateCcw} label="All L" onClick={onRotateAllCCW} />
+          <IconButton icon={RotateCw} label="All R" onClick={onRotateAllCW} />
+        </ToolGroup>
+
+        {fullscreen.supported && (
+          <>
+            <Divider />
+            <ToolGroup title="View">
+              <IconButton
+                icon={fullscreen.isFullscreen ? Minimize : Maximize}
+                label={fullscreen.isFullscreen ? 'Exit' : 'Full screen'}
+                onClick={fullscreen.toggle}
+              />
+            </ToolGroup>
+          </>
         )}
       </div>
 
-      {/* Tools */}
-      <div data-tour="tools" className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 shadow-sm shrink-0 h-10">
-        <span className="text-xs font-medium text-gray-400 mr-0.5">Tools</span>
-        {MEASUREMENT_TOOLS.map((tool, index) => {
-          const isActive = activeTool === tool.type || (tool.type === 'linear' && activeTool === 'polyline');
-          const tooltip = (() => {
-            if (isActive) return `${tool.label} — click again or Done to exit`;
-            if (tool.type === 'linear')
-              return 'Linear — click points; double-click, Enter, or right-click to finish. Click first point (≥4 pts) to close as area.';
-            if (tool.type === 'area')
-              return 'Area — click points; double-click or Enter to close. Right-click a finished area to deduct.';
-            return tool.label;
-          })();
-          return (
-            <React.Fragment key={tool.type}>
-              {index > 0 && <div className="w-px h-4 bg-gray-200" />}
-              <button
-                type="button"
-                onClick={() => (isActive ? onFinishTool() : onSelectTool(tool.type))}
-                title={tooltip}
-                aria-pressed={isActive}
-                className={`flex items-center justify-center w-8 h-6 rounded text-sm font-bold transition cursor-pointer outline-none ${
-                  isActive ? 'bg-secondary text-white outline-2 outline-secondary/30' : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                +<sub className="text-[9px]">{tool.short}</sub>
-              </button>
-            </React.Fragment>
-          );
-        })}
-        <div className="w-px h-4 bg-gray-200" />
-        <button
-          type="button"
-          onClick={onToggleAutoArea}
-          title="Auto area — click once inside a room and its boundary is detected automatically"
-          aria-pressed={autoAreaMode}
-          className={`flex items-center justify-center w-8 h-6 rounded transition cursor-pointer outline-none ${
-            autoAreaMode ? 'bg-secondary text-white outline-2 outline-secondary/30' : 'text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          <Wand2 className="w-3.5 h-3.5" />
-        </button>
-        {/* No "Done" button: a measurement finishes on double-click (or by
-            clicking near the first vertex), and clicking outside puts the tool
-            down and dismisses the toolbox. */}
-      </div>
+      {/* Scale / calibration menu */}
+      {calOpen &&
+        createPortal(
+          <div
+            ref={calMenuRef}
+            style={{ position: 'fixed', top: calPos.top, left: calPos.left, zIndex: 99999 }}
+            className="w-56 bg-white border border-gray-200 rounded-xl shadow-xl py-1.5 text-sm"
+          >
+            <p className="px-3 pb-1.5 pt-0.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100">
+              {currentScale ? `Scale set — 1m = ${currentScale.toFixed(1)}px` : 'Not scaled'}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setCalOpen(false);
+                onStartKnownCalibration();
+              }}
+              className="block w-full px-3 py-2 text-left hover:bg-gray-50 cursor-pointer"
+            >
+              <span className="font-medium text-gray-800">Use known dimension</span>
+              <span className="block text-[11px] text-gray-500">
+                Type a measurement, then draw it on the plan
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCalOpen(false);
+                onStartCalibration();
+              }}
+              className="block w-full px-3 py-2 text-left hover:bg-gray-50 cursor-pointer"
+            >
+              <span className="font-medium text-gray-800">Draw, then enter distance</span>
+              <span className="block text-[11px] text-gray-500">
+                Trace a line first, type its real length after
+              </span>
+            </button>
+            <button
+              type="button"
+              disabled={!currentScale}
+              onClick={() => {
+                setCalOpen(false);
+                onClearScale();
+              }}
+              className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-default cursor-pointer border-t border-gray-100"
+            >
+              Clear scale
+            </button>
+          </div>,
+          document.body
+        )}
 
-      {/* Color dropdown */}
-      <div className="shrink-0" ref={colorTriggerRef}>
-        <button
-          type="button"
-          onClick={toggleColor}
-          title="Markup color"
-          className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 shadow-sm hover:bg-gray-50 transition cursor-pointer h-10"
-        >
-          <span className="text-xs font-medium text-gray-500">Color</span>
-          <div className="w-4 h-4 rounded-full border border-gray-300 shadow-sm" style={{ backgroundColor: liveColor }} />
-          <svg className="w-3 h-3 text-gray-400" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M2 4l4 4 4-4" />
-          </svg>
-        </button>
-      </div>
-
-      {colorOpen && createPortal(
-        <div
-          ref={colorMenuRef}
-          style={{ position: 'fixed', top: colorPos.top, left: colorPos.left, zIndex: 99999 }}
-          className="bg-white border border-gray-200 rounded-xl shadow-xl p-3"
-        >
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Markup Color</p>
-          <div className="grid grid-cols-4 gap-2">
-            {MARKUP_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onMouseDown={(e) => { e.preventDefault(); onColorChange(c); setColorOpen(false); }}
-                className="relative w-8 h-10 rounded-full transition hover:scale-110 cursor-pointer"
-                style={{ backgroundColor: c }}
-                title={c}
-              >
-                {liveColor === c && (
-                  <svg className="absolute inset-0 m-auto w-4 h-4 text-white drop-shadow" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M2 6l3 3 5-5" />
-                  </svg>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Width input */}
-      <div
-        className={`flex items-stretch rounded-lg border shadow-sm shrink-0 h-10 overflow-hidden transition-colors ${
-          selectedMeasurementId && currentScale
-            ? 'border-secondary/50 bg-secondary/5'
-            : 'border-gray-200 bg-white'
-        }`}
-        title={
-          selectedMeasurementId && currentScale
-            ? 'Edit selected measurement line width'
-            : currentScale
-            ? 'Line width in metres — scaled to plan calibration'
-            : 'Calibrate first to use real-world width'
-        }
-      >
-        <span className={`px-2.5 flex items-center text-xs font-medium border-r border-gray-200 whitespace-nowrap ${
-          selectedMeasurementId && currentScale ? 'text-secondary bg-secondary/10' : 'text-gray-500 bg-gray-50'
-        }`}>
-          {selectedMeasurementId && currentScale ? 'Edit Width' : 'Width'}
-        </span>
-        <input
-          type="number"
-          min="0.001"
-          step="0.01"
-          value={widthInput}
-          disabled={!currentScale}
-          onChange={(e) => setWidthInput(e.target.value)}
-          onBlur={(e) => commitWidth(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.currentTarget.blur();
-            }
-          }}
-          className="w-16 px-2 text-sm tabular-nums outline-none bg-transparent disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
-        />
-        <span className="px-2 flex items-center text-xs text-gray-500 border-l border-gray-200 bg-gray-50">
-          m
-        </span>
-      </div>
-
-      {/* Rotate */}
-      <div className="flex items-center gap-0.5 rounded-lg border border-gray-200 bg-white px-2 shadow-sm shrink-0 h-10">
-        <span className="text-xs font-medium text-gray-400 mr-1">Rotate</span>
-        <button type="button" onClick={onRotateCCW} title="Rotate CCW" className="flex items-center justify-center w-7 h-7 rounded text-gray-600 hover:bg-gray-100 transition cursor-pointer">
-          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-          </svg>
-        </button>
-        <button type="button" onClick={onRotateCW} title="Rotate CW" className="flex items-center justify-center w-7 h-7 rounded text-gray-600 hover:bg-gray-100 transition cursor-pointer">
-          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-            <path d="M21 3v5h-5" />
-          </svg>
-        </button>
-        <div className="w-px h-5 bg-gray-200 mx-0.5" />
-        <button type="button" onClick={onRotateAllCCW} title="Rotate all CCW" className="h-7 px-1.5 rounded text-xs font-medium text-gray-600 hover:bg-gray-100 transition cursor-pointer whitespace-nowrap">↺ All</button>
-        <button type="button" onClick={onRotateAllCW} title="Rotate all CW" className="h-7 px-1.5 rounded text-xs font-medium text-gray-600 hover:bg-gray-100 transition cursor-pointer whitespace-nowrap">↻ All</button>
-      </div>
-
-      {/* Fullscreen toggle */}
-      {fullscreen.supported && (
-        <button
-          type="button"
-          onClick={fullscreen.toggle}
-          title={fullscreen.isFullscreen ? 'Exit full screen' : 'Full screen'}
-          aria-label={fullscreen.isFullscreen ? 'Exit full screen' : 'Full screen'}
-          className="shrink-0 ml-auto flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition cursor-pointer"
-        >
-          {fullscreen.isFullscreen ? (
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M8 3v4a1 1 0 0 1-1 1H3M16 3v4a1 1 0 0 0 1 1h4M8 21v-4a1 1 0 0 0-1-1H3M16 21v-4a1 1 0 0 1 1-1h4" />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 8V5a2 2 0 0 1 2-2h3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M21 16v3a2 2 0 0 1-2 2h-3" />
-            </svg>
-          )}
-        </button>
-      )}
-
+      {colorOpen &&
+        createPortal(
+          <div
+            ref={colorMenuRef}
+            style={{ position: 'fixed', top: colorPos.top, left: colorPos.left, zIndex: 99999 }}
+            className="bg-white border border-gray-200 rounded-xl shadow-xl p-3"
+          >
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
+              Markup Color
+            </p>
+            <div className="grid grid-cols-4 gap-2">
+              {MARKUP_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onColorChange(c);
+                    setColorOpen(false);
+                  }}
+                  className="relative w-8 h-10 rounded-full transition hover:scale-110 cursor-pointer"
+                  style={{ backgroundColor: c }}
+                  title={c}
+                >
+                  {liveColor === c && (
+                    <svg
+                      className="absolute inset-0 m-auto w-4 h-4 text-white drop-shadow"
+                      viewBox="0 0 12 12"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M2 6l3 3 5-5" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
