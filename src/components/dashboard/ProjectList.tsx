@@ -36,12 +36,12 @@ const ProjectList = () => {
       message: (
         <>
           <p>
-            <span className="font-medium text-gray-900">
+            <span className="font-medium text-body">
               {project?.title ?? "This project"}
             </span>{" "}
             will be removed permanently.
           </p>
-          <p className="mt-1 text-xs text-gray-500">This cannot be undone.</p>
+          <p className="mt-1 text-xs text-muted">This cannot be undone.</p>
         </>
       ),
       confirmLabel: "Delete",
@@ -72,12 +72,12 @@ const ProjectList = () => {
 
   if (isLoading) {
     return (
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="bg-surface rounded-lg border border-border p-6">
         <div className="animate-pulse space-y-4">
-          <div className="h-10 bg-gray-200 rounded w-full"></div>
-          <div className="h-16 bg-gray-200 rounded w-full"></div>
-          <div className="h-16 bg-gray-200 rounded w-full"></div>
-          <div className="h-16 bg-gray-200 rounded w-full"></div>
+          <div className="h-10 bg-border rounded w-full"></div>
+          <div className="h-16 bg-border rounded w-full"></div>
+          <div className="h-16 bg-border rounded w-full"></div>
+          <div className="h-16 bg-border rounded w-full"></div>
         </div>
       </div>
     );
@@ -85,33 +85,33 @@ const ProjectList = () => {
 
   return (
     <div>
-      <div className="flex items-center gap-2 border-b border-gray-200 pb-2 mb-3">
-        <FiSearch className="text-gray-400 w-4 h-4 flex-shrink-0" />
+      <div className="flex items-center gap-2 border-b border-border pb-2 mb-3">
+        <FiSearch className="text-muted/70 w-4 h-4 flex-shrink-0" />
         <input
           type="text"
           placeholder="Search Projects"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="flex-1 text-sm text-gray-600 placeholder-gray-400 focus:outline-none bg-transparent"
+          className="flex-1 text-sm text-muted placeholder-gray-400 focus:outline-none bg-transparent"
         />
       </div>
 
       <div className="space-y-2">
         {filteredProjects.length === 0 ? (
-          <div className="text-center text-gray-400 py-12">
+          <div className="text-center text-muted/70 py-12">
             <p className="text-sm">{searchQuery ? "No projects found matching your search" : "No projects yet. Create your first project!"}</p>
           </div>
         ) : (
           filteredProjects.map((project) => (
             <div
               key={project.id}
-              className="flex items-center justify-between px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+              className="flex items-center justify-between px-4 py-3 border border-border rounded-lg hover:bg-overlay/5 transition-colors cursor-pointer"
               onClick={() => navigate(`/project/${project.id}`)}
             >
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{project.title}</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  <span className="font-semibold text-gray-700">Location:</span> {project.location || "Unknown"}
+                <p className="text-sm font-medium text-body truncate">{project.title}</p>
+                <p className="text-xs text-muted mt-0.5">
+                  <span className="font-semibold text-body">Location:</span> {project.location || "Unknown"}
                 </p>
               </div>
               <div className="flex items-center gap-2 ml-3">
@@ -121,7 +121,7 @@ const ProjectList = () => {
                     handleDuplicate(project.id.toString());
                   }}
                   disabled={isDuplicating}
-                  className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+                  className="text-muted/70 hover:text-body transition-colors disabled:opacity-50"
                   title="Duplicate"
                 >
                   <FiCopy className="w-4 h-4" />
@@ -131,7 +131,7 @@ const ProjectList = () => {
                     e.stopPropagation();
                     handleEdit(project.id.toString());
                   }}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  className="text-muted/70 hover:text-body transition-colors"
                   title="Edit"
                 >
                   <FiEdit2 className="w-4 h-4" />
@@ -141,7 +141,7 @@ const ProjectList = () => {
                     e.stopPropagation();
                     handleDelete(project.id.toString());
                   }}
-                  className="text-red-400 hover:text-red-600 transition-colors"
+                  className="text-red-400 hover:text-danger transition-colors"
                   title="Delete"
                 >
                   <FiTrash2 className="w-4 h-4" />

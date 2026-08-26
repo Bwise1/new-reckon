@@ -64,7 +64,7 @@ export default function TakeoffTour() {
         onClick={() => setRunning(true)}
         title="Replay the tutorial"
         aria-label="Replay the tutorial"
-        className="fixed bottom-12 right-[610px] z-[8999] flex items-center gap-1.5 rounded-full bg-white px-3 py-2 text-sm font-semibold text-[#003566] shadow-lg border border-gray-200 hover:bg-gray-50 cursor-pointer"
+        className="fixed bottom-12 right-[610px] z-[8999] flex items-center gap-1.5 rounded-full bg-surface px-3 py-2 text-sm font-semibold text-navy-soft shadow-lg border border-border hover:bg-overlay/5 cursor-pointer"
       >
         <HelpCircle className="h-4 w-4" />
         Help

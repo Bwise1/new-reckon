@@ -50,7 +50,7 @@ const AuthLayout = ({ children }: AuthLayoutProps) => {
         <div className="w-2/4 h-[90vh] relative p-16 flex flex-col">
           <div>
             {/* Tab Navigation */}
-            <div className="flex flex-row items-center mb-8 border-b border-gray-200">
+            <div className="flex flex-row items-center mb-8 border-b border-border">
               <button
                 className={`flex-1 text-base font-normal pb-4 transition-colors text-center ${
                   isLoginPage

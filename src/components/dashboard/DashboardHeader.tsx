@@ -30,7 +30,7 @@ const DashboardHeader = () => {
   }, []);
 
   return (
-    <header className="flex items-center justify-between py-6 px-8 bg-white border-b border-gray-200">
+    <header className="flex items-center justify-between py-6 px-8 bg-surface border-b border-border">
       {/* Left: logo + wordmark */}
       <div className="flex items-center gap-2.5">
         <img src={Logo} alt="Reckon" className="h-8" />
@@ -53,19 +53,19 @@ const DashboardHeader = () => {
         </button>
 
         {open && (
-          <div className="absolute right-0 mt-2 w-44 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-50">
+          <div className="absolute right-0 mt-2 w-44 bg-surface rounded-xl shadow-xl border border-border py-1 z-50">
             <button
               onClick={() => { setOpen(false); navigate("/settings"); }}
-              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-body hover:bg-overlay/5 transition-colors"
             >
-              <FiUser className="text-gray-400" />
+              <FiUser className="text-muted/70" />
               My Profile
             </button>
-            <div className="h-px bg-gray-100 mx-2" />
+            <div className="h-px bg-surface-muted mx-2" />
             <button
               onClick={() => { setOpen(false); logout(); }}
               disabled={isLoading}
-              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
             >
               <FiLogOut className="text-red-400" />
               Log out

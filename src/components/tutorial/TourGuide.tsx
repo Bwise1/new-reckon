@@ -137,20 +137,20 @@ export default function TourGuide({
       )}
 
       <div
-        className="absolute rounded-xl bg-white p-4 shadow-2xl"
+        className="absolute rounded-xl bg-surface p-4 shadow-2xl"
         style={tipStyle}
       >
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-[#289693]">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-accent">
           Step {index + 1} of {steps.length}
         </p>
-        <h3 className="mt-1 text-base font-bold text-gray-900">{step.title}</h3>
-        <p className="mt-1.5 text-sm leading-relaxed text-gray-600">{step.body}</p>
+        <h3 className="mt-1 text-base font-bold text-body">{step.title}</h3>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted">{step.body}</p>
 
         <div className="mt-4 flex items-center justify-between">
           <button
             type="button"
             onClick={onFinish}
-            className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
+            className="text-xs text-muted/70 hover:text-body cursor-pointer"
           >
             Skip tour
           </button>
@@ -159,7 +159,7 @@ export default function TourGuide({
               <button
                 type="button"
                 onClick={back}
-                className="rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 cursor-pointer"
+                className="rounded-md px-3 py-1.5 text-sm text-muted hover:bg-overlay/10 cursor-pointer"
               >
                 Back
               </button>
@@ -167,7 +167,7 @@ export default function TourGuide({
             <button
               type="button"
               onClick={next}
-              className="rounded-md bg-[#003566] px-4 py-1.5 text-sm font-semibold text-white hover:bg-[#002847] cursor-pointer"
+              className="rounded-md bg-navy-soft px-4 py-1.5 text-sm font-semibold text-white hover:bg-[#002847] cursor-pointer"
             >
               {isLast ? 'Got it' : 'Next'}
             </button>

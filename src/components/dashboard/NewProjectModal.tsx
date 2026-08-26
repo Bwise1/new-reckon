@@ -53,12 +53,12 @@ const NewProjectModal = ({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
       onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
     >
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-900">
+      <div className="bg-surface rounded-xl shadow-xl w-full max-w-sm mx-4">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h2 className="text-sm font-semibold text-body">
             {isEdit ? "Edit Project" : "New Project"}
           </h2>
-          <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button onClick={handleClose} className="text-muted/70 hover:text-body transition-colors">
             <FiX className="w-4 h-4" />
           </button>
         </div>
@@ -71,7 +71,7 @@ const NewProjectModal = ({
             onChange={(e) => setTitle(e.target.value)}
             autoFocus
             onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 placeholder-gray-400"
+            className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-gray-400 placeholder-gray-400"
           />
 
           <input
@@ -80,7 +80,7 @@ const NewProjectModal = ({
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 placeholder-gray-400"
+            className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-gray-400 placeholder-gray-400"
           />
 
         </div>
@@ -88,7 +88,7 @@ const NewProjectModal = ({
         <div className="flex gap-3 px-5 pb-5">
           <button
             onClick={handleClose}
-            className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            className="flex-1 py-2.5 text-sm font-medium text-muted bg-surface-muted rounded-lg hover:bg-overlay/15 transition-colors"
           >
             Cancel
           </button>
