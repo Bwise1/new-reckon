@@ -73,6 +73,8 @@ export interface ApiMeasurement {
     name?: string;
     /** Stable per-type sequence number for the auto "Area 3" label. */
     seq?: number;
+    /** True when the polyline was tessellated from the arc tool. */
+    arc?: boolean;
   } | null;
   created_at?: string;
   updated_at?: string;

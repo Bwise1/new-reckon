@@ -30,6 +30,10 @@ export interface Measurement {
   strokeWidth?: number;
   /** When true, the markup is hidden from the canvas render. */
   hidden?: boolean;
+  /** True for polylines tessellated from the arc tool. Carried in the sync
+   *  metadata blob (no API column). Select mode shows only the endpoint
+   *  handles for these — dragging interior vertices would break the curve. */
+  arc?: boolean;
   /** User-given name for this measurement (e.g. "Kitchen floor"). When set,
    *  it's shown instead of the auto "Area N" label. */
   name?: string;

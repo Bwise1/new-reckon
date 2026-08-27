@@ -102,9 +102,10 @@ export const takeoffItemsFromApiMeasurements = (
       color: m.color,
       hidden: m.hidden,
       strokeWidth: m.metadata?.strokeWidth,
-      // name/seq are carried in the metadata blob (no dedicated API columns).
+      // name/seq/arc are carried in the metadata blob (no dedicated API columns).
       name: m.metadata?.name,
       seq: m.metadata?.seq,
+      arc: m.metadata?.arc === true || undefined,
       boqElementId: m.boq_element_id ?? undefined,
       boqItemId: m.boq_item_id ?? undefined,
       deductions:
@@ -183,6 +184,7 @@ export const measurementCreateBodyFromStore = (
       // Carried in metadata (no dedicated API columns).
       name: measurement.name,
       seq: measurement.seq,
+      arc: measurement.arc ? true : undefined,
     },
   };
 };

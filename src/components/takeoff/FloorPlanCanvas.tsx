@@ -1069,8 +1069,11 @@ if (!prev && activeTool) {
         page: currentPage,
         type: "polyline",
         color: activeColor,
-        strokeWidth:
-          currentScale != null ? Math.max(activeRealWidth * currentScale, 2) : 2,
+        // Arcs are curve measurements, not wall-width bodies: a real-width
+        // stroke thicker than the arc's own radius fills it into a blob, so
+        // arcs always commit hairline. Width stays editable via Select.
+        strokeWidth: 2,
+        arc: true,
         metadata: {
           createdAt: now,
           lastModified: now,
@@ -2797,15 +2800,21 @@ if (!prev && activeTool) {
                           lineCap="round"
                           listening={false}
                         />
-                        {displayPoints.map((p, i) => (
+                        {/* Arc-tessellated polylines mark only their endpoints:
+                            a ring on each of the 20-40 interior vertices reads
+                            as a caterpillar, not a curve. */}
+                        {(m.arc && displayPoints.length > 2
+                          ? [displayPoints[0], displayPoints[displayPoints.length - 1]]
+                          : displayPoints
+                        ).map((p, i) => (
                           <Circle
                             key={i}
                             x={p.x}
                             y={p.y}
-                            radius={4.5 * strokeScale}
+                            radius={4.5 * labelScale}
                             fill="#ffffff"
                             stroke={mColor}
-                            strokeWidth={1.75 * strokeScale}
+                            strokeWidth={1.75 * labelScale}
                             listening={false}
                           />
                         ))}
@@ -3232,7 +3241,15 @@ if (!prev && activeTool) {
                     const isSelected =
                       selectedMeasurement?.itemId === item.id &&
                       selectedMeasurement?.measurementId === m.id;
-                  return m.points.map((p, idx) => {
+                  // Arc-tessellated polylines expose only their endpoints:
+                  // 20-40 interior rings would bury a small arc, and dragging
+                  // an interior vertex breaks the circular shape anyway.
+                  const handleIdx =
+                    m.arc && m.points.length > 2
+                      ? [0, m.points.length - 1]
+                      : m.points.map((_, i) => i);
+                  return handleIdx.map((idx) => {
+                      const p = m.points[idx];
                       const isHovered =
                         hoveredPoint?.itemId === item.id &&
                         hoveredPoint?.measurementId === m.id &&
@@ -3242,13 +3259,13 @@ if (!prev && activeTool) {
                         key={`${m.id}-point-${idx}`}
                         x={p.x}
                         y={p.y}
-                        radius={(isHovered ? 6 : 5) * strokeScale}
+                        radius={(isHovered ? 6 : 5) * labelScale}
                         // Solid fill only on hover of THIS vertex — selection
                         // of the whole measurement is signaled by the halo
                         // behind the line, not by filling every point.
                         fill={isHovered ? mColor : "#ffffff"}
                         stroke={mColor}
-                        strokeWidth={(isHovered ? 2.5 : 2) * strokeScale}
+                        strokeWidth={(isHovered ? 2.5 : 2) * labelScale}
                         draggable={true}
                         onDragStart={(e) => {
                           e.cancelBubble = true;
