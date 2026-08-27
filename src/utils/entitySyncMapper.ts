@@ -102,10 +102,12 @@ export const takeoffItemsFromApiMeasurements = (
       color: m.color,
       hidden: m.hidden,
       strokeWidth: m.metadata?.strokeWidth,
-      // name/seq/arc are carried in the metadata blob (no dedicated API columns).
+      // name/seq/arc/sectionGroupId are carried in the metadata blob
+      // (no dedicated API columns).
       name: m.metadata?.name,
       seq: m.metadata?.seq,
       arc: m.metadata?.arc === true || undefined,
+      sectionGroupId: m.metadata?.sectionGroupId,
       boqElementId: m.boq_element_id ?? undefined,
       boqItemId: m.boq_item_id ?? undefined,
       deductions:
@@ -176,18 +178,25 @@ export const measurementCreateBodyFromStore = (
         : null,
     quantity: measurement.quantity,
     hidden: Boolean(measurement.hidden),
-    metadata: {
-      createdAt: measurement.metadata?.createdAt,
-      lastModified: measurement.metadata?.lastModified,
-      confidence: measurement.metadata?.confidence,
-      strokeWidth: measurement.strokeWidth,
-      // Carried in metadata (no dedicated API columns).
-      name: measurement.name,
-      seq: measurement.seq,
-      arc: measurement.arc ? true : undefined,
-    },
+    metadata: measurementMetadataBody(measurement),
   };
 };
+
+/** The canonical sync metadata blob. The server stores metadata wholesale,
+ *  so every write (create OR patch) must send the FULL blob — building it
+ *  in one place keeps fields from silently dropping (rename used to lose
+ *  the arc flag by rebuilding the blob by hand). */
+export const measurementMetadataBody = (measurement: Measurement) => ({
+  createdAt: measurement.metadata?.createdAt,
+  lastModified: measurement.metadata?.lastModified,
+  confidence: measurement.metadata?.confidence,
+  strokeWidth: measurement.strokeWidth,
+  // Carried in metadata (no dedicated API columns).
+  name: measurement.name,
+  seq: measurement.seq,
+  arc: measurement.arc ? true : undefined,
+  sectionGroupId: measurement.sectionGroupId,
+});
 
 // ---------- BOQ ----------
 

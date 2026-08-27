@@ -107,6 +107,9 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     boqTargeting,
     exitBoqTargeting,
     cancelBoqTargeting,
+    pendingSectionGroup,
+    setPendingSectionGroup,
+    setMeasurementSectionGroup,
   } = useTakeoffStore(
     useShallow((s) => ({
       currentProjectId: s.currentProjectId,
@@ -141,6 +144,9 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       boqTargeting: s.boqTargeting,
       exitBoqTargeting: s.exitBoqTargeting,
       cancelBoqTargeting: s.cancelBoqTargeting,
+      pendingSectionGroup: s.pendingSectionGroup,
+      setPendingSectionGroup: s.setPendingSectionGroup,
+      setMeasurementSectionGroup: s.setMeasurementSectionGroup,
     }))
   );
   const {
@@ -1343,8 +1349,9 @@ if (!prev && activeTool) {
 
   // Handle context menu (right-click).
   //  1. Drawing in progress → finalize current run (mirrors dbl-click / Enter).
-  //  2. Hovered/selected area, no drawing → open area context menu
-  //     (Add deduction / Remove last deduction / Duplicate / Delete).
+  //  2. Hovered/selected measurement, no drawing → context menu
+  //     (New section for all types; Deduct / Remove last deduction for areas;
+  //     Delete).
   //  3. Otherwise → let the native browser menu through.
   const handleContextMenu = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -1359,7 +1366,7 @@ if (!prev && activeTool) {
         const m = item?.measurements.find(
           (mm) => mm.id === target.measurementId
         );
-        if (m && item && getMeasurementType(m, item) === "area") {
+        if (m && item) {
           e.evt.preventDefault();
           setAreaContextMenu({
             itemId: target.itemId,
@@ -3829,6 +3836,9 @@ if (!prev && activeTool) {
         } else if (deductionTarget && activeTool === "area") {
           text = "Deducting — double-click / Enter to finish, Esc to cancel";
           accent = "bg-danger/90";
+        } else if (pendingSectionGroup && activeTool) {
+          text = "New section — every shape you draw joins that measurement. Esc to stop";
+          accent = "bg-accent/90";
         } else if (activeTool === "linear") {
           text = "Linear — click points, double-click / Enter to finish";
         } else if (activeTool === "area") {
@@ -3904,6 +3914,7 @@ if (!prev && activeTool) {
         const item = takeoffItems.find((i) => i.id === areaContextMenu.itemId);
         const m = item?.measurements.find((mm) => mm.id === areaContextMenu.measurementId);
         const deductionCount = m?.deductions?.length ?? 0;
+        const menuType = m && item ? getMeasurementType(m, item) : "area";
         return (
           <>
             <div
@@ -3918,6 +3929,30 @@ if (!prev && activeTool) {
               className="fixed z-[9999] bg-surface border border-border rounded-lg shadow-xl py-1 min-w-[180px] text-sm"
               style={{ left: areaContextMenu.x, top: areaContextMenu.y }}
             >
+              <button
+                type="button"
+                onClick={() => {
+                  if (!m || !item) return;
+                  // Join (or start) this measurement's section group: shapes
+                  // drawn from here on merge into ITS pill instead of a new one.
+                  const groupId = m.sectionGroupId ?? generateClientId();
+                  if (!m.sectionGroupId) {
+                    setMeasurementSectionGroup(item.id, m.id, groupId);
+                  }
+                  setCurrentPoints([]);
+                  setDeductionTarget(null);
+                  setActiveTool(
+                    m.arc ? "arc" : menuType === "area" ? "area" : "linear"
+                  );
+                  // AFTER setActiveTool — it clears pendingSectionGroup.
+                  setPendingSectionGroup(groupId);
+                  setAreaContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-overlay/10 cursor-pointer"
+              >
+                New section
+              </button>
+              {menuType === "area" && (
               <button
                 type="button"
                 onClick={() => {
@@ -3943,6 +3978,8 @@ if (!prev && activeTool) {
               >
                 Deduct
               </button>
+              )}
+              {menuType === "area" && (
               <button
                 type="button"
                 disabled={deductionCount === 0}
@@ -3959,6 +3996,7 @@ if (!prev && activeTool) {
               >
                 Remove last deduction {deductionCount > 0 ? `(${deductionCount})` : ''}
               </button>
+              )}
               <div className="h-px bg-border my-1" />
               <button
                 type="button"
@@ -3972,7 +4010,7 @@ if (!prev && activeTool) {
                 }}
                 className="w-full text-left px-3 py-1.5 hover:bg-danger/10 text-danger cursor-pointer"
               >
-                Delete area
+                Delete
               </button>
             </div>
           </>

@@ -34,6 +34,11 @@ export interface Measurement {
    *  metadata blob (no API column). Select mode shows only the endpoint
    *  handles for these — dragging interior vertices would break the curve. */
   arc?: boolean;
+  /** Measurements sharing a sectionGroupId are sections of ONE logical
+   *  measurement: the panel shows a single pill whose value is their sum.
+   *  Stamped per measuring session (tool pick-up → put-down) and via
+   *  right-click "New section". Carried in the sync metadata blob. */
+  sectionGroupId?: string;
   /** User-given name for this measurement (e.g. "Kitchen floor"). When set,
    *  it's shown instead of the auto "Area N" label. */
   name?: string;

@@ -1,6 +1,6 @@
-# Measurement sections (PlanSwift-style)
+# Measurement sections (PlanSwift-style) — SHIPPED 2026-08-27
 
-Written 2026-08-27. Companion to `docs/buildout-plans.md`.
+Written and implemented 2026-08-27. Companion to `docs/buildout-plans.md`.
 
 PlanSwift's model: while a takeoff item is recording, you draw a shape, hit
 **New Section**, draw another, and **Stop** when done — every section belongs

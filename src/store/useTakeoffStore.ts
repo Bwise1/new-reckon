@@ -30,6 +30,7 @@ import {
   boqTreeOpsDiff,
   calibrationUpsertBodyFromStore,
   measurementCreateBodyFromStore,
+  measurementMetadataBody,
 } from '@/utils/entitySyncMapper';
 import {
   CANVAS_TAKEOFF_ITEM_ID,
@@ -53,6 +54,12 @@ interface TakeoffStore {
   takeoffItems: TakeoffItem[];
   activeItemId: string | null;
   activeTool: DrawTool | null;
+  /** Measuring-session id (tool pick-up → put-down). Shapes finished during
+   *  the session share it as sectionGroupId → one panel pill. Not persisted. */
+  measureSessionId: string | null;
+  /** Right-click "New section": finished shapes join THIS group instead of
+   *  the session's own id. Cleared on tool put-down. */
+  pendingSectionGroup: string | null;
   activeColor: string;
   activeRealWidth: number;
 
@@ -191,6 +198,14 @@ interface TakeoffStore {
   moveTakeoffItemDown: (id: string) => void;
   setActiveItemId: (id: string | null) => void;
   setActiveTool: (tool: DrawTool | null) => void;
+  setPendingSectionGroup: (groupId: string | null) => void;
+  /** Retro-tag an existing measurement with a section group (used when
+   *  "New section" targets a measurement that predates grouping). */
+  setMeasurementSectionGroup: (
+    itemId: string,
+    measurementId: string,
+    groupId: string
+  ) => void;
   setActiveColor: (color: string) => void;
   setActiveRealWidth: (width: number) => void;
   setFocusedBoqCard: (card: { elementId: string; itemId: string; unit: string } | null) => void;
@@ -324,6 +339,8 @@ const initialState = {
   takeoffItems: [],
   activeItemId: null,
   activeTool: null,
+  measureSessionId: null,
+  pendingSectionGroup: null,
   activeColor: MARKUP_COLORS[0],
   activeRealWidth: 0.225,
   scales: {},
@@ -1180,7 +1197,45 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         get().exitBoqTargeting();
       }
     }
-    set({ activeTool: tool });
+    // Sections: each draw-tool pick-up starts a fresh measuring session;
+    // put-down (or switching tools) ends it. Count self-accumulates into one
+    // measurement already, so it carries no session. pendingSectionGroup is
+    // always cleared — "New section" sets it AFTER this call.
+    set({
+      activeTool: tool,
+      measureSessionId: tool && tool !== 'count' ? generateClientId() : null,
+      pendingSectionGroup: null,
+    });
+  },
+
+  setPendingSectionGroup: (groupId) => set({ pendingSectionGroup: groupId }),
+
+  setMeasurementSectionGroup: (itemId, measurementId, groupId) => {
+    let updated: Measurement | null = null;
+    set((state) => ({
+      takeoffItems: state.takeoffItems.map((item) => {
+        if (item.id !== itemId) return item;
+        return {
+          ...item,
+          measurements: item.measurements.map((m) => {
+            if (m.id !== measurementId) return m;
+            updated = { ...m, sectionGroupId: groupId };
+            return updated;
+          }),
+        };
+      }),
+    }));
+    if (!updated) return;
+    get().triggerAutoSave();
+    const projectId = get().currentProjectId;
+    if (projectId) {
+      syncQueue.enqueue({
+        kind: 'measurement.update',
+        projectId,
+        clientUuid: measurementId,
+        patch: { metadata: measurementMetadataBody(updated) },
+      });
+    }
   },
 
   setActiveColor: (color) => set({ activeColor: color }),
@@ -1514,6 +1569,13 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   },
 
   addMeasurement: (itemId, measurement) => {
+    // Stamp the section group: shapes drawn in one measuring session (or
+    // aimed at an existing group via "New section") merge into one pill.
+    if (!measurement.sectionGroupId && measurement.type !== 'count') {
+      const state0 = get();
+      const groupId = state0.pendingSectionGroup ?? state0.measureSessionId;
+      if (groupId) measurement = { ...measurement, sectionGroupId: groupId };
+    }
     executeCommand({
       execute: () => {
         set((state) => {
@@ -1783,13 +1845,12 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         projectId,
         clientUuid: measurementId,
         patch: {
+          // Full canonical blob — the server stores metadata wholesale, so a
+          // partial rebuild here silently dropped fields (the arc flag, once).
           metadata: {
-            createdAt: m?.metadata?.createdAt,
+            ...(m ? measurementMetadataBody(m) : {}),
             lastModified: new Date().toISOString(),
-            confidence: m?.metadata?.confidence,
-            strokeWidth: m?.strokeWidth,
             name: nextName,
-            seq: m?.seq,
           },
         },
       });

@@ -119,6 +119,11 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
   const [bindPickerFor, setBindPickerFor] = useState<{
     measurementId: string;
     type: TakeoffMode;
+    /** All shapes in the pill (anchor included) — a multi-section pill binds
+     *  as ONE summed chip on the BOQ side. */
+    members: string[];
+    quantity: number;
+    sectionGroupId?: string;
   } | null>(null);
   const [pendingDiscipline, setPendingDiscipline] = useState<PlanDiscipline | null>(null);
   const [showUploadPicker, setShowUploadPicker] = useState(false);
@@ -146,22 +151,24 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
 
   const historyGroups = useMemo(() => {
     const planById = new Map(plans.map((plan) => [plan.id, plan]));
+    type PillEntry = {
+      itemId: string;
+      measurementId: string;
+      type: TakeoffMode;
+      color: string;
+      quantity: number;
+      hidden: boolean;
+      label: string;
+      boqElementId?: string;
+      boqItemId?: string;
+      /** All member shapes (the anchor included). A pill IS one measurement
+       *  to the user — controls act on every member. */
+      members: { itemId: string; measurementId: string; hidden: boolean }[];
+      sectionGroupId?: string;
+    };
     const groups = new Map<
       string,
-      {
-        label: string;
-        entries: {
-          itemId: string;
-          measurementId: string;
-          type: TakeoffMode;
-          color: string;
-          quantity: number;
-          hidden: boolean;
-          label: string;
-          boqElementId?: string;
-          boqItemId?: string;
-        }[];
-      }
+      { label: string; entries: PillEntry[]; byKey: Map<string, PillEntry> }
     >();
 
     for (const item of takeoffItems) {
@@ -172,19 +179,42 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
           key === UNCATEGORIZED_KEY
             ? UNCATEGORIZED_LABEL
             : DISCIPLINE_LABEL[key as PlanDiscipline];
-        if (!groups.has(key)) groups.set(key, { label, entries: [] });
+        if (!groups.has(key)) groups.set(key, { label, entries: [], byKey: new Map() });
+        const bucket = groups.get(key)!;
+        const member = {
+          itemId: item.id,
+          measurementId: measurement.id,
+          hidden: Boolean(measurement.hidden),
+        };
+        // Sections: shapes sharing a sectionGroupId merge into ONE pill —
+        // summed quantity, first shape is the anchor (name/label/binding).
+        // The pill counts as hidden only when every member is hidden.
+        const pillKey = measurement.sectionGroupId
+          ? `sg:${measurement.sectionGroupId}`
+          : measurement.id;
+        const existing = bucket.byKey.get(pillKey);
+        if (existing) {
+          existing.quantity += measurement.quantity;
+          existing.hidden = existing.hidden && member.hidden;
+          existing.members.push(member);
+          continue;
+        }
         const mType = getMeasurementType(measurement, item);
-        groups.get(key)!.entries.push({
+        const entry: PillEntry = {
           itemId: item.id,
           measurementId: measurement.id,
           type: mType,
           color: getMeasurementColor(measurement, item),
           quantity: measurement.quantity,
-          hidden: Boolean(measurement.hidden),
+          hidden: member.hidden,
           label: measurementLabel(measurement, mType),
           boqElementId: measurement.boqElementId,
           boqItemId: measurement.boqItemId,
-        });
+          members: [member],
+          sectionGroupId: measurement.sectionGroupId,
+        };
+        bucket.byKey.set(pillKey, entry);
+        bucket.entries.push(entry);
       }
     }
 
@@ -464,7 +494,9 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    unbindMeasurement(entry.measurementId);
+                                    for (const mem of entry.members) {
+                                      unbindMeasurement(mem.measurementId);
+                                    }
                                   }}
                                   className="flex h-5 w-5 items-center justify-center rounded-md text-warn transition-colors hover:bg-overlay/10 cursor-pointer"
                                   title="Bound to a BOQ line — click to unlink"
@@ -479,6 +511,9 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                                     setBindPickerFor({
                                       measurementId: entry.measurementId,
                                       type: entry.type,
+                                      members: entry.members.map((mem) => mem.measurementId),
+                                      quantity: entry.quantity,
+                                      sectionGroupId: entry.sectionGroupId,
                                     });
                                   }}
                                   className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay/10 hover:text-warn cursor-pointer"
@@ -491,7 +526,13 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  toggleMeasurementHidden(entry.itemId, entry.measurementId);
+                                  // Pill = one measurement: hide/show every member.
+                                  const targetHidden = !entry.hidden;
+                                  for (const mem of entry.members) {
+                                    if (mem.hidden !== targetHidden) {
+                                      toggleMeasurementHidden(mem.itemId, mem.measurementId);
+                                    }
+                                  }
                                 }}
                                 className="flex h-5 w-5 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay/10 hover:text-body cursor-pointer"
                                 title={entry.hidden ? 'Show markup' : 'Hide markup'}
@@ -506,7 +547,9 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  onDeleteMeasurement(entry.itemId, entry.measurementId);
+                                  for (const mem of entry.members) {
+                                    onDeleteMeasurement(mem.itemId, mem.measurementId);
+                                  }
                                 }}
                                 className="flex h-5 w-5 items-center justify-center rounded-md text-danger transition-colors hover:bg-danger/10 cursor-pointer"
                                 title="Delete measurement"
@@ -661,11 +704,25 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                       key={`${opt.elementId}-${opt.itemId}`}
                       type="button"
                       onClick={() => {
-                        bindMeasurementToItem(
-                          bindPickerFor.measurementId,
-                          opt.elementId,
-                          opt.itemId
-                        );
+                        if (bindPickerFor.members.length > 1) {
+                          // One summed chip for the whole pill; groupId keeps
+                          // the takeoff box merging it the way live measuring
+                          // sessions already do.
+                          bindMeasurementToItem(
+                            bindPickerFor.members,
+                            opt.elementId,
+                            opt.itemId,
+                            'add',
+                            Math.abs(bindPickerFor.quantity).toFixed(2),
+                            bindPickerFor.sectionGroupId
+                          );
+                        } else {
+                          bindMeasurementToItem(
+                            bindPickerFor.measurementId,
+                            opt.elementId,
+                            opt.itemId
+                          );
+                        }
                         setBindPickerFor(null);
                       }}
                       className="w-full text-left px-3 py-2 text-sm text-body rounded hover:bg-overlay/10 cursor-pointer flex items-center gap-2"

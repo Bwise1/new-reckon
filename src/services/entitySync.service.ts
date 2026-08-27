@@ -75,6 +75,9 @@ export interface ApiMeasurement {
     seq?: number;
     /** True when the polyline was tessellated from the arc tool. */
     arc?: boolean;
+    /** Section group: measurements sharing this id are one logical
+     *  measurement (one panel pill, quantity summed). */
+    sectionGroupId?: string;
   } | null;
   created_at?: string;
   updated_at?: string;
