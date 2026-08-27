@@ -247,30 +247,33 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
     >
       <div className="flex h-full w-[260px] flex-col">
 
-      <div className="shrink-0 px-5 pt-5 pb-4 border-b border-overlay/10 flex items-start justify-between gap-2">
-        <h2 className="text-[15px] font-semibold text-body leading-snug line-clamp-2">
-          {projectTitle}
-        </h2>
-        <button
-          type="button"
-          aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-          title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-          onClick={toggleTheme}
-          className="shrink-0 mt-0.5 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-overlay/10 hover:text-body transition-colors cursor-pointer"
-        >
-          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
-      </div>
+      {/* Title + underline tabs in one header (prototype layout). The active
+          tab's accent underline uses -mb-px so it sits ON the header's own
+          border line — the two lines touch. */}
+      <div className="shrink-0 border-b border-overlay/10 px-5 pt-5">
+        <div className="flex items-start justify-between gap-2">
+          <h2 className="text-[15px] font-semibold text-body leading-snug line-clamp-2">
+            {projectTitle}
+          </h2>
+          <button
+            type="button"
+            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            onClick={toggleTheme}
+            className="shrink-0 mt-0.5 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-overlay/10 hover:text-body transition-colors cursor-pointer"
+          >
+            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+        </div>
 
-      <div className="shrink-0 px-5 py-4 border-b border-overlay/10">
-        <div className="inline-flex items-center gap-1 bg-ink-elevated rounded-md p-1">
+        <nav className="mt-3 flex items-center gap-5 text-sm">
           <button
             type="button"
             onClick={() => setActiveTab('plan')}
-            className={`px-3 py-1 text-xs rounded transition-colors cursor-pointer ${
+            className={`-mb-px border-b-2 pb-2.5 font-medium transition-colors cursor-pointer ${
               activeTab === 'plan'
-                ? 'bg-primary text-primary-fg font-medium'
-                : 'text-muted hover:text-body'
+                ? 'border-accent text-body'
+                : 'border-transparent text-muted hover:text-body'
             }`}
           >
             Plan
@@ -278,15 +281,15 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('history')}
-            className={`px-3 py-1 text-xs rounded transition-colors cursor-pointer ${
+            className={`-mb-px border-b-2 pb-2.5 font-medium transition-colors cursor-pointer ${
               activeTab === 'history'
-                ? 'bg-primary text-primary-fg font-medium'
-                : 'text-muted hover:text-body'
+                ? 'border-accent text-body'
+                : 'border-transparent text-muted hover:text-body'
             }`}
           >
             History
           </button>
-        </div>
+        </nav>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar-dark">
