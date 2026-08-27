@@ -12,10 +12,10 @@ import {
   Minimize,
 } from 'lucide-react';
 import type { DrawTool } from '@/types/takeoff';
-import { MARKUP_COLORS } from '@/constants/takeoffDesign';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import RotateMenu from './RotateMenu';
+import MarkupColorPicker from './MarkupColorPicker';
 import { useProjectTheme } from '@/hooks/useProjectTheme';
 import {
   CalibrateIcon,
@@ -235,30 +235,30 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   // Apply-to-All toggle is on (Reckon-Bill behaviour).
 
   // Local input state so the field stays editable mid-type.
-  const [widthInput, setWidthInput] = useState(Number(activeRealWidth).toFixed(3));
+  // Width is OPT-IN: empty (or 0) means hairline. Real-world width is for
+  // walls and the like; measurements shouldn't start life as thick bands.
+  // A selected hairline measurement round-trips to ~2px/scale, so anything
+  // below 5mm displays as empty too.
+  const widthDisplay = (w: number) => (w >= 0.005 ? Number(w).toFixed(3) : '');
+  const [widthInput, setWidthInput] = useState(widthDisplay(activeRealWidth));
   const widthSeed = `${selectedMeasurementId ?? ''}:${activeRealWidth}`;
   const [seededWidth, setSeededWidth] = useState(widthSeed);
   if (widthSeed !== seededWidth) {
     setSeededWidth(widthSeed);
-    setWidthInput(Number(activeRealWidth).toFixed(3));
+    setWidthInput(widthDisplay(activeRealWidth));
   }
   const commitWidth = (raw: string) => {
+    if (raw.trim() === '') {
+      onRealWidthChange(0);
+      return;
+    }
     const parsed = parseFloat(raw);
-    if (isFinite(parsed) && parsed > 0) {
+    if (isFinite(parsed) && parsed >= 0) {
       onRealWidthChange(parsed);
     } else {
-      setWidthInput(Number(activeRealWidth).toFixed(3));
+      setWidthInput(widthDisplay(activeRealWidth));
     }
   };
-
-  const {
-    open: colorOpen,
-    setOpen: setColorOpen,
-    toggle: toggleColor,
-    triggerRef: colorTriggerRef,
-    menuRef: colorMenuRef,
-    pos: colorPos,
-  } = usePortalDropdown();
 
   const {
     open: calOpen,
@@ -333,26 +333,11 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         <Divider />
 
         <ToolGroup title="Style">
-          {/* Color */}
-          <div ref={colorTriggerRef}>
-            <button
-              type="button"
-              aria-label="Markup color"
-              title="Markup color"
-              onClick={toggleColor}
-              className="flex flex-col items-center gap-[2px] rounded-lg px-1 py-0.5 cursor-pointer"
-            >
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-overlay/10 transition-colors">
-                <span
-                  className="h-4 w-4 rounded-full border border-black/10"
-                  style={{ backgroundColor: liveColor }}
-                />
-              </span>
-              <span className="whitespace-nowrap text-[9.5px] font-medium leading-none text-muted">
-                Color
-              </span>
-            </button>
-          </div>
+          <MarkupColorPicker
+            value={liveColor}
+            onChange={onColorChange}
+            portalTheme={portalTheme}
+          />
 
           {/* Width */}
           <div
@@ -361,7 +346,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               selectedMeasurementId && currentScale
                 ? 'Edit selected measurement line width'
                 : currentScale
-                  ? 'Line width in metres — scaled to plan calibration'
+                  ? 'Line width in metres for walls etc. — empty draws a thin line'
                   : 'Calibrate first to use real-world width'
             }
           >
@@ -374,8 +359,9 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             >
               <input
                 type="number"
-                min="0.001"
+                min="0"
                 step="0.01"
+                placeholder="—"
                 value={widthInput}
                 disabled={!currentScale}
                 onChange={(e) => setWidthInput(e.target.value)}
@@ -487,50 +473,6 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           document.body
         )}
 
-      {colorOpen &&
-        createPortal(
-          <div
-            ref={colorMenuRef}
-            style={{ position: 'fixed', top: colorPos.top, left: colorPos.left, zIndex: 99999 }}
-            data-theme={portalTheme}
-            className="bg-surface border border-border rounded-xl shadow-xl p-3"
-          >
-            <p className="text-[10px] font-semibold text-muted/70 uppercase tracking-wide mb-2">
-              Markup Color
-            </p>
-            <div className="grid grid-cols-4 gap-2">
-              {MARKUP_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    onColorChange(c);
-                    setColorOpen(false);
-                  }}
-                  className="relative w-8 h-10 rounded-full transition hover:scale-110 cursor-pointer"
-                  style={{ backgroundColor: c }}
-                  title={c}
-                >
-                  {liveColor === c && (
-                    <svg
-                      className="absolute inset-0 m-auto w-4 h-4 text-white drop-shadow"
-                      viewBox="0 0 12 12"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M2 6l3 3 5-5" />
-                    </svg>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>,
-          document.body
-        )}
     </div>
   );
 };

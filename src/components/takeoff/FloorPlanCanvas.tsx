@@ -917,11 +917,12 @@ if (!prev && activeTool) {
           page: currentPage,
           type: "polyline",
           color: activeColor,
-          // Apply the toolbar width at creation (same as the dbl-click finish)
-          // so a shape closed by joining the first vertex isn't stuck at the
-          // default and needing a select-and-edit afterwards.
+          // The real-width band is OPT-IN (walls etc.): applied only when the
+          // toolbar Width is set; otherwise lines commit hairline.
           strokeWidth:
-            currentScale != null ? Math.max(activeRealWidth * currentScale, 2) : 2,
+            activeRealWidth > 0 && currentScale != null
+              ? Math.max(activeRealWidth * currentScale, 2)
+              : 2,
           metadata: {
             createdAt: now,
             lastModified: now,
@@ -1258,8 +1259,11 @@ if (!prev && activeTool) {
         page: currentPage,
         type,
         color: activeColor,
+        // Opt-in real-width band — see the close-at-first-vertex site.
         strokeWidth:
-          currentScale != null ? Math.max(activeRealWidth * currentScale, 2) : 2,
+          activeRealWidth > 0 && currentScale != null
+            ? Math.max(activeRealWidth * currentScale, 2)
+            : 2,
         metadata: {
           createdAt: now,
           lastModified: now,

@@ -342,7 +342,8 @@ const initialState = {
   measureSessionId: null,
   pendingSectionGroup: null,
   activeColor: MARKUP_COLORS[0],
-  activeRealWidth: 0.225,
+  // 0 = hairline (no real-width band). Width is opt-in for walls etc.
+  activeRealWidth: 0,
   scales: {},
   calibrationLines: {},
   calibrationMode: false,
