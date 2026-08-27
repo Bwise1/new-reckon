@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from "react";
-import type { TakeoffItem, TakeoffMode } from "@/types/takeoff";
+import type { DrawTool, TakeoffItem, TakeoffMode } from "@/types/takeoff";
 import {
   Line,
   Circle,
@@ -53,9 +53,9 @@ const clamp = (value: number, min: number, max: number) =>
 interface FloorPlanCanvasProps {
   takeoffItems: TakeoffItem[];
   activeItemId: string | null;
-  activeTool: TakeoffMode | null;
+  activeTool: DrawTool | null;
   activeColor: string;
-  onSelectTool: (type: TakeoffMode) => void;
+  onSelectTool: (type: DrawTool) => void;
   onFinishTool: () => void;
   onColorChange: (color: string) => void;
   registerUploadHandler: (handler: (e: React.ChangeEvent<HTMLInputElement>) => void) => void;
