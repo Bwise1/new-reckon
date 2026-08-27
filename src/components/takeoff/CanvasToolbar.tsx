@@ -275,8 +275,8 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   } = usePortalDropdown();
 
   return (
-    <div className="shrink-0 flex w-full overflow-x-auto bg-surface border-b border-border z-10 h-[76px]">
-      <div className="flex items-stretch gap-1.5 mx-auto px-3 py-1.5">
+    <div className="shrink-0 flex w-full overflow-x-auto bg-surface border-b border-border z-10 h-[92px]">
+      <div className="flex items-center gap-1.5 mx-auto px-3">
         <ToolGroup title="Pointer">
           <IconButton icon={Hand} label="Pan" active={isPanningMode} onClick={onTogglePan} />
           <IconButton

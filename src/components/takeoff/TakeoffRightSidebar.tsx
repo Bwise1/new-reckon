@@ -169,7 +169,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
       }`}
     >
       <div className="flex h-full w-[380px] flex-col">
-      <div className="shrink-0 px-4 py-3 border-b border-border flex items-center gap-3">
+      <div className="shrink-0 h-[92px] px-4 border-b border-border flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-base font-bold text-body">Bill of Quantities</h2>
           <p className="mt-0.5 text-xs font-medium text-muted">

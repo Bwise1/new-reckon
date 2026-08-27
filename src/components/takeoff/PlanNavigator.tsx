@@ -250,9 +250,9 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
       {/* Title + underline tabs in one header (prototype layout). The active
           tab's accent underline uses -mb-px so it sits ON the header's own
           border line — the two lines touch. */}
-      <div className="shrink-0 border-b border-overlay/10 px-5 pt-5">
+      <div className="shrink-0 h-[92px] border-b border-overlay/10 px-5 pt-4 flex flex-col">
         <div className="flex items-start justify-between gap-2">
-          <h2 className="text-[15px] font-semibold text-body leading-snug line-clamp-2">
+          <h2 className="text-[15px] font-semibold text-body leading-snug truncate">
             {projectTitle}
           </h2>
           <button
@@ -266,7 +266,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
           </button>
         </div>
 
-        <nav className="mt-3 flex items-center gap-5 text-sm">
+        <nav className="mt-auto flex items-center gap-5 text-sm">
           <button
             type="button"
             onClick={() => setActiveTab('plan')}
