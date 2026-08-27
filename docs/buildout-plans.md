@@ -48,7 +48,7 @@ paywalls are one hook, not scattered ifs.
 stored as an ordinary polyline. No data-model, sync, or export changes
 were needed, exactly as planned.
 
-## 4b. Measurement sections (PlanSwift-style) — PLANNED
+## 4b. Measurement sections (PlanSwift-style) — SHIPPED (2026-08-27)
 
 One pill per measuring session, quantity summed across sections; right-click
 → New Section adds to an existing measurement. Full design in
