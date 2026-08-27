@@ -276,7 +276,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
 
         {displayRows.length > 0 && (
           <div>
-            <p className="text-[13px] font-bold text-[#1F1F1F] mb-1.5">History:</p>
+            <p className="text-[13px] font-bold text-body mb-1.5">History:</p>
             <div className="flex flex-wrap gap-1 items-center text-[11px]">
               {displayRows.map((row, idx) => {
                 const isDeduct =
@@ -297,17 +297,17 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 return (
                   <React.Fragment key={key}>
                     {idx > 0 && (
-                      <span className="text-[#1F1F1F] font-semibold px-0.5">
+                      <span className="text-body font-semibold px-0.5">
                         {isDeduct ? "−" : "+"}
                       </span>
                     )}
                     <div
                       className={`flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] ${
                         isDeduct
-                          ? "bg-danger/10/80 border-red-100 text-danger"
+                          ? "bg-danger/10 border-danger/25 text-danger"
                           : idx === 0
                             ? "bg-surface-muted border-border text-muted"
-                            : "bg-amber-50/80 border-amber-100 text-amber-700"
+                            : "bg-warn/10 border-warn/25 text-warn-strong"
                       }`}
                       title={
                         row.kind === "group"

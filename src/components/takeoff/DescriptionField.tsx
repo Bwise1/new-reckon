@@ -44,7 +44,7 @@ const DescriptionField: React.FC<DescriptionFieldProps> = ({
           onFocus={() => setIsFocused(true)}
           placeholder="Description"
           rows={3}
-          className="w-full text-sm font-semibold text-black leading-relaxed bg-transparent border-none outline-none resize-none placeholder:text-muted/70 placeholder:font-normal"
+          className="w-full text-sm font-semibold text-body leading-relaxed bg-transparent border-none outline-none resize-none placeholder:text-muted/70 placeholder:font-normal"
         />
       </div>
 

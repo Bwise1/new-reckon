@@ -202,8 +202,8 @@ const FormulaInput = forwardRef<FormulaInputHandle, FormulaInputProps>(({
           placeholder={placeholder}
           className={`w-full px-4 py-2.5 bg-surface border rounded-xl shadow-sm outline-none transition-all placeholder:text-muted/70 font-medium text-body ${
             !isValid && value.length > 0
-              ? "border-red-500 focus:ring-2 focus:ring-red-100"
-              : "border-[#D9D9D9] focus:ring-1 focus:ring-accent/25 focus:border-accent"
+              ? "border-danger focus:ring-2 focus:ring-danger/15"
+              : "border-border focus:ring-1 focus:ring-accent/25 focus:border-accent"
           }`}
         />
 

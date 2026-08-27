@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useProject } from '@/hooks/useProjects';
@@ -19,7 +19,23 @@ export function useBoqExport() {
 
   const [exportModalMode, setExportModalMode] = useState<'preview' | 'export' | null>(null);
   const [busyAction, setBusyAction] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
+  const [statusMessage, setStatusMessageRaw] = useState('');
+  // Success confirmations fade on their own; errors stay until replaced so
+  // the user can't miss them.
+  const statusTimerRef = useRef<number | null>(null);
+  const setStatusMessage = useCallback((message: string, autoClearMs?: number) => {
+    if (statusTimerRef.current !== null) {
+      window.clearTimeout(statusTimerRef.current);
+      statusTimerRef.current = null;
+    }
+    setStatusMessageRaw(message);
+    if (message && autoClearMs) {
+      statusTimerRef.current = window.setTimeout(() => {
+        statusTimerRef.current = null;
+        setStatusMessageRaw('');
+      }, autoClearMs);
+    }
+  }, []);
 
   const buildExportPayload = (vat: number, contingency: number) => {
     const bills = collectBills();
@@ -56,7 +72,7 @@ export function useBoqExport() {
         ? await boqService.previewExcel(payload)
         : await boqService.previewPdf(payload);
       await openDownload(response.data.downloadUrl);
-      setStatusMessage('Preview ready.');
+      setStatusMessage('Preview ready.', 4000);
     } catch (error) {
       setStatusMessage((error as Error).message || 'Preview failed.');
     } finally {
@@ -89,7 +105,7 @@ export function useBoqExport() {
         ? await boqService.exportExcel(payload, exportId)
         : await boqService.exportPdf(payload, exportId);
       await openDownload(exported.data.downloadUrl);
-      setStatusMessage('Export completed.');
+      setStatusMessage('Export completed.', 4000);
     } catch (error) {
       setStatusMessage((error as Error).message || 'Export failed.');
     } finally {

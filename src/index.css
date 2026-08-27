@@ -92,9 +92,21 @@
     "Helvetica Neue", Arial, sans-serif;
 }
 
+/* The app manages its own theme — forbid Chrome's Auto Dark Theme from
+   force-darkening the light chrome (it repaints author colors wholesale and
+   made light-theme inputs render dark on prefers-dark devices). Dark scopes
+   declare dark so UA controls/scrollbars match. */
+:root {
+  color-scheme: only light;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
 /* Explicit light values so a light scope can nest INSIDE a dark one (the
    canvas viewport is paper and stays light in every theme). */
 [data-theme="light"] {
+  color-scheme: light;
   --color-ink: #f8fafc;
   --color-ink-elevated: #eef2f6;
   --color-canvas: #ffffff;
