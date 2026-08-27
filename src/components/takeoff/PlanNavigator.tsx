@@ -1,6 +1,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Eye, EyeOff, FileText, Link2, Trash2, X } from 'lucide-react';
+import { ChevronRight, Eye, EyeOff, FileText, Link2, Moon, Sun, Trash2, X } from 'lucide-react';
+import PanelEdgeToggle from './PanelEdgeToggle';
+import { useProjectTheme } from '@/hooks/useProjectTheme';
 import { AreaIcon, LinearIcon, CountIcon } from './icons/ToolIcons';
 import ReckonLogo from '@/assets/images/logo.svg';
 import type { PlanDiscipline, TakeoffItem, TakeoffMode, ProjectPlan } from '@/types/takeoff';
@@ -64,6 +66,8 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
   const setPlanDiscipline = useTakeoffStore((s) => s.setPlanDiscipline);
   const toggleMeasurementHidden = useTakeoffStore((s) => s.toggleMeasurementHidden);
   const renameMeasurement = useTakeoffStore((s) => s.renameMeasurement);
+  const [railCollapsed, setRailCollapsed] = useState(false);
+  const { theme, toggle: toggleTheme } = useProjectTheme();
   const removePlan = useTakeoffStore((s) => s.removePlan);
   const boqElements = useTakeoffStore((s) => s.boqElements);
   const bindMeasurementToItem = useTakeoffStore((s) => s.bindMeasurementToItem);
@@ -234,13 +238,17 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
 
 
   return (
-    // data-theme="dark": the plan rail keeps its dark chrome by re-scoping the
-    // semantic tokens for this subtree — same classes as light surfaces, dark
-    // values here, and it follows a future global theme switch automatically.
+    // Collapsible (prototype pattern): the aside animates its width to zero
+    // while the inner column stays at full width inside the clip, so nothing
+    // reflows or unmounts. The edge toggle lives outside the clipped box.
+    // Theme comes from the shell scope (useProjectTheme on ProjectDetail).
+    <div className="group relative shrink-0 h-full">
     <aside
-      data-theme="dark"
-      className="w-[260px] min-w-[260px] max-w-[260px] shrink-0 h-full flex flex-col bg-ink text-body border-r border-border"
+      className={`h-full overflow-hidden bg-ink text-body border-r border-border transition-[width] duration-200 ${
+        railCollapsed ? 'w-0 border-r-0' : 'w-[260px]'
+      }`}
     >
+      <div className="flex h-full w-[260px] flex-col">
       <div className="shrink-0 px-5 pt-5 pb-4 flex items-center gap-2">
         {/* The logo doubles as "back to projects" — no separate back button. */}
         <button
@@ -254,10 +262,19 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
         </button>
       </div>
 
-      <div className="shrink-0 px-5 pb-4 border-b border-overlay/10">
+      <div className="shrink-0 px-5 pb-4 border-b border-overlay/10 flex items-start justify-between gap-2">
         <h2 className="text-[15px] font-semibold text-body leading-snug line-clamp-2">
           {projectTitle}
         </h2>
+        <button
+          type="button"
+          aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          onClick={toggleTheme}
+          className="shrink-0 mt-0.5 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-overlay/10 hover:text-body transition-colors cursor-pointer"
+        >
+          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </button>
       </div>
 
       <div className="shrink-0 px-5 py-4 border-b border-overlay/10">
@@ -683,7 +700,16 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
         .custom-scrollbar-dark::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar-dark::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 8px; }
       `}</style>
+      </div>
     </aside>
+      <PanelEdgeToggle
+        side="left"
+        collapsed={railCollapsed}
+        onClick={() => setRailCollapsed((c) => !c)}
+        expandLabel="Expand sidebar"
+        collapseLabel="Collapse sidebar"
+      />
+    </div>
   );
 };
 

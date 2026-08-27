@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import EstimationCard from "./EstimationCard";
 import BillsOverview from "./BillsOverview";
+import PanelEdgeToggle from "./PanelEdgeToggle";
 import { ArrowLeft } from "lucide-react";
 import BoqExportModal from "./BoqExportModal";
 import { useShallow } from "zustand/react/shallow";
@@ -32,6 +33,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
   // element view (Reckon-Bill prototype pattern). Detail is the default so
   // the measuring workflow lands on editable cards.
   const [billView, setBillView] = useState<"list" | "detail">("detail");
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
   const bills = useTakeoffStore((s) => s.bills);
   const activeBillId = useTakeoffStore((s) => s.activeBillId);
   const switchBill = useTakeoffStore((s) => s.switchBill);
@@ -159,9 +161,13 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
   };
 
   return (
+    <div className={`group relative shrink-0 h-full ${className}`}>
     <div
-      className={`w-[380px] min-w-[380px] max-w-[380px] shrink-0 h-full flex flex-col bg-surface border-l border-border overflow-hidden ${className}`}
+      className={`h-full flex flex-col bg-surface border-l border-border overflow-hidden transition-[width] duration-200 ${
+        panelCollapsed ? 'w-0 border-l-0' : 'w-[380px]'
+      }`}
     >
+      <div className="flex h-full w-[380px] flex-col">
       <div className="shrink-0 px-4 py-3 border-b border-border flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-base font-bold text-body">Bill of Quantities</h2>
@@ -388,8 +394,17 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--color-overlay) 18%, transparent); border-radius: 10px; }
       `}</style>
+      </div>
+    </div>
+      <PanelEdgeToggle
+        side="right"
+        collapsed={panelCollapsed}
+        onClick={() => setPanelCollapsed((c) => !c)}
+        expandLabel="Expand BOQ panel"
+        collapseLabel="Collapse BOQ panel"
+      />
     </div>
   );
 };

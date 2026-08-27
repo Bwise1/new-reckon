@@ -18,6 +18,7 @@ import type { TakeoffMode } from '@/types/takeoff';
 import { MARKUP_COLORS } from '@/constants/takeoffDesign';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useFullscreen } from '@/hooks/useFullscreen';
+import { useProjectTheme } from '@/hooks/useProjectTheme';
 import {
   CalibrateIcon,
   AreaIcon,
@@ -231,6 +232,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
 }) => {
   const liveColor = useTakeoffStore((s) => s.activeColor);
   const fullscreen = useFullscreen();
+  const { theme: portalTheme } = useProjectTheme();
 
   // Rotate applies to the current page, or to every page while the
   // Apply-to-All toggle is on (Reckon-Bill behaviour).
@@ -466,7 +468,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           <div
             ref={calMenuRef}
             style={{ position: 'fixed', top: calPos.top, left: calPos.left, zIndex: 99999 }}
-            data-theme="dark"
+            data-theme={portalTheme}
             className="w-56 bg-surface border border-border rounded-xl shadow-xl py-1.5 text-sm"
           >
             <p className="px-3 pb-1.5 pt-0.5 text-[10px] font-semibold text-muted/70 uppercase tracking-wide border-b border-border">
@@ -518,7 +520,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           <div
             ref={colorMenuRef}
             style={{ position: 'fixed', top: colorPos.top, left: colorPos.left, zIndex: 99999 }}
-            data-theme="dark"
+            data-theme={portalTheme}
             className="bg-surface border border-border rounded-xl shadow-xl p-3"
           >
             <p className="text-[10px] font-semibold text-muted/70 uppercase tracking-wide mb-2">

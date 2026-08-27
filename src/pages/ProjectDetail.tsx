@@ -2,6 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useRef, useCallback, useEffect, useState } from 'react';
 import PlanNavigator from '@/components/takeoff/PlanNavigator';
 import SidebarRail from '@/components/takeoff/SidebarRail';
+import { useProjectTheme } from '@/hooks/useProjectTheme';
 import FloorPlanCanvas from '@/components/takeoff/FloorPlanCanvas';
 import TakeoffRightSidebar from '@/components/takeoff/TakeoffRightSidebar';
 import TakeoffTour from '@/components/tutorial/TakeoffTour';
@@ -13,6 +14,7 @@ import { ApiError } from '@/lib/api-client';
 import type { TakeoffMode } from '@/types/takeoff';
 
 const ProjectDetail = () => {
+  const { theme: projectTheme } = useProjectTheme();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const {
@@ -254,9 +256,10 @@ const ProjectDetail = () => {
   }
 
   return (
-    // The project shell runs the DARK token set (Reckon-Bill prototype look);
-    // the canvas viewport re-scopes itself light because the sheet is paper.
-    <div data-theme="dark" className="relative flex h-screen bg-ink text-body overflow-hidden">
+    // The project shell runs the prototype token set — dark by default, the
+    // sun/moon toggle in the sidebar flips it. The canvas viewport re-scopes
+    // itself light regardless: the sheet is paper, not chrome.
+    <div data-theme={projectTheme} className="relative flex h-screen bg-ink text-body overflow-hidden">
       {!isPlanReady && (
         <div className="absolute inset-0 z-[100] flex items-center justify-center bg-ink">
           <div className="rounded-lg bg-surface px-5 py-4 shadow-lg border border-border text-center">
