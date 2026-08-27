@@ -22,6 +22,7 @@ import { useProjectTheme } from '@/hooks/useProjectTheme';
 import {
   CalibrateIcon,
   AreaIcon,
+  ArcIcon,
   LinearIcon,
   CountIcon,
 } from './icons/ToolIcons';
@@ -335,6 +336,12 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               />
             );
           })}
+          <IconButton
+            icon={ArcIcon}
+            label="Arc"
+            disabled
+            title="Arc — coming soon"
+          />
           <IconButton
             icon={Wand2}
             label="Auto Area"

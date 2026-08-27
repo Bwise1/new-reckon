@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Play, Users } from "lucide-react";
 import EstimationCard from "./EstimationCard";
 import BillsOverview from "./BillsOverview";
 import PanelEdgeToggle from "./PanelEdgeToggle";
@@ -32,7 +32,8 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
   // Bill navigation: the sidebar is either the bill LIST page or one bill's
   // element view (Reckon-Bill prototype pattern). Detail is the default so
   // the measuring workflow lands on editable cards.
-  const [billView, setBillView] = useState<"list" | "detail">("detail");
+  // The bills ledger is the landing view (prototype behaviour).
+  const [billView, setBillView] = useState<"list" | "detail">("list");
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const bills = useTakeoffStore((s) => s.bills);
   const activeBillId = useTakeoffStore((s) => s.activeBillId);
@@ -176,6 +177,25 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
           </p>
         </div>
 
+        <button
+          type="button"
+          title="Preview the BOQ document"
+          aria-label="Preview"
+          disabled={busyAction || !isOnline}
+          onClick={() => setExportModalMode("preview")}
+          className="rounded-lg border border-border p-2 text-muted hover:bg-overlay/5 hover:text-body transition-colors disabled:opacity-40 cursor-pointer"
+        >
+          <Play className="h-4 w-4" strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
+          title="Collaborate — coming soon"
+          aria-label="Collaborate"
+          onClick={() => window.alert("Collaboration is coming soon.")}
+          className="rounded-lg border border-border p-2 text-muted hover:bg-overlay/5 hover:text-body transition-colors cursor-pointer"
+        >
+          <Users className="h-4 w-4" strokeWidth={1.75} />
+        </button>
         <button
           type="button"
           data-tour="export"
@@ -384,7 +404,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
       <BoqExportModal
         key={`${exportModalMode}-${pricing.vatRate}-${pricing.contingency}`}
         open={exportModalMode !== null}
-        mode="export"
+        mode={exportModalMode ?? "export"}
         initialVat={pricing.vatRate}
         initialContingency={pricing.contingency}
         busy={busyAction}

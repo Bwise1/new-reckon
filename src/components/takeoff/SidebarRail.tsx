@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Folder, Globe, Settings, User, LogOut } from 'lucide-react';
-import ReckonLogo from '@/assets/images/logo.svg';
 import { useAuthStore } from '@/stores/auth.store';
 import { useLogout } from '@/hooks/useAuth';
 
@@ -38,9 +37,9 @@ const SidebarRail: React.FC = () => {
         aria-label="Back to projects"
         title="Back to projects"
         onClick={() => navigate('/dashboard')}
-        className="flex h-9 w-9 items-center justify-center rounded-lg transition-opacity hover:opacity-80 cursor-pointer"
+        className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1 transition-opacity hover:opacity-80 cursor-pointer"
       >
-        <img src={ReckonLogo} alt="Reckon" className="h-full w-full object-contain" />
+        <img src="/reckon-mark.svg" alt="Reckon" className="h-full w-full object-contain" />
       </button>
 
       <div className="mt-6 flex flex-col items-center gap-2">

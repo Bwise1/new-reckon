@@ -1,10 +1,8 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Eye, EyeOff, FileText, Link2, Moon, Sun, Trash2, X } from 'lucide-react';
+import { ChevronRight, Eye, EyeOff, FileText, Link2, Moon, Sun, Trash2, UploadCloud, X } from 'lucide-react';
 import PanelEdgeToggle from './PanelEdgeToggle';
 import { useProjectTheme } from '@/hooks/useProjectTheme';
 import { AreaIcon, LinearIcon, CountIcon } from './icons/ToolIcons';
-import ReckonLogo from '@/assets/images/logo.svg';
 import type { PlanDiscipline, TakeoffItem, TakeoffMode, ProjectPlan } from '@/types/takeoff';
 import {
   getMeasurementColor,
@@ -61,7 +59,6 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
   onDeleteMeasurement,
   onFileUpload,
 }) => {
-  const navigate = useNavigate();
   const uploadRef = useRef<HTMLInputElement>(null);
   const setPlanDiscipline = useTakeoffStore((s) => s.setPlanDiscipline);
   const toggleMeasurementHidden = useTakeoffStore((s) => s.toggleMeasurementHidden);
@@ -249,20 +246,8 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
       }`}
     >
       <div className="flex h-full w-[260px] flex-col">
-      <div className="shrink-0 px-5 pt-5 pb-4 flex items-center gap-2">
-        {/* The logo doubles as "back to projects" — no separate back button. */}
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard')}
-          title="Go to projects"
-          aria-label="Go to projects"
-          className="rounded-md hover:bg-overlay/10 transition-colors cursor-pointer p-0.5"
-        >
-          <img src={ReckonLogo} alt="Reckon" className="h-9 w-9" />
-        </button>
-      </div>
 
-      <div className="shrink-0 px-5 pb-4 border-b border-overlay/10 flex items-start justify-between gap-2">
+      <div className="shrink-0 px-5 pt-5 pb-4 border-b border-overlay/10 flex items-start justify-between gap-2">
         <h2 className="text-[15px] font-semibold text-body leading-snug line-clamp-2">
           {projectTitle}
         </h2>
@@ -556,8 +541,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
             </div>
           </div>
         )}
-        <div className="p-3 flex items-center justify-between gap-3">
-          <span className="text-xs text-muted">Add more project file</span>
+        <div className="p-3 space-y-2">
           <input
             ref={uploadRef}
             type="file"
@@ -569,9 +553,17 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
             type="button"
             data-tour="upload-plan"
             onClick={handleUploadClick}
-            className="px-3 py-1.5 rounded-md bg-primary text-primary-fg text-xs font-semibold hover:bg-primary/90 transition-colors cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-primary text-primary-fg text-sm font-semibold hover:bg-primary/90 transition-colors cursor-pointer"
           >
+            <UploadCloud className="h-4 w-4" />
             Upload
+          </button>
+          <button
+            type="button"
+            onClick={handleUploadClick}
+            className="w-full text-center text-xs text-muted hover:text-body transition-colors cursor-pointer"
+          >
+            Add more project file
           </button>
         </div>
       </div>

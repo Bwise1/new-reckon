@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Plus, MoreHorizontal } from "lucide-react";
+import React, { useState } from "react";
+import { Plus, MoreHorizontal, Copy, Trash2, FileStack } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { useTakeoffStore } from "@/store/useTakeoffStore";
 import type { BoqElementData } from "@/types/takeoff";
@@ -26,15 +26,17 @@ const formatAmount = (value: number): string =>
     maximumFractionDigits: 2,
   });
 
+const CURRENCY = "₦";
+
 interface BillsOverviewProps {
   /** Open a bill's element view. */
   onOpenBill: (billId: string) => void;
 }
 
 /**
- * The bill list page (Reckon-Bill prototype layout): grand total card, one row
- * per bill with its own total, and an Add Bill button. Clicking a row opens
- * that bill's elements.
+ * The bills ledger (Reckon-Bill prototype, matched 1:1): grand-total strip,
+ * one ledger of rows (caps label, live-editable name, per-bill total, hover
+ * menu with Duplicate/Delete), and the Add Bill button.
  */
 const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
   const { bills, addBill, renameBill, duplicateBill, deleteBill, collectBills } =
@@ -49,27 +51,6 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
       }))
     );
 
-  const [menuFor, setMenuFor] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draftName, setDraftName] = useState("");
-  const menuRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!menuFor) return;
-    const close = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuFor(null);
-      }
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [menuFor]);
-
-  const commitRename = () => {
-    if (editingId && draftName.trim()) renameBill(editingId, draftName.trim());
-    setEditingId(null);
-  };
-
   const withElements = collectBills();
   const grandTotal = withElements.reduce(
     (sum, bill) => sum + billTotal(bill.elements),
@@ -77,123 +58,179 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
   );
 
   return (
-    <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden custom-scrollbar px-4 py-4 space-y-4">
-      {/* Grand total */}
-      <div className="rounded-xl bg-surface-muted border border-border px-4 py-3">
-        <p className="text-[11px] font-bold tracking-wide text-muted/70 uppercase">
-          Grand Total Project Cost
-        </p>
-        <p className="text-2xl font-extrabold text-body">
-          ₦ {formatAmount(grandTotal)}
-        </p>
+    <>
+      {/* Grand financial summary strip */}
+      <div className="shrink-0 px-3 pt-3">
+        <div className="rounded-lg border border-border bg-surface-muted p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            Grand Total Project Cost
+          </p>
+          <p className="mt-1 text-xl font-semibold tabular-nums text-body">
+            {CURRENCY} {formatAmount(grandTotal)}
+          </p>
+        </div>
       </div>
 
-      {/* Bill rows */}
-      <div className="rounded-xl border border-border divide-y divide-border overflow-visible">
-        {withElements.map((bill, idx) => (
-          <div key={bill.id} className="relative">
-            {editingId === bill.id ? (
-              <div className="px-4 py-3">
-                <p className="text-[11px] font-bold tracking-wide text-muted/70 uppercase">
-                  Bill {idx + 1}
-                </p>
-                <input
-                  autoFocus
-                  value={draftName}
-                  onChange={(e) => setDraftName(e.target.value)}
-                  onBlur={commitRename}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitRename();
-                    if (e.key === "Escape") setEditingId(null);
-                  }}
-                  className="mt-0.5 w-full px-2 py-1 rounded-md border border-secondary text-lg font-bold outline-none"
-                />
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onOpenBill(bill.id)}
-                className="w-full text-left px-4 py-3 hover:bg-overlay/5 transition-colors cursor-pointer"
-              >
-                <p className="text-[11px] font-bold tracking-wide text-muted/70 uppercase">
-                  Bill {idx + 1}
-                </p>
-                <span className="flex items-center justify-between gap-2">
-                  <span className="text-lg font-bold text-body truncate">
-                    {bill.name}
-                  </span>
-                  <span className="shrink-0 text-base font-bold text-body">
-                    ₦ {formatAmount(billTotal(bill.elements))}
-                  </span>
-                </span>
-              </button>
-            )}
+      {/* Bills ledger */}
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-3 py-3">
+        {withElements.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+            <FileStack className="h-6 w-6 text-muted" strokeWidth={1.5} />
+            <p className="text-sm text-muted">No bills yet. Add one to get started.</p>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-border">
+            {withElements.map((bill, index) => (
+              <BillRow
+                key={bill.id}
+                label={`Bill ${index + 1}`}
+                name={
+                  lookupBillName(bills, bill.id) ?? bill.name
+                }
+                total={billTotal(bill.elements)}
+                isLast={index === withElements.length - 1}
+                canDelete={bills.length > 1}
+                onOpen={() => onOpenBill(bill.id)}
+                onRename={(name) => renameBill(bill.id, name)}
+                onDuplicate={() => duplicateBill(bill.id)}
+                onDelete={() => {
+                  if (window.confirm(`Delete "${bill.name}" and all its elements?`)) {
+                    deleteBill(bill.id);
+                  }
+                }}
+              />
+            ))}
+          </div>
+        )}
 
-            <button
-              type="button"
-              aria-label={`Actions for ${bill.name}`}
-              onClick={() => setMenuFor(menuFor === bill.id ? null : bill.id)}
-              className="absolute top-2.5 right-2 p-1 rounded text-muted/50 hover:text-body hover:bg-overlay/10 cursor-pointer"
-            >
-              <MoreHorizontal className="w-4 h-4" />
-            </button>
+        <button
+          type="button"
+          onClick={() => addBill()}
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-fg shadow-sm transition-opacity hover:opacity-90 cursor-pointer"
+        >
+          <Plus className="h-4 w-4" />
+          Add Bill
+        </button>
+      </div>
+    </>
+  );
+};
 
-            {menuFor === bill.id && (
+// Names live in `bills`; collectBills snapshots may lag a keystroke, so the
+// row reads the freshest name straight from the bills list.
+function lookupBillName(
+  bills: { id: string; name: string }[],
+  id: string
+): string | undefined {
+  return bills.find((b) => b.id === id)?.name;
+}
+
+function BillRow({
+  label,
+  name,
+  total,
+  isLast,
+  canDelete,
+  onOpen,
+  onRename,
+  onDuplicate,
+  onDelete,
+}: {
+  label: string;
+  name: string;
+  total: number;
+  isLast: boolean;
+  canDelete: boolean;
+  onOpen: () => void;
+  onRename: (name: string) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  return (
+    <div
+      onClick={onOpen}
+      className={`group cursor-pointer bg-surface px-3 py-2.5 transition-colors hover:bg-overlay/5 ${
+        isLast ? "" : "border-b border-border"
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          {label}
+        </span>
+
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            aria-label="Bill options"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((open) => !open);
+            }}
+            className="flex h-6 w-6 items-center justify-center rounded-md text-muted opacity-0 transition-opacity hover:bg-overlay/10 hover:text-body group-hover:opacity-100 focus-visible:opacity-100 cursor-pointer"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+
+          {menuOpen && (
+            <>
               <div
-                ref={menuRef}
-                className="absolute right-2 top-9 z-40 w-36 rounded-lg border border-border bg-surface py-1 shadow-lg text-xs font-medium"
+                className="fixed inset-0 z-10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                }}
+              />
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-border bg-surface py-1 shadow-lg"
               >
                 <button
                   type="button"
                   onClick={() => {
-                    setMenuFor(null);
-                    setEditingId(bill.id);
-                    setDraftName(bill.name);
+                    setMenuOpen(false);
+                    onDuplicate();
                   }}
-                  className="block w-full px-3 py-1.5 text-left hover:bg-overlay/5 cursor-pointer"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-body transition-colors hover:bg-overlay/5 cursor-pointer"
                 >
-                  Rename
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuFor(null);
-                    duplicateBill(bill.id);
-                  }}
-                  className="block w-full px-3 py-1.5 text-left hover:bg-overlay/5 cursor-pointer"
-                >
+                  <Copy className="h-3.5 w-3.5" />
                   Duplicate
                 </button>
+                <div className="my-1 h-px bg-surface-muted" />
                 <button
                   type="button"
-                  disabled={bills.length <= 1}
+                  disabled={!canDelete}
                   onClick={() => {
-                    setMenuFor(null);
-                    if (window.confirm(`Delete "${bill.name}" and all its elements?`)) {
-                      deleteBill(bill.id);
-                    }
+                    setMenuOpen(false);
+                    onDelete();
                   }}
-                  className="block w-full px-3 py-1.5 text-left text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-default cursor-pointer"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-danger/10 disabled:opacity-40 disabled:cursor-default cursor-pointer"
                 >
+                  <Trash2 className="h-3.5 w-3.5" />
                   Delete
                 </button>
               </div>
-            )}
-          </div>
-        ))}
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Add bill */}
-      <button
-        type="button"
-        onClick={() => addBill()}
-        className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-fg py-3 text-sm font-bold hover:bg-primary/90 transition-colors cursor-pointer"
-      >
-        <Plus className="w-4 h-4" />
-        Add Bill
-      </button>
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <input
+          value={name}
+          onChange={(e) => onRename(e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          placeholder="Untitled Bill"
+          className="min-w-0 w-1/2 rounded bg-transparent px-1 -mx-1 text-base font-semibold text-body outline-none transition-colors hover:bg-overlay/10 focus:bg-surface focus:ring-1 focus:ring-accent/30"
+        />
+
+        <span className="shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums text-body">
+          {CURRENCY} {formatAmount(total)}
+        </span>
+      </div>
     </div>
   );
-};
+}
 
 export default BillsOverview;
