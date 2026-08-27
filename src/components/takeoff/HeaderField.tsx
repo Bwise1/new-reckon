@@ -37,7 +37,7 @@ const HeaderField: React.FC<HeaderFieldProps> = ({ value, onChange }) => {
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setIsFocused(true)}
         placeholder="Header"
-        className="w-full px-3 py-2.5 rounded-lg border border-[#D9D9D9] bg-surface text-sm font-bold text-body placeholder:text-muted/70 outline-none focus:border-accent focus:ring-1 focus:ring-accent/30"
+        className="w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm font-medium text-body placeholder:text-muted/70 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
       />
       {showDropdown && (
         <ul className="absolute z-40 left-0 right-0 mt-1 max-h-32 overflow-y-auto rounded-lg border border-border bg-surface shadow-lg">
@@ -45,7 +45,7 @@ const HeaderField: React.FC<HeaderFieldProps> = ({ value, onChange }) => {
             <li key={suggestion}>
               <button
                 type="button"
-                className="w-full text-left px-3 py-2 text-sm text-body hover:bg-accent/10 cursor-pointer"
+                className="w-full text-left px-3 py-2 text-sm text-body hover:bg-overlay/5 cursor-pointer"
                 onMouseDown={(e) => {
                   e.preventDefault();
                   onChange(suggestion);

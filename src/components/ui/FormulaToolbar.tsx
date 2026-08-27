@@ -3,56 +3,71 @@ export type FormulaMode = "add" | "deduct";
 interface FormulaToolbarProps {
   onModeChange?: (mode: FormulaMode) => void;
   onSymbolClick?: (symbol: string) => void;
-  onToggleMeasure?: () => void;
-  isMeasuring?: boolean;
+  /** Last-used commit mode — highlighted in the segmented toggle. */
+  mode?: FormulaMode;
   disabled?: boolean;
   className?: string;
 }
 
 const symbols = ["()", "+", "*", "-", "/", "√"];
 
+/**
+ * The floating takeoff toolbox (Reckon-Bill prototype): a light surface pill
+ * with a monochrome Add/Deduct segmented toggle and micro arithmetic keys.
+ * Strictly neutral except the active mode (primary = accent).
+ */
 const FormulaToolbar = ({
   onModeChange,
   onSymbolClick,
+  mode = "add",
   disabled = false,
   className = "",
 }: FormulaToolbarProps) => {
   return (
     <div
-      className={`inline-flex flex-nowrap items-center gap-1 px-2 py-1.5 bg-[#1a1a1a] rounded-xl shadow-[0_6px_18px_rgba(0,0,0,0.3)] border border-white/10 ${className} ${
+      className={`inline-flex flex-nowrap items-center gap-1.5 rounded-xl border border-border bg-surface p-1 shadow-xl ${className} ${
         disabled ? "opacity-50 pointer-events-none" : ""
       }`}
     >
-      <button
-        type="button"
-        onClick={() => onModeChange?.("add")}
-        className="px-3 py-1.5 rounded-md font-bold text-xs text-black bg-[#eeb952] hover:bg-[#e5ad42] active:scale-95 transition-transform shrink-0 cursor-pointer"
-      >
-        Add
-      </button>
-      <button
-        type="button"
-        onClick={() => onModeChange?.("deduct")}
-        className="px-3 py-1.5 rounded-md font-bold text-xs text-white bg-[#f8714b] hover:bg-[#ef6340] active:scale-95 transition-transform shrink-0 cursor-pointer"
-      >
-        Deduct
-      </button>
+      <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-surface-muted p-0.5">
+        {(["add", "deduct"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            aria-pressed={mode === m}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onModeChange?.(m)}
+            className={`rounded-md px-2 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+              mode === m
+                ? "bg-primary text-primary-fg"
+                : "text-muted hover:bg-overlay/10 hover:text-body"
+            }`}
+          >
+            {m === "add" ? "Add" : "Deduct"}
+          </button>
+        ))}
+      </div>
 
-      <div className="w-px h-5 bg-surface/15 shrink-0 mx-0.5" />
+      <span className="h-5 w-px shrink-0 bg-border" />
 
-      {symbols.map((symbol) => (
-        <button
-          key={symbol}
-          type="button"
-          // Keep the formula input focused so the caret position is preserved
-          // and the symbol inserts at the caret rather than the end.
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => onSymbolClick?.(symbol)}
-            className="flex items-center justify-center w-8 h-8 shrink-0 bg-surface text-[#3d3d3d] font-bold text-xs rounded-md hover:bg-overlay/10 active:scale-90 transition-transform shadow-sm cursor-pointer"
-        >
-          {symbol}
-        </button>
-      ))}
+      <div className="flex items-center gap-0.5">
+        {symbols.map((symbol) => (
+          <button
+            key={symbol}
+            type="button"
+            aria-label={`Insert ${symbol}`}
+            // Keep the formula input focused so the caret position is preserved
+            // and the symbol inserts at the caret rather than the end.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onSymbolClick?.(symbol)}
+            className={`flex h-6 shrink-0 items-center justify-center rounded-md font-mono text-xs font-medium text-body transition-colors hover:bg-overlay/10 cursor-pointer ${
+              symbol === "()" ? "w-7" : "w-6"
+            }`}
+          >
+            {symbol}
+          </button>
+        ))}
+      </div>
     </div>
   );
 };

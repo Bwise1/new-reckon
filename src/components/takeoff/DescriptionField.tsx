@@ -36,15 +36,17 @@ const DescriptionField: React.FC<DescriptionFieldProps> = ({
 
   return (
     <div ref={containerRef} className="relative">
-      <div className="flex gap-2 rounded-lg border border-[#D9D9D9] bg-surface px-3 py-3">
-        <span className="font-bold text-accent shrink-0 text-sm mt-0.5">{itemLabel}</span>
+      <div className="flex items-stretch rounded-md border border-border bg-surface outline-none transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
+        <span className="flex w-9 shrink-0 items-start justify-center pt-1.5 text-sm font-semibold text-body">
+          {itemLabel}
+        </span>
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onFocus={() => setIsFocused(true)}
-          placeholder="Description"
+          placeholder="Item description"
           rows={3}
-          className="w-full text-sm font-semibold text-body leading-relaxed bg-transparent border-none outline-none resize-none placeholder:text-muted/70 placeholder:font-normal"
+          className="flex-1 min-w-0 resize-none rounded-r-md bg-transparent px-2.5 py-1.5 text-sm text-body outline-none placeholder:text-muted/70"
         />
       </div>
 
@@ -54,7 +56,7 @@ const DescriptionField: React.FC<DescriptionFieldProps> = ({
             <li key={suggestion}>
               <button
                 type="button"
-                className="w-full text-left px-3 py-2 text-sm text-body hover:bg-accent/10 cursor-pointer"
+                className="w-full text-left px-3 py-2 text-sm text-body hover:bg-overlay/5 cursor-pointer"
                 onMouseDown={(e) => {
                   e.preventDefault();
                   onChange(suggestion);

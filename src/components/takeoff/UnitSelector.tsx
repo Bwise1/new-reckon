@@ -28,10 +28,10 @@ const UnitSelector: React.FC<UnitSelectorProps> = ({
         <button
           key={unit.value}
           onClick={() => onChange(unit.value)}
-          className={`flex-1 py-1.5 px-2 text-sm font-medium transition-all duration-200 cursor-pointer ${
+          className={`flex-1 py-1.5 px-2 text-xs font-medium transition-colors cursor-pointer ${
             selectedUnit === unit.value
               ? "bg-accent text-accent-fg"
-              : "text-muted hover:bg-overlay/5 bg-surface"
+              : "bg-surface text-body hover:bg-surface-muted"
           } ${i !== units.length - 1 ? "border-r border-border" : ""}`}
         >
           {unit.label}

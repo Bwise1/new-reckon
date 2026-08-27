@@ -55,6 +55,13 @@ One pill per measuring session, quantity summed across sections; right-click
 `docs/measurement-sections.md`. No server change (sectionGroupId rides the
 sync metadata blob like name/seq/arc).
 
+## 4c. Comments on BOQ elements/items — PLANNED
+
+The prototype's discussion threads (element + item level, resolve/reopen,
+count badges). Full design in `docs/takeoff-comments-plan.md` — built
+collaboration-shaped from day one (account-id authors), useful solo as
+annotations immediately. Phase 1 has no dependency on collaborate.
+
 ## 5. Preview (Play button — wired)
 
 Done: opens the existing BOQ preview flow (server-rendered document, no

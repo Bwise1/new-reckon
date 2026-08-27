@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef } from "react";
-import { Copy, RotateCcw, Trash2, X } from "lucide-react";
+import { Copy, Link2, RotateCcw, Trash2, X } from "lucide-react";
 import UnitSelector from "./UnitSelector";
 import FormulaInput, { type FormulaInputHandle } from "./FormulaInput";
 import DescriptionField from "./DescriptionField";
@@ -231,16 +231,16 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") onFocus?.();
       }}
-      className={`rounded-[10px] border px-4 pb-4 pt-0 space-y-3 transition-all cursor-pointer overflow-visible ${
+      className={`rounded-lg border p-3 space-y-2.5 transition-all cursor-pointer overflow-visible ${
         isTargeting
           ? "border-accent bg-accent/5 shadow-md ring-2 ring-accent/40"
           : isActive
-          ? "border-accent bg-accent/5 shadow-sm"
+          ? "border-border bg-surface-muted/50 shadow-sm"
           : "border-border bg-surface-muted opacity-55 hover:opacity-80"
       } ${className}`}
     >
-      <div onClick={(e) => e.stopPropagation()} className="space-y-3 pt-2">
-        <UnitSelector selectedUnit={unit} onChange={updateUnit} className="mt-3" />
+      <div onClick={(e) => e.stopPropagation()} className="space-y-2.5">
+        <UnitSelector selectedUnit={unit} onChange={updateUnit} />
 
         <HeaderField
           value={header}
@@ -276,8 +276,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
 
         {displayRows.length > 0 && (
           <div>
-            <p className="text-[13px] font-bold text-body mb-1.5">History:</p>
-            <div className="flex flex-wrap gap-1 items-center text-[11px]">
+            <div className="flex flex-wrap items-center gap-1.5">
               {displayRows.map((row, idx) => {
                 const isDeduct =
                   row.kind === "single" ? !!row.item.isDeduct : row.isDeduct;
@@ -294,20 +293,23 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                   row.kind === "single"
                     ? () => removeHistoryItem(row.item.id)
                     : () => removeHistoryGroup(row.items.map((it) => it.id));
+                const isBound =
+                  row.kind === "group" ||
+                  (row.kind === "single" && !!row.item.sourceMeasurementId);
                 return (
                   <React.Fragment key={key}>
                     {idx > 0 && (
-                      <span className="text-body font-semibold px-0.5">
+                      <span className="text-xs font-semibold text-muted">
                         {isDeduct ? "−" : "+"}
                       </span>
                     )}
-                    <div
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] ${
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs font-medium ${
                         isDeduct
-                          ? "bg-danger/10 border-danger/25 text-danger"
-                          : idx === 0
-                            ? "bg-surface-muted border-border text-muted"
-                            : "bg-overlay/10 border-border text-body"
+                          ? "bg-surface text-danger"
+                          : isBound
+                            ? "bg-overlay/10 text-body"
+                            : "bg-surface text-body"
                       }`}
                       title={
                         row.kind === "group"
@@ -315,15 +317,17 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                           : undefined
                       }
                     >
-                      <span>{displayValue}</span>
+                      {isBound && <Link2 className="h-3 w-3 shrink-0" strokeWidth={2} />}
+                      <span className="tabular-nums">{displayValue}</span>
                       <button
                         type="button"
+                        aria-label="Remove"
                         onClick={onRemove}
-                        className="opacity-60 hover:opacity-100 cursor-pointer"
+                        className="text-muted hover:text-danger transition-colors cursor-pointer"
                       >
-                        <X className="w-3 h-3" />
+                        <X className="h-3 w-3" />
                       </button>
-                    </div>
+                    </span>
                   </React.Fragment>
                 );
               })}
@@ -331,20 +335,22 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2 min-w-0">
-          <div className="min-w-0 flex items-center gap-1.5 rounded-lg border border-[#D9D9D9] bg-surface px-2.5 py-2 overflow-hidden">
-            <span className="text-[11px] text-muted/70 shrink-0">Qty</span>
-            <span className="flex-1 min-w-0 text-right text-[13px] font-bold text-body tabular-nums truncate">
-              {qty}
-            </span>
-            <span className="text-muted/50 shrink-0 text-[11px]">|</span>
-            <span className="text-[11px] font-medium text-muted shrink-0">
-              {unit === 'm2' ? 'm²' : unit === 'm3' ? 'm³' : unit}
+        <div className="flex items-center gap-2 min-w-0 pt-0.5">
+          <div className="min-w-0 flex flex-1 items-center justify-between gap-2 rounded-md border border-border bg-surface px-2.5 py-1.5 overflow-hidden">
+            <span className="text-xs font-medium text-muted shrink-0">Qty</span>
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="min-w-0 truncate text-right text-sm font-semibold text-body tabular-nums">
+                {qty}
+              </span>
+              <span className="text-muted shrink-0">|</span>
+              <span className="text-xs font-medium text-muted shrink-0">
+                {unit === 'm2' ? 'm²' : unit === 'm3' ? 'm³' : unit}
+              </span>
             </span>
           </div>
-          <div className="min-w-0 flex items-center gap-1 rounded-lg border border-[#D9D9D9] bg-surface px-2.5 py-2 overflow-hidden">
-            <span className="text-[11px] text-muted/70 shrink-0">Rate</span>
-            <span className="text-[13px] font-bold text-body shrink-0">₦</span>
+          <div className="min-w-0 flex flex-1 items-center justify-between gap-2 rounded-md border border-border bg-surface px-2.5 py-1.5 overflow-hidden">
+            <span className="text-xs font-medium text-muted shrink-0">Rate</span>
+            <span className="text-sm font-medium text-muted shrink-0">₦</span>
             <input
               type="text"
               inputMode="decimal"
@@ -366,21 +372,21 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 syncToParent({ rate: formatted });
               }}
               placeholder="0.00"
-              className="flex-1 min-w-0 w-0 text-right text-[13px] font-bold text-body outline-none bg-transparent"
+              className="flex-1 min-w-0 w-0 text-right text-sm text-body outline-none bg-transparent"
             />
           </div>
         </div>
 
         <div className="flex items-center justify-between pt-1">
-          <div className="flex items-center gap-1 text-[11px] font-bold text-muted/70">
-            <span className="opacity-70">Add:</span>
+          <div className="flex items-center gap-2 text-xs font-medium text-muted">
+            <span>Add:</span>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onAddElement?.();
               }}
-              className="underline hover:text-accent transition-colors cursor-pointer"
+              className="hover:text-body transition-colors cursor-pointer"
             >
               Element
             </button>
@@ -390,7 +396,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 e.stopPropagation();
                 onAddItem?.();
               }}
-              className="underline hover:text-accent transition-colors cursor-pointer"
+              className="hover:text-body transition-colors cursor-pointer"
             >
               Item
             </button>
@@ -405,10 +411,10 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 pushHistory([]);
                 onClearPendingMeasured?.();
               }}
-              className="p-1.5 text-muted/70 hover:text-danger transition-colors cursor-pointer"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-surface-muted hover:text-body transition-colors cursor-pointer"
               title="Reset takeoff (clear history)"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
@@ -416,10 +422,10 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 e.stopPropagation();
                 onCopy?.(data?.id || "");
               }}
-              className="p-1.5 text-muted/70 hover:text-accent transition-colors cursor-pointer"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-surface-muted hover:text-body transition-colors cursor-pointer"
               title="Duplicate"
             >
-              <Copy className="w-4 h-4" />
+              <Copy className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
@@ -427,10 +433,10 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 e.stopPropagation();
                 onDelete?.(data?.id || "");
               }}
-              className="p-1.5 text-red-400 hover:text-danger transition-colors cursor-pointer"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-danger/10 hover:text-danger transition-colors cursor-pointer"
               title="Delete"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>

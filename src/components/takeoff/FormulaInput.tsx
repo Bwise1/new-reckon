@@ -34,7 +34,7 @@ const FormulaInput = forwardRef<FormulaInputHandle, FormulaInputProps>(({
   onChange,
   onCommit,
   onFocus: onFocusProp,
-  onToggleMeasure,
+  onToggleMeasure: _onToggleMeasure,
   onModeChange,
   isMeasuring = false,
   placeholder = "Enter formula...",
@@ -151,10 +151,9 @@ const FormulaInput = forwardRef<FormulaInputHandle, FormulaInputProps>(({
         } z-[60]`}
       >
         <FormulaToolbar
+          mode={mode}
           onModeChange={handleModeChange}
           onSymbolClick={handleSymbolClick}
-          onToggleMeasure={onToggleMeasure}
-          isMeasuring={isMeasuring}
         />
       </div>
 
@@ -200,10 +199,10 @@ const FormulaInput = forwardRef<FormulaInputHandle, FormulaInputProps>(({
             onFocusProp?.();
           }}
           placeholder={placeholder}
-          className={`w-full px-4 py-2.5 bg-surface border rounded-xl shadow-sm outline-none transition-all placeholder:text-muted/70 font-medium text-body ${
+          className={`w-full rounded-md border bg-surface px-2.5 py-1.5 font-mono text-sm text-body placeholder:font-sans placeholder:text-muted/70 outline-none transition ${
             !isValid && value.length > 0
               ? "border-danger focus:ring-2 focus:ring-danger/15"
-              : "border-border focus:ring-1 focus:ring-accent/25 focus:border-accent"
+              : "border-border focus:border-accent focus:ring-2 focus:ring-accent/20"
           }`}
         />
 
