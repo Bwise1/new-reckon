@@ -41,12 +41,12 @@ Prereqs: orgs (seats belong to an org) and the accounts service's
 gate features behind a single `useEntitlements()` hook when the time comes so
 paywalls are one hook, not scattered ifs.
 
-## 4. Arc tool (toolbar button — currently disabled)
+## 4. Arc tool — SHIPPED (2026-08-27)
 
-Already designed in session notes: 3-point arc input (start, end, bulge point)
-→ circle through three points → tessellate to ~24 straight points at draw
-time → stored as ordinary `Point[]`. No data-model, sync, or export changes.
-The button flips from disabled to a real tool mode when implemented.
+3-click input (start, end, point on the curve) → circle through three points
+→ tessellated to ~8°/segment at draw time (`src/utils/arcGeometry.ts`) →
+stored as an ordinary polyline. No data-model, sync, or export changes
+were needed, exactly as planned.
 
 ## 5. Preview (Play button — wired)
 
