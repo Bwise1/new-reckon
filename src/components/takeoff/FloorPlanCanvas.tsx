@@ -1012,9 +1012,11 @@ if (!prev && activeTool) {
           page: currentPage,
           type: activeTool,
           color: activeColor,
-          // Apply the toolbar width at creation (see polyline close above).
-          strokeWidth:
-            currentScale != null ? Math.max(activeRealWidth * currentScale, 2) : 2,
+          // Areas always commit hairline. The real-width band is a linear
+          // concept (wall thickness); on an area the boundary stroke is
+          // opaque and drawn half-inward, so at 0.225m x scale it swallows
+          // the translucent fill and small areas render as solid blocks.
+          strokeWidth: 2,
           metadata: {
             createdAt: now,
             lastModified: now,
@@ -1312,9 +1314,8 @@ if (!prev && activeTool) {
         page: currentPage,
         type: activeTool,
         color: activeColor,
-        // Apply the toolbar width at creation (matches the other finish paths).
-        strokeWidth:
-          currentScale != null ? Math.max(activeRealWidth * currentScale, 2) : 2,
+        // Hairline for areas — see the close-at-first-vertex site.
+        strokeWidth: 2,
         metadata: {
           createdAt: now,
           lastModified: now,
