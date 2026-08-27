@@ -48,7 +48,7 @@ const KnownDimensionDialog: React.FC<KnownDimensionDialogProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/40">
       <div className="bg-surface rounded-lg shadow-xl w-full max-w-sm mx-4 p-5">
         <h2 className="text-base font-semibold text-body">Known dimension</h2>
         <p className="mt-1 text-xs text-muted">

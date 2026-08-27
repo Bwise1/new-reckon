@@ -28,9 +28,9 @@ const BoqExportModal: React.FC<BoqExportModalProps> = ({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-scrim/40 p-4">
       <div className="w-full max-w-sm rounded-xl bg-surface shadow-xl p-5">
-        <h3 className="text-base font-bold text-navy-soft mb-4">
+        <h3 className="text-base font-bold text-body mb-4">
           {mode === "preview" ? "Preview BOQ" : "Export BOQ"}
         </h3>
         <div className="space-y-3">
@@ -42,7 +42,7 @@ const BoqExportModal: React.FC<BoqExportModalProps> = ({
                 onClick={() => setFormat("pdf")}
                 className={`flex-1 py-2 text-sm font-semibold rounded-lg border transition ${
                   format === "pdf"
-                    ? "bg-navy-soft text-white border-navy-soft"
+                    ? "bg-accent text-accent-fg border-accent"
                     : "border-border text-muted hover:border-muted/60"
                 }`}
               >
@@ -53,7 +53,7 @@ const BoqExportModal: React.FC<BoqExportModalProps> = ({
                 onClick={() => setFormat("excel")}
                 className={`flex-1 py-2 text-sm font-semibold rounded-lg border transition ${
                   format === "excel"
-                    ? "bg-navy-soft text-white border-navy-soft"
+                    ? "bg-accent text-accent-fg border-accent"
                     : "border-border text-muted hover:border-muted/60"
                 }`}
               >
@@ -99,7 +99,7 @@ const BoqExportModal: React.FC<BoqExportModalProps> = ({
             onClick={() =>
               onConfirm(Number.parseFloat(vat) || 0, Number.parseFloat(contingency) || 0, format)
             }
-            className="px-4 py-2 text-sm rounded-lg bg-navy-soft text-white font-semibold disabled:opacity-50"
+            className="px-4 py-2 text-sm rounded-lg bg-accent text-accent-fg font-semibold hover:bg-accent-strong disabled:opacity-50"
           >
             {busy ? "Working..." : mode === "preview" ? "Preview" : "Export"}
           </button>

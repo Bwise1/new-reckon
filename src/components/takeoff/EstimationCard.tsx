@@ -334,7 +334,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
         <div className="grid grid-cols-2 gap-2 min-w-0">
           <div className="min-w-0 flex items-center gap-1.5 rounded-lg border border-[#D9D9D9] bg-surface px-2.5 py-2 overflow-hidden">
             <span className="text-[11px] text-muted/70 shrink-0">Qty</span>
-            <span className="flex-1 min-w-0 text-right text-[13px] font-bold text-navy-soft tabular-nums truncate">
+            <span className="flex-1 min-w-0 text-right text-[13px] font-bold text-body tabular-nums truncate">
               {qty}
             </span>
             <span className="text-muted/50 shrink-0 text-[11px]">|</span>
@@ -344,7 +344,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
           </div>
           <div className="min-w-0 flex items-center gap-1 rounded-lg border border-[#D9D9D9] bg-surface px-2.5 py-2 overflow-hidden">
             <span className="text-[11px] text-muted/70 shrink-0">Rate</span>
-            <span className="text-[13px] font-bold text-navy-soft shrink-0">₦</span>
+            <span className="text-[13px] font-bold text-body shrink-0">₦</span>
             <input
               type="text"
               inputMode="decimal"
@@ -366,7 +366,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 syncToParent({ rate: formatted });
               }}
               placeholder="0.00"
-              className="flex-1 min-w-0 w-0 text-right text-[13px] font-bold text-navy-soft outline-none bg-transparent"
+              className="flex-1 min-w-0 w-0 text-right text-[13px] font-bold text-body outline-none bg-transparent"
             />
           </div>
         </div>

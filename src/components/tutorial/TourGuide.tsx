@@ -133,14 +133,14 @@ export default function TourGuide({
           }}
         />
       ) : (
-        <div className="absolute inset-0 bg-black/60" />
+        <div className="absolute inset-0 bg-scrim/60" />
       )}
 
       <div
         className="absolute rounded-xl bg-surface p-4 shadow-2xl"
         style={tipStyle}
       >
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-accent">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
           Step {index + 1} of {steps.length}
         </p>
         <h3 className="mt-1 text-base font-bold text-body">{step.title}</h3>
@@ -167,7 +167,7 @@ export default function TourGuide({
             <button
               type="button"
               onClick={next}
-              className="rounded-md bg-navy-soft px-4 py-1.5 text-sm font-semibold text-white hover:bg-[#002847] cursor-pointer"
+              className="rounded-md bg-accent px-4 py-1.5 text-sm font-semibold text-accent-fg hover:bg-accent-strong cursor-pointer"
             >
               {isLast ? 'Got it' : 'Next'}
             </button>

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useProjectTheme } from "@/hooks/useProjectTheme";
 import { UNIT_PRESETS } from "@/types/takeoff";
 
 interface UnitComboboxProps {
@@ -20,6 +21,7 @@ const displayFor = (value: string) =>
  * escapes the Qty box's `overflow-hidden` clipping.
  */
 const UnitCombobox: React.FC<UnitComboboxProps> = ({ value, onChange, className = "" }) => {
+  const { theme: portalTheme } = useProjectTheme();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -108,6 +110,7 @@ const UnitCombobox: React.FC<UnitComboboxProps> = ({ value, onChange, className 
         createPortal(
           <div
             ref={menuRef}
+            data-theme={portalTheme}
             style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 99999 }}
           >
             <ul className="max-h-44 overflow-y-auto rounded-lg border border-border bg-surface shadow-xl">
