@@ -62,12 +62,10 @@ A group with a single member renders as a plain chip — identical to today —
 so nothing changes visually unless the user actually draws multiple shapes
 in one session.
 
-**Decision (recommended: ON by default).** This changes the current
-default of one chip per shape. If it feels wrong in practice, the fallback
-is an explicit toggle ("group sections" chip in the hint pill) — but
-PlanSwift users expect grouping, and the BOQ side already groups by session,
-so default-on keeps the two sides consistent. Escape hatch either way:
-**Split sections** on the pill menu clears sectionGroupId from all members.
+This is ON by default (confirmed with the user 2026-08-27): every session's
+shapes merge into one pill, replacing the old one-chip-per-shape default.
+There is deliberately NO split/ungroup UI — the pill is presented as a
+single measurement, and individual shapes are managed on the canvas.
 
 ## Right-click → New Section (adding to an EXISTING measurement)
 
@@ -89,14 +87,20 @@ type):
 In PlanNavigator's measurement list (inside the existing structured tree —
 NOT flattened):
 
-- Members of a group collapse into one pill: type icon, name, **summed
-  quantity**, small `×N` badge.
-- A chevron expands the pill to per-section rows (value · eye · ✕). Deleting
-  a section re-sums the pill; deleting the last member removes the pill.
-- Pill-level controls: rename (anchor), color, link-to-BOQ, hide (toggles
-  all members), delete-all (confirm), **Split sections**.
-- Hovering the pill highlights every member shape on canvas (existing
+The pill IS a single measurement as far as the user can tell. No `×N`
+badge, no expandable section rows, no "split" menu — the panel never
+exposes a "group" concept. One chip with:
+
+- type icon, name, **summed quantity** — indistinguishable from a
+  single-shape measurement's chip;
+- rename renames it, eye hides ALL its shapes, ✕ deletes ALL its shapes,
+  link links the summed value;
+- hovering it highlights every member shape on canvas (existing
   hover-highlight, fired for each member id).
+
+Individual shapes are managed on the CANVAS only: right-click a shape →
+Delete removes just that shape and the pill re-sums; deleting the last
+shape removes the pill.
 
 ## BOQ linking
 
@@ -120,10 +124,11 @@ summed chip. The two grouping mechanisms compose; no new UI in the BOQ box.
 2. **Session grouping** — session id on tool pick-up/put-down; stamp on
    finish (all four finish paths: dbl-click, Enter, close-at-first-vertex,
    auto-area wand). Small.
-3. **Pill UI** — grouped chips in PlanNavigator with expand/split/delete.
-   Medium (the panel's chip row is already componentized).
+3. **Pill UI** — merge members into one ordinary-looking chip in
+   PlanNavigator (summed value; eye/✕/rename/link act on all members).
+   Small-medium (the chip row is already componentized).
 4. **Context menu** — generalize to all types + New Section targeting +
-   hint pill state. Medium.
+   per-shape Delete + hint pill state. Medium.
 5. Later items above as demand appears.
 
 Gate every push on `npm run build` (tsc -b), not `tsc --noEmit`.
