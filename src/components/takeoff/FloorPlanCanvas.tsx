@@ -2800,10 +2800,12 @@ if (!prev && activeTool) {
                           lineCap="round"
                           listening={false}
                         />
-                        {/* Arc-tessellated polylines mark only their endpoints:
+                        {/* Vertex rings only while selected — matching linear
+                            and area, which don't decorate unselected shapes.
+                            Arc-tessellated polylines mark only their endpoints:
                             a ring on each of the 20-40 interior vertices reads
                             as a caterpillar, not a curve. */}
-                        {(m.arc && displayPoints.length > 2
+                        {isSelected && (m.arc && displayPoints.length > 2
                           ? [displayPoints[0], displayPoints[displayPoints.length - 1]]
                           : displayPoints
                         ).map((p, i) => (
