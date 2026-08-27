@@ -11,7 +11,7 @@ import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useProject } from '@/hooks/useProjects';
 import { useProjectData } from '@/hooks/useProjectData';
 import { ApiError } from '@/lib/api-client';
-import type { TakeoffMode } from '@/types/takeoff';
+import type { DrawTool } from '@/types/takeoff';
 
 const ProjectDetail = () => {
   const { theme: projectTheme } = useProjectTheme();
@@ -118,7 +118,7 @@ const ProjectDetail = () => {
   // project entry already replaces state, so a lingering store between navigations is fine.
 
   const handleSelectTool = useCallback(
-    (type: TakeoffMode) => {
+    (type: DrawTool) => {
       if (activeTool === type) {
         setActiveTool(null);
         return;

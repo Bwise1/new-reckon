@@ -10,6 +10,7 @@ import {
 import { useShallow } from "zustand/react/shallow";
 import { useTakeoffStore } from "@/store/useTakeoffStore";
 import type { Point, Measurement } from "@/types/takeoff";
+import { tessellateArc } from "@/utils/arcGeometry";
 import "@/utils/planMediaLoader";
 import type Konva from "konva";
 import {
@@ -1038,6 +1039,51 @@ if (!prev && activeTool) {
       }
 
       setCurrentPoints([...currentPoints, finalPoint]);
+    } else if (activeTool === "arc") {
+      // 3-click arc: start, end, then a point on the curve. The third click
+      // commits immediately — the tessellated points are stored as an
+      // ordinary polyline, so sync/export/quantity math see nothing new.
+      const effectiveScale = stageScale * (imageScale > 0 ? imageScale : 1);
+      const clickSep = MIN_CLICK_SEPARATION_SCREEN / effectiveScale;
+      if (
+        currentPoints.some((p) => calculateDistance(p, point) < clickSep)
+      ) {
+        return;
+      }
+      const clicks = [...currentPoints, point];
+      if (clicks.length < 3) {
+        setCurrentPoints(clicks);
+        return;
+      }
+      const arcPoints = tessellateArc(clicks[0], clicks[1], clicks[2]);
+      const qty = calculateQuantity(arcPoints, "polyline", currentScale);
+      const chordLen = calculateDistance(clicks[0], clicks[1]);
+      const confidence = currentScale
+        ? Math.min(1.0, chordLen / (currentScale * 10))
+        : 0.5;
+      const measurement: Measurement = {
+        id: generateClientId(),
+        points: arcPoints,
+        quantity: qty,
+        planId: activePlanId,
+        page: currentPage,
+        type: "polyline",
+        color: activeColor,
+        strokeWidth:
+          currentScale != null ? Math.max(activeRealWidth * currentScale, 2) : 2,
+        metadata: {
+          createdAt: now,
+          lastModified: now,
+          confidence: Math.max(0.1, confidence),
+        },
+      };
+      const validation = validateMeasurement(measurement, "polyline");
+      if (validation.isValid) {
+        addMeasurement(canvasItemId, measurement);
+        setCurrentPoints([]);
+      } else {
+        console.warn("Invalid measurement:", validation.error);
+      }
     }
     },
     [
@@ -3406,6 +3452,47 @@ if (!prev && activeTool) {
                     </Group>
                   );
                 })()}
+                  {activeTool === "arc" &&
+                    (() => {
+                      let previewPoint = mousePos;
+                      const snapped = getSnappedPoint(mousePos);
+                      if (snapped) previewPoint = snapped.point;
+                      // One click down: dashed chord to the cursor. Two clicks:
+                      // the arc bends live through the cursor until click 3.
+                      const previewPts =
+                        currentPoints.length === 1
+                          ? [currentPoints[0], previewPoint]
+                          : tessellateArc(
+                              currentPoints[0],
+                              currentPoints[1],
+                              previewPoint
+                            );
+                      const qty = calculateQuantity(
+                        previewPts,
+                        "polyline",
+                        currentScale
+                      );
+                      return (
+                        <Group opacity={0.5}>
+                          <Line
+                            points={previewPts.flatMap((p) => [p.x, p.y])}
+                            stroke={activeColor}
+                            strokeWidth={2 * strokeScale}
+                            dash={[5 * strokeScale, 5 * strokeScale]}
+                          />
+                          <Text
+                            x={previewPoint.x}
+                            y={previewPoint.y}
+                            text={formatDistance(qty)}
+                            fontSize={LABEL_FONT_SIZE * labelScale}
+                            fill={activeColor}
+                            align="center"
+                            verticalAlign="bottom"
+                            offsetY={10 * labelScale}
+                          />
+                        </Group>
+                      );
+                    })()}
               </>
             )}
 
@@ -3727,6 +3814,8 @@ if (!prev && activeTool) {
           text = "Linear — click points, double-click / Enter to finish";
         } else if (activeTool === "area") {
           text = "Area — click points, double-click / Enter to close";
+        } else if (activeTool === "arc") {
+          text = "Arc — click start and end, then a point on the curve";
         } else if (activeTool === "count") {
           text = "Count — click each item, Esc to finish";
         }

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type {
   TakeoffItem,
   TakeoffMode,
+  DrawTool,
   Measurement,
   CalibrationLine,
   EstimationCardData,
@@ -52,7 +53,7 @@ interface TakeoffStore {
   // Takeoff Items
   takeoffItems: TakeoffItem[];
   activeItemId: string | null;
-  activeTool: TakeoffMode | null;
+  activeTool: DrawTool | null;
   activeColor: string;
   activeRealWidth: number;
 
@@ -190,7 +191,7 @@ interface TakeoffStore {
   moveTakeoffItemUp: (id: string) => void;
   moveTakeoffItemDown: (id: string) => void;
   setActiveItemId: (id: string | null) => void;
-  setActiveTool: (tool: TakeoffMode | null) => void;
+  setActiveTool: (tool: DrawTool | null) => void;
   setActiveColor: (color: string) => void;
   setActiveRealWidth: (width: number) => void;
   setFocusedBoqCard: (card: { elementId: string; itemId: string; unit: string } | null) => void;
@@ -1175,7 +1176,7 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     // running total is committed as one chip before switching.
     const target = get().boqTargeting;
     if (target && tool !== null) {
-      const toolUnit = unitForTakeoffMode(tool);
+      const toolUnit = unitForTakeoffMode(tool === 'arc' ? 'polyline' : tool);
       if (toolUnit !== target.unit) {
         get().exitBoqTargeting();
       }
@@ -1494,7 +1495,8 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       return CANVAS_TAKEOFF_ITEM_ID;
     }
 
-    const tool = state.activeTool ?? 'linear';
+    const tool =
+      state.activeTool === 'arc' ? 'polyline' : (state.activeTool ?? 'linear');
     const canvasItem: TakeoffItem = {
       id: CANVAS_TAKEOFF_ITEM_ID,
       name: 'Canvas markups',

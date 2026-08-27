@@ -1,5 +1,9 @@
 export type TakeoffMode = "linear" | "area" | "count" | "polyline";
 
+/** Toolbar drawing modes. "arc" is input-only: the three clicks tessellate
+ *  into an ordinary polyline measurement, so stored types stay TakeoffMode. */
+export type DrawTool = TakeoffMode | "arc";
+
 export interface Point {
   x: number;
   y: number;

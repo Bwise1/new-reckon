@@ -14,7 +14,7 @@ import {
   Maximize,
   Minimize,
 } from 'lucide-react';
-import type { TakeoffMode } from '@/types/takeoff';
+import type { DrawTool } from '@/types/takeoff';
 import { MARKUP_COLORS } from '@/constants/takeoffDesign';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useFullscreen } from '@/hooks/useFullscreen';
@@ -32,7 +32,7 @@ type IconComponent = ComponentType<{ className?: string; strokeWidth?: number }>
 interface CanvasToolbarProps {
   calibrationMode: boolean;
   currentScale: number | null;
-  activeTool: TakeoffMode | null;
+  activeTool: DrawTool | null;
   activeColor: string;
   activeRealWidth: number;
   selectedMeasurementId?: string | null;
@@ -41,7 +41,7 @@ interface CanvasToolbarProps {
   /** Calibration: type the known dimension first, then draw the line. */
   onStartKnownCalibration: () => void;
   onClearScale: () => void;
-  onSelectTool: (type: TakeoffMode) => void;
+  onSelectTool: (type: DrawTool) => void;
   /** Single-click area detection mode (magic wand). */
   autoAreaMode: boolean;
   onToggleAutoArea: () => void;
@@ -166,7 +166,7 @@ function usePortalDropdown() {
 }
 
 const MEASURE_TOOLS: {
-  type: TakeoffMode;
+  type: DrawTool;
   label: string;
   icon: IconComponent;
   activeBg: string;
@@ -189,6 +189,14 @@ const MEASURE_TOOLS: {
     activeBg: 'bg-accent/10',
     activeLabelColor: 'text-accent-strong',
     tooltip: 'Area — click points; double-click or Enter to close. Right-click a finished area to deduct.',
+  },
+  {
+    type: 'arc',
+    label: 'Arc',
+    icon: ArcIcon,
+    activeBg: 'bg-navy-soft/10',
+    activeLabelColor: 'text-navy-soft',
+    tooltip: 'Arc — click start and end points, then a point on the curve.',
   },
   {
     type: 'count',
@@ -336,12 +344,6 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               />
             );
           })}
-          <IconButton
-            icon={ArcIcon}
-            label="Arc"
-            disabled
-            title="Arc — coming soon"
-          />
           <IconButton
             icon={Wand2}
             label="Auto Area"
