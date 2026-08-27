@@ -1241,7 +1241,10 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
 
   setActiveColor: (color) => set({ activeColor: color }),
 
-  setActiveRealWidth: (width) => set({ activeRealWidth: width }),
+  // Clamped: no real-width band is wider than 2m — a runaway value here
+  // renders every line as a sheet-covering ribbon.
+  setActiveRealWidth: (width) =>
+    set({ activeRealWidth: Math.min(Math.max(width, 0), 2) }),
 
   setFocusedBoqCard: (card) => set({ focusedBoqCard: card }),
 

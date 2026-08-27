@@ -254,7 +254,12 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     }
     const parsed = parseFloat(raw);
     if (isFinite(parsed) && parsed >= 0) {
-      onRealWidthChange(parsed);
+      // Construction speaks millimetres: a block wall is "225", not 225m.
+      // Anything over 2 is read as mm; the result clamps to a 2m ceiling so
+      // a typo can never paint the whole sheet as one giant band again.
+      let w = parsed > 2 ? parsed / 1000 : parsed;
+      w = Math.min(w, 2);
+      onRealWidthChange(w);
     } else {
       setWidthInput(widthDisplay(activeRealWidth));
     }
@@ -346,7 +351,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               selectedMeasurementId && currentScale
                 ? 'Edit selected measurement line width'
                 : currentScale
-                  ? 'Line width in metres for walls etc. — empty draws a thin line'
+                  ? 'Wall width — metres, or plain mm (225 = 0.225m). Empty draws a thin line'
                   : 'Calibrate first to use real-world width'
             }
           >
