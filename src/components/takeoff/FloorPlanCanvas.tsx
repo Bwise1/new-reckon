@@ -3833,7 +3833,7 @@ if (!prev && activeTool) {
         let accent = "bg-charcoal/85";
         if (calibrationMode) {
           text = "Calibration — click two points, then enter the real distance";
-          accent = "bg-orange-600/90";
+          accent = "bg-accent/90";
         } else if (deductionTarget && activeTool === "area") {
           text = "Deducting — double-click / Enter to finish, Esc to cancel";
           accent = "bg-danger/90";

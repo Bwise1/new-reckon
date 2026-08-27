@@ -65,14 +65,14 @@ const SyncSegment: React.FC = () => {
   }
   if (pendingCount > 0) {
     return (
-      <span className="inline-flex items-center gap-1 text-warn-strong">
+      <span className="inline-flex items-center gap-1 text-muted">
         <Loader2 className="h-3 w-3 animate-spin" />
         Syncing ({pendingCount})
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-accent-strong">
+    <span className="inline-flex items-center gap-1 text-muted">
       <Check className="h-3 w-3" strokeWidth={2.5} />
       Synced
     </span>
@@ -145,7 +145,7 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
       <Divider />
       <span
         className={`inline-flex items-center gap-1 ${
-          currentScale ? "text-accent-strong" : "text-danger"
+          currentScale ? "text-body" : "text-muted"
         }`}
       >
         {currentScale ? (

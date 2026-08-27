@@ -54,7 +54,7 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
           Line length: {pixelDistance.toFixed(1)} px. Enter the real-world distance this line represents.
         </p>
 
-        <div className="mt-4 flex items-stretch rounded-md border border-border overflow-hidden focus-within:ring-2 focus-within:ring-warn/30">
+        <div className="mt-4 flex items-stretch rounded-md border border-border overflow-hidden focus-within:ring-2 focus-within:ring-accent/30">
           <input
             ref={inputRef}
             type="number"
@@ -97,7 +97,7 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
           <button
             type="button"
             onClick={submit}
-            className="px-3 py-1.5 text-sm rounded-md bg-warn text-white hover:bg-warn-strong font-semibold"
+            className="px-3 py-1.5 text-sm rounded-md bg-accent text-accent-fg hover:bg-accent-strong font-semibold"
           >
             Confirm
           </button>

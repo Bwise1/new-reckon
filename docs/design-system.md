@@ -35,41 +35,56 @@ Fallback stack: `"General Sans", -apple-system, "Segoe UI", Roboto, sans-serif`.
 
 Numbers always get `tabular-nums`.
 
-## 2. Color tokens
+## 2. Color tokens — THE COLOR LAW (updated 2026-08-27 from the prototype)
 
-The prototype is **dark-first with a light flip** — every neutral is a semantic
-token, never a raw gray. Brand hues are reserved for *micro-interactions*
-(status, ticks, destructive), never as chrome fills.
+**One accent, neutral foundation, red exception.** The teal/gold/coral trio is
+gone; the brand blue is the only chromatic color, ~90% of the surface area is
+neutral, and red is the lone functional exception.
 
-### Brand accents (same in both themes)
-
-| Token | Hex | Meaning |
-|---|---|---|
-| `charcoal` | `#0f172a` | darkest brand neutral |
-| `navy-soft` | `#4a7fa8` (dark) / `#003566` (light) | Linear tool hue; Reckon navy |
-| `teal` | `#289693` | accent base |
-| `gold` | `#e9c268` | warn base (matches Reckon `brandGold`) |
-| `coral` | `#fc7750` | danger base |
+**Strict accent restraint** — the brand blue is not decoration. It appears
+ONLY on: (a) primary high-value CTAs (Export, modal submit buttons), (b) the
+active canvas tool, (c) the single active unit pill in a BOQ row, (d) the "on"
+state of a toggle, (e) input focus rings. Everything else — secondary buttons,
+tabs, badges, avatars, progress bars, selected cards, history chips — is
+neutral (`body` / `muted` / `overlay` tints).
 
 ### Semantic tokens
 
 | Token | Dark | Light | Use |
 |---|---|---|---|
+| `accent` / `accent-strong` | `#3b69a9` / `#4c7bc7` (luminous on matte black) | `#1a3865` / `#142c50` | the ONLY chromatic color — see restraint list |
+| `accent-fg` | `#ffffff` | `#ffffff` | text/icon on accent fills |
+| `primary` / `primary-fg` | = accent / `#ffffff` | = accent / `#ffffff` | solid CTAs **are** the accent now (no longer theme-inverted B/W) |
+| `danger` / `danger-strong` | `#ef4444` / `#f87171` | `#ef4444` / `#dc2626` | deletions, warnings, errors ONLY |
+| `warn` / `warn-strong` | = danger | = danger | legacy alias — warnings fold into the red exception |
+| `navy-soft` | = accent | = accent | legacy alias |
 | `ink` | `#18181b` | `#f8fafc` | sidebars, rails, chrome bars |
 | `ink-elevated` | `#232327` | `#eef2f6` | raised chrome (modal header strips) |
 | `canvas` | `#121212` | `#ffffff` | app background behind the sheet |
 | `surface` | `#1e1e1e` | `#ffffff` | cards, modal bodies, dropdowns |
-| `surface-muted` | `#27272a` | `#f1f5f9` | inset fields, quiet fills |
+| `surface-muted` | `#27272a` | `#f8fafc` | inset fields, quiet fills |
 | `border` | `#27272a` | `#e2e8f0` | hairline dividers |
 | `body` | `#f4f4f5` | `#0f172a` | primary text |
 | `muted` | `#a1a1aa` | `#64748b` | secondary text |
 | `overlay` | `#ffffff` | `#0f172a` | hover/active tints **with opacity**: `bg-overlay/5`, `bg-overlay/10`, `border-overlay/10`, `ring-overlay/20` — one class works in both themes |
-| `primary` / `primary-fg` | `#ffffff` / `#18181b` | `#0f172a` / `#ffffff` | solid CTA buttons (theme-inverted) |
-| `accent` / `accent-strong` | teal / `#1f7875` | teal / `#1b6f6c` | success, calibrated, Area tool |
-| `warn` / `warn-strong` | gold / `#c9a050` | `#c9a050` / `#a9813c` | uncalibrated, caution |
-| `danger` / `danger-strong` | coral / `#e35f3a` | `#e35f3a` / `#c24a29` | delete, offline, Count tool |
+| `board` / `board-grid` | `#eaecef` / `#dde1e6` | same | takeoff canvas board + 24px grid — theme-constant |
+| `paper` | `#ffffff` | same | the drawing sheet — a physical page, theme-constant (Konva fills need the literal) |
+| `scrim` | `#000000` | same | modal/dialog backdrop |
+| `charcoal` | `#0f172a` | same | ink for markings on the paper |
 
-Theme switch = `[data-theme="light"]` on the root; tokens flip, classes don't.
+Theme switch = `[data-theme]` on the shell; tokens flip, classes don't.
+Neutralized in the 2026-08-27 sweep: tab underlines (`border-body`), storage
+meters (`bg-overlay/40`), sync/scale status text (`text-muted`/`text-body`),
+bound-measurement chips, history chips. Calibration UI moved from orange to
+accent (it's an active-tool state, not a warning).
+
+### Icon set
+
+All generic UI icons are `lucide-react` line glyphs (the prototype briefly
+tried Heroicons solids and reverted). The domain measurement marks
+(Calibrate, Dimension, Area, Linear, Arc, Count) stay bespoke solid art in
+`ToolIcons.tsx`. Pointer tools use lucide `Hand` / `MousePointer2` / `Magnet`.
+Active tool style is uniform: `bg-accent text-accent-fg` — no per-tool hues.
 
 ## 3. Shape, depth, motion
 

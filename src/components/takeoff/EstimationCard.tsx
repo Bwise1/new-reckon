@@ -233,7 +233,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
       }}
       className={`rounded-[10px] border px-4 pb-4 pt-0 space-y-3 transition-all cursor-pointer overflow-visible ${
         isTargeting
-          ? "border-[#f97316] bg-warn/5 shadow-md ring-2 ring-[#f97316]/40"
+          ? "border-accent bg-accent/5 shadow-md ring-2 ring-accent/40"
           : isActive
           ? "border-accent bg-accent/5 shadow-sm"
           : "border-border bg-surface-muted opacity-55 hover:opacity-80"
@@ -307,7 +307,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                           ? "bg-danger/10 border-danger/25 text-danger"
                           : idx === 0
                             ? "bg-surface-muted border-border text-muted"
-                            : "bg-warn/10 border-warn/25 text-warn-strong"
+                            : "bg-overlay/10 border-border text-body"
                       }`}
                       title={
                         row.kind === "group"
@@ -405,7 +405,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 pushHistory([]);
                 onClearPendingMeasured?.();
               }}
-              className="p-1.5 text-muted/70 hover:text-warn-strong transition-colors cursor-pointer"
+              className="p-1.5 text-muted/70 hover:text-danger transition-colors cursor-pointer"
               title="Reset takeoff (clear history)"
             >
               <RotateCcw className="w-4 h-4" />

@@ -302,7 +302,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
             onClick={() => setActiveTab('plan')}
             className={`-mb-px border-b-2 pb-2.5 font-medium transition-colors cursor-pointer ${
               activeTab === 'plan'
-                ? 'border-accent text-body'
+                ? 'border-body text-body'
                 : 'border-transparent text-muted hover:text-body'
             }`}
           >
@@ -313,7 +313,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
             onClick={() => setActiveTab('history')}
             className={`-mb-px border-b-2 pb-2.5 font-medium transition-colors cursor-pointer ${
               activeTab === 'history'
-                ? 'border-accent text-body'
+                ? 'border-body text-body'
                 : 'border-transparent text-muted hover:text-body'
             }`}
           >
@@ -498,7 +498,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                                       unbindMeasurement(mem.measurementId);
                                     }
                                   }}
-                                  className="flex h-5 w-5 items-center justify-center rounded-md text-warn transition-colors hover:bg-overlay/10 cursor-pointer"
+                                  className="flex h-5 w-5 items-center justify-center rounded-md text-body transition-colors hover:bg-overlay/10 cursor-pointer"
                                   title="Bound to a BOQ line — click to unlink"
                                 >
                                   <Link2 className="h-3 w-3" />
@@ -516,7 +516,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                                       sectionGroupId: entry.sectionGroupId,
                                     });
                                   }}
-                                  className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay/10 hover:text-warn cursor-pointer"
+                                  className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay/10 hover:text-body cursor-pointer"
                                   title="Bind to a BOQ line"
                                 >
                                   <Link2 className="h-3 w-3" />
@@ -581,7 +581,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
             </div>
             <div className="h-1 bg-overlay/10 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all ${storage.percent_used >= 90 ? 'bg-danger' : storage.percent_used >= 70 ? 'bg-warn' : 'bg-brandGold'}`}
+                className={`h-full rounded-full transition-all ${storage.percent_used >= 90 ? 'bg-danger' : 'bg-overlay/40'}`}
                 style={{ width: `${Math.min(storage.percent_used, 100)}%` }}
               />
             </div>
@@ -727,7 +727,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                       }}
                       className="w-full text-left px-3 py-2 text-sm text-body rounded hover:bg-overlay/10 cursor-pointer flex items-center gap-2"
                     >
-                      <span className="text-[10px] font-bold text-warn w-10 shrink-0">
+                      <span className="text-[10px] font-bold text-muted w-10 shrink-0">
                         {opt.elementIndex + 1}·{opt.itemLetter}
                       </span>
                       <span className="flex-1 truncate">{opt.elementTitle}</span>

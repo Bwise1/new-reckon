@@ -38,13 +38,22 @@
  * Rule: new code uses semantic tokens only — no raw grays, no hex literals.
  */
 @theme {
-  /* Brand accents — micro-interactions only (status, ticks, destructive),
-     never chrome fills. */
+  /* ── 1. Brand accent — the ONLY chromatic color (Reckon-Bill color law).
+     Accent appears solely on: primary CTAs, the active canvas tool, the
+     active unit pill, toggle "on" states, and input focus rings. Everything
+     else is neutral; red is the lone functional exception (danger). */
+  --color-accent: #1a3865;
+  --color-accent-strong: #142c50;
+  --color-accent-fg: #ffffff;
+
+  /* Legacy aliases — historical "secondary blue" collapses onto the accent. */
+  --color-navy-soft: var(--color-accent);
+  --color-secondary: var(--color-accent);
+  --color-brandColor: #11253e;
+  --color-brandGold: #e9c268; /* legacy auth/dashboard pages only */
+
+  /* ── 2. Neutral foundation ─────────────────────────────────────────── */
   --color-charcoal: #0f172a;
-  --color-navy-soft: #003566;
-  --color-teal: #289693;
-  --color-gold: #e9c268;
-  --color-coral: #fc7750;
 
   /* Neutral chrome — sidebars, rails, floating panel bars. */
   --color-ink: #f8fafc;
@@ -55,7 +64,7 @@
 
   /* Cards, modal bodies, dropdowns. */
   --color-surface: #ffffff;
-  --color-surface-muted: #f1f5f9;
+  --color-surface-muted: #f8fafc;
 
   /* Hairline dividers. */
   --color-border: #e2e8f0;
@@ -68,25 +77,25 @@
      the theme so one class works in both. */
   --color-overlay: #0f172a;
 
-  /* Solid CTA buttons (theme-inverted). */
-  --color-primary: #0f172a;
+  /* Takeoff canvas board + drawing sheet — a physical page, theme-constant. */
+  --color-board: #eaecef;
+  --color-board-grid: #dde1e6;
+  --color-paper: #ffffff;
+
+  /* Modal / dialog backdrop. */
+  --color-scrim: #000000;
+
+  /* Primary action buttons and primary active states === the accent. */
+  --color-primary: var(--color-accent);
   --color-primary-fg: #ffffff;
 
-  --color-accent: var(--color-teal);
-  --color-accent-strong: #1b6f6c;
+  /* ── 3. Danger — the functional exception, red only ─────────────────── */
+  --color-danger: #ef4444;
+  --color-danger-strong: #dc2626;
 
-  /* Calibration/caution currently orange in Reckon; the prototype's gold
-     family is a phase-3 decision (see docs/design-system.md §6). */
-  --color-warn: #f97316;
-  --color-warn-strong: #ea580c;
-
-  --color-danger: #dc2626;
-  --color-danger-strong: #b91c1c;
-
-  /* Legacy aliases — heavily used; migrate off during the token sweep. */
-  --color-secondary: #003566;
-  --color-brandColor: #11253e;
-  --color-brandGold: #e9c268;
+  /* Legacy alias: "warnings" fold into the red exception per the color law. */
+  --color-warn: var(--color-danger);
+  --color-warn-strong: var(--color-danger-strong);
 
   --font-family-sans: "General Sans", -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -107,23 +116,28 @@
    canvas viewport is paper and stays light in every theme). */
 [data-theme="light"] {
   color-scheme: light;
+  --color-accent: #1a3865;
+  --color-accent-strong: #142c50;
   --color-ink: #f8fafc;
   --color-ink-elevated: #eef2f6;
   --color-canvas: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-muted: #f1f5f9;
+  --color-surface-muted: #f8fafc;
   --color-border: #e2e8f0;
   --color-body: #0f172a;
   --color-muted: #64748b;
   --color-overlay: #0f172a;
-  --color-primary: #0f172a;
+  --color-primary: var(--color-accent);
   --color-primary-fg: #ffffff;
-  --color-accent-strong: #1b6f6c;
-  --color-navy-soft: #003566;
+  --color-danger: #ef4444;
+  --color-danger-strong: #dc2626;
 }
 
-/* Dark theme — inert until a data-theme switch ships (design-system §6 P5). */
+/* Dark theme — the accent brightens to a luminous variant so it stays crisp
+   on matte-black surfaces; board/paper are theme-constant (physical page). */
 [data-theme="dark"] {
+  --color-accent: #3b69a9;
+  --color-accent-strong: #4c7bc7;
   --color-ink: #18181b;
   --color-ink-elevated: #232327;
   --color-canvas: #121212;
@@ -133,10 +147,10 @@
   --color-body: #f4f4f5;
   --color-muted: #a1a1aa;
   --color-overlay: #ffffff;
-  --color-primary: #ffffff;
-  --color-primary-fg: #18181b;
-  --color-accent-strong: #1f7875;
-  --color-navy-soft: #4a7fa8;
+  --color-primary: var(--color-accent);
+  --color-primary-fg: #ffffff;
+  --color-danger: #ef4444;
+  --color-danger-strong: #f87171;
 }
 
 @layer base {

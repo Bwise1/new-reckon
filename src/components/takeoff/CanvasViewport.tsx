@@ -87,13 +87,13 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
       // clamped symmetrically in all directions. With overflow-auto, browser
       // scroll competed with pan and only bounded the bottom, causing the
       // "free up, limited down" asymmetry.
-      className="flex-1 bg-ink-elevated relative overflow-hidden"
+      className="flex-1 bg-board relative overflow-hidden"
       // Prototype graph-paper backdrop: subtle 24px grid behind the floating
       // sheet, tinted from the overlay token so it follows the theme.
       style={{
         backgroundImage:
-          "linear-gradient(color-mix(in srgb, var(--color-overlay) 7%, transparent) 1px, transparent 1px)," +
-          "linear-gradient(90deg, color-mix(in srgb, var(--color-overlay) 7%, transparent) 1px, transparent 1px)",
+          "linear-gradient(var(--color-board-grid) 1px, transparent 1px)," +
+          "linear-gradient(90deg, var(--color-board-grid) 1px, transparent 1px)",
         backgroundSize: "24px 24px",
       }}
     >
@@ -124,7 +124,9 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
               y={0}
               width={stageSize.width}
               height={stageSize.height}
-              fill="white"
+              // Konva fills can't resolve CSS vars — literal --color-paper value
+              // (theme-constant white; the sheet is a physical page).
+              fill="#ffffff"
               shadowColor="black"
               shadowBlur={12}
               shadowOpacity={0.12}

@@ -7,9 +7,6 @@ import {
   Wand2,
   Undo2,
   Redo2,
-  RotateCcw,
-  RotateCw,
-  CopyCheck,
   Trash2,
   Maximize,
   Minimize,
@@ -18,6 +15,7 @@ import type { DrawTool } from '@/types/takeoff';
 import { MARKUP_COLORS } from '@/constants/takeoffDesign';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useFullscreen } from '@/hooks/useFullscreen';
+import RotateMenu from './RotateMenu';
 import { useProjectTheme } from '@/hooks/useProjectTheme';
 import {
   CalibrateIcon,
@@ -95,7 +93,7 @@ function IconButton({
   label,
   active,
   disabled,
-  activeBg = 'bg-overlay/10',
+  activeBg = 'bg-accent text-accent-fg',
   activeLabelColor = 'text-body',
   title,
   onClick,
@@ -169,16 +167,12 @@ const MEASURE_TOOLS: {
   type: DrawTool;
   label: string;
   icon: IconComponent;
-  activeBg: string;
-  activeLabelColor: string;
   tooltip: string;
 }[] = [
   {
     type: 'linear',
     label: 'Linear',
     icon: LinearIcon,
-    activeBg: 'bg-navy-soft/10',
-    activeLabelColor: 'text-navy-soft',
     tooltip:
       'Linear — click points; double-click, Enter, or right-click to finish. Click first point (≥4 pts) to close as area.',
   },
@@ -186,24 +180,18 @@ const MEASURE_TOOLS: {
     type: 'area',
     label: 'Area',
     icon: AreaIcon,
-    activeBg: 'bg-accent/10',
-    activeLabelColor: 'text-accent-strong',
     tooltip: 'Area — click points; double-click or Enter to close. Right-click a finished area to deduct.',
   },
   {
     type: 'arc',
     label: 'Arc',
     icon: ArcIcon,
-    activeBg: 'bg-navy-soft/10',
-    activeLabelColor: 'text-navy-soft',
     tooltip: 'Arc — click start and end points, then a point on the curve.',
   },
   {
     type: 'count',
     label: 'Count',
     icon: CountIcon,
-    activeBg: 'bg-danger/10',
-    activeLabelColor: 'text-danger',
     tooltip: 'Count — click to place count markers.',
   },
 ];
@@ -245,7 +233,6 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
 
   // Rotate applies to the current page, or to every page while the
   // Apply-to-All toggle is on (Reckon-Bill behaviour).
-  const [applyToAll, setApplyToAll] = useState(false);
 
   // Local input state so the field stays editable mid-type.
   const [widthInput, setWidthInput] = useState(Number(activeRealWidth).toFixed(3));
@@ -312,18 +299,10 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               active
               activeBg={
                 calibrationMode
-                  ? 'bg-warn/20 animate-pulse'
-                  : currentScale
-                    ? 'bg-accent/10'
-                    : 'bg-warn/15'
+                  ? 'bg-accent text-accent-fg animate-pulse'
+                  : 'bg-overlay/10 text-body'
               }
-              activeLabelColor={
-                calibrationMode
-                  ? 'text-warn-strong'
-                  : currentScale
-                    ? 'text-accent-strong'
-                    : 'text-warn-strong'
-              }
+              activeLabelColor={calibrationMode ? 'text-accent-strong' : 'text-body'}
               title="Scale / calibration options"
               onClick={toggleCal}
             />
@@ -337,8 +316,6 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                 icon={tool.icon}
                 label={tool.label}
                 active={isActive}
-                activeBg={tool.activeBg}
-                activeLabelColor={tool.activeLabelColor}
                 title={isActive ? `${tool.label} — click again or Done to exit` : tool.tooltip}
                 onClick={() => (isActive ? onFinishTool() : onSelectTool(tool.type))}
               />
@@ -348,8 +325,6 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             icon={Wand2}
             label="Auto Area"
             active={autoAreaMode}
-            activeBg="bg-accent/10"
-            activeLabelColor="text-accent-strong"
             title="Auto area — click once inside a room and its boundary is detected automatically"
             onClick={onToggleAutoArea}
           />
@@ -434,41 +409,29 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         <Divider />
 
         <ToolGroup title="Page">
-          <IconButton
-            icon={RotateCcw}
-            label="Rotate Left"
-            title={applyToAll ? 'Rotate every page left' : 'Rotate this page left'}
-            onClick={() => (applyToAll ? onRotateAllCCW() : onRotateCCW())}
+          <RotateMenu
+            portalTheme={portalTheme}
+            onRotate={(direction, scope) => {
+              if (scope === 'all') {
+                if (direction === 'left') onRotateAllCCW();
+                else onRotateAllCW();
+              } else if (direction === 'left') {
+                onRotateCCW();
+              } else {
+                onRotateCW();
+              }
+            }}
           />
-          <IconButton
-            icon={RotateCw}
-            label="Rotate Right"
-            title={applyToAll ? 'Rotate every page right' : 'Rotate this page right'}
-            onClick={() => (applyToAll ? onRotateAllCW() : onRotateCW())}
-          />
-          <IconButton
-            icon={CopyCheck}
-            label="Apply to All"
-            active={applyToAll}
-            activeBg="bg-accent text-white"
-            activeLabelColor="text-accent-strong"
-            title="When on, rotations apply to every page of the plan"
-            onClick={() => setApplyToAll((prev) => !prev)}
-          />
+          {fullscreen.supported && (
+            <IconButton
+              icon={fullscreen.isFullscreen ? Minimize : Maximize}
+              label="Full Screen"
+              active={fullscreen.isFullscreen}
+              activeBg="bg-overlay/10 text-body"
+              onClick={fullscreen.toggle}
+            />
+          )}
         </ToolGroup>
-
-        {fullscreen.supported && (
-          <>
-            <Divider />
-            <ToolGroup title="View">
-              <IconButton
-                icon={fullscreen.isFullscreen ? Minimize : Maximize}
-                label={fullscreen.isFullscreen ? 'Exit' : 'Full screen'}
-                onClick={fullscreen.toggle}
-              />
-            </ToolGroup>
-          </>
-        )}
       </div>
 
       {/* Scale / calibration menu */}

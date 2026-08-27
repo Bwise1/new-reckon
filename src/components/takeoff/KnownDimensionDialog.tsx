@@ -57,7 +57,7 @@ const KnownDimensionDialog: React.FC<KnownDimensionDialogProps> = ({
           distance on the plan and the scale is set automatically.
         </p>
 
-        <div className="mt-4 flex items-stretch rounded-md border border-border overflow-hidden focus-within:ring-2 focus-within:ring-warn/30">
+        <div className="mt-4 flex items-stretch rounded-md border border-border overflow-hidden focus-within:ring-2 focus-within:ring-accent/30">
           <input
             ref={inputRef}
             type="number"
