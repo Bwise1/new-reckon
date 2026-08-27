@@ -48,6 +48,13 @@ paywalls are one hook, not scattered ifs.
 stored as an ordinary polyline. No data-model, sync, or export changes
 were needed, exactly as planned.
 
+## 4b. Measurement sections (PlanSwift-style) — PLANNED
+
+One pill per measuring session, quantity summed across sections; right-click
+→ New Section adds to an existing measurement. Full design in
+`docs/measurement-sections.md`. No server change (sectionGroupId rides the
+sync metadata blob like name/seq/arc).
+
 ## 5. Preview (Play button — wired)
 
 Done: opens the existing BOQ preview flow (server-rendered document, no
