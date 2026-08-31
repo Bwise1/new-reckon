@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import {
   Hand,
   MousePointer2,
-  Magnet,
   Wand2,
   Undo2,
   Redo2,
@@ -55,8 +54,6 @@ interface CanvasToolbarProps {
   onTogglePan: () => void;
   isSelectMode: boolean;
   onToggleSelect: () => void;
-  snapEnabled: boolean;
-  onToggleSnap: () => void;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
@@ -94,7 +91,8 @@ function IconButton({
   active,
   disabled,
   activeBg = 'bg-accent text-accent-fg',
-  activeLabelColor = 'text-body',
+  activeLabelColor = '',
+  iconScale,
   title,
   onClick,
 }: {
@@ -104,6 +102,9 @@ function IconButton({
   disabled?: boolean;
   activeBg?: string;
   activeLabelColor?: string;
+  /** Per-tool glyph size for optical balance; every icon still sits in the
+   *  shared 24px box (prototype metric system). */
+  iconScale?: string;
   title?: string;
   onClick?: () => void;
 }) {
@@ -115,18 +116,16 @@ function IconButton({
       disabled={disabled}
       title={title ?? label}
       onClick={onClick}
-      className="flex flex-col items-center gap-[2px] rounded-lg px-1 py-0.5 disabled:opacity-35 disabled:cursor-default cursor-pointer"
+      className={`flex flex-col items-center gap-1 rounded-lg px-2 py-1.5 transition-colors disabled:opacity-35 disabled:cursor-default cursor-pointer ${
+        active ? activeBg : 'text-muted hover:bg-overlay/10 hover:text-body'
+      }`}
     >
-      <span
-        className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
-          active ? activeBg : 'text-muted hover:bg-overlay/10'
-        }`}
-      >
-        <Icon className="h-4 w-4" strokeWidth={1.5} />
+      <span className="flex h-6 w-6 items-center justify-center">
+        <Icon className={iconScale ?? DEFAULT_ICON_SCALE} />
       </span>
       <span
-        className={`whitespace-nowrap text-[9.5px] font-medium leading-none ${
-          active ? activeLabelColor : 'text-muted'
+        className={`whitespace-nowrap text-[10px] font-medium leading-none ${
+          active ? activeLabelColor : ''
         }`}
       >
         {label}
@@ -163,16 +162,24 @@ function usePortalDropdown() {
   return { open, setOpen, toggle, triggerRef, menuRef, pos };
 }
 
+/** Prototype icon metric system: every glyph sits in a 24px box. Measure
+ *  marks run larger (primary drawing tools); lucide line icons 5% smaller;
+ *  Linear and Count carry per-glyph optical corrections. */
+const DEFAULT_ICON_SCALE = 'h-[17.1px] w-[17.1px]';
+const MEASURE_ICON_SCALE = 'h-[21.78px] w-[21.78px]';
+
 const MEASURE_TOOLS: {
   type: DrawTool;
   label: string;
   icon: IconComponent;
+  iconScale?: string;
   tooltip: string;
 }[] = [
   {
     type: 'linear',
     label: 'Linear',
     icon: LinearIcon,
+    iconScale: 'h-[23.96px] w-[23.96px]',
     tooltip:
       'Linear — click points; double-click, Enter, or right-click to finish. Click first point (≥4 pts) to close as area.',
   },
@@ -192,6 +199,7 @@ const MEASURE_TOOLS: {
     type: 'count',
     label: 'Count',
     icon: CountIcon,
+    iconScale: 'h-[23.43px] w-[23.43px]',
     tooltip: 'Count — click to place count markers.',
   },
 ];
@@ -219,8 +227,6 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onTogglePan,
   isSelectMode,
   onToggleSelect,
-  snapEnabled,
-  onToggleSnap,
   onUndo,
   onRedo,
   canUndo,
@@ -278,20 +284,13 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     <div className="shrink-0 flex w-full overflow-x-auto bg-surface border-b border-border z-10 h-[92px]">
       <div className="flex items-center gap-1.5 mx-auto px-3">
         <ToolGroup title="Pointer">
-          <IconButton icon={Hand} label="Pan" active={isPanningMode} onClick={onTogglePan} />
           <IconButton
             icon={MousePointer2}
             label="Select"
             active={isSelectMode}
             onClick={onToggleSelect}
           />
-          <IconButton
-            icon={Magnet}
-            label="Snap"
-            active={snapEnabled}
-            onClick={onToggleSnap}
-            title={snapEnabled ? 'Snap: on' : 'Snap: off'}
-          />
+          <IconButton icon={Hand} label="Pan" active={isPanningMode} onClick={onTogglePan} />
         </ToolGroup>
 
         <Divider />
@@ -301,6 +300,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             <IconButton
               icon={CalibrateIcon}
               label={calibrationMode ? 'Calibrating…' : 'Scale'}
+              iconScale={MEASURE_ICON_SCALE}
               active
               activeBg={
                 calibrationMode
@@ -320,6 +320,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                 key={tool.type}
                 icon={tool.icon}
                 label={tool.label}
+                iconScale={tool.iconScale ?? MEASURE_ICON_SCALE}
                 active={isActive}
                 title={isActive ? `${tool.label} — click again or Done to exit` : tool.tooltip}
                 onClick={() => (isActive ? onFinishTool() : onSelectTool(tool.type))}

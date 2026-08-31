@@ -41,6 +41,8 @@ interface UseCanvasInteractionsParams {
     vertex: boolean;
     perpendicular: boolean;
     intersection: boolean;
+    /** Snap to vector lines detected in the underlying PDF. */
+    pdfSnap: boolean;
   };
 }
 
@@ -167,7 +169,7 @@ export const useCanvasInteractions = ({
       // PDF segments are in PDF user-space pt (scale=1). Mouse `point` is in
       // display-bitmap px = pt × displayScale (pdfSpaceScale), NOT × imageScale
       // — dividing by imageScale only worked when the two happened to be equal.
-      if (snapSettings.vertex && pdfSegmentIndexRef?.current) {
+      if (snapSettings.pdfSnap && pdfSegmentIndexRef?.current) {
         const spaceScale = pdfSpaceScale && pdfSpaceScale > 0 ? pdfSpaceScale : 1;
         const rotation = pdfRotation ?? 0;
         const unrotW = pdfUnrotatedSize?.width ?? 0;

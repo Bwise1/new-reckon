@@ -3,7 +3,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Check,
-  AlertCircle,
   Loader2,
   WifiOff,
   ZoomIn,
@@ -25,11 +24,20 @@ interface CanvasStatusBarProps {
   onFit: () => void;
   autoScrollEnabled: boolean;
   onToggleAutoScroll: () => void;
+  pdfSnapEnabled: boolean;
+  onTogglePdfSnap: () => void;
+  autoSnapEnabled: boolean;
+  onToggleAutoSnap: () => void;
+  crosshairEnabled: boolean;
+  onToggleCrosshair: () => void;
+  /** Start draw-first calibration (clicking the scale readout). */
+  onCalibrateClick: () => void;
   /** Cursor position in display-bitmap px (image space), or null when outside. */
   mousePos: Point | null;
 }
 
-/** zz-style compact toggle chip: `Label : On`. */
+/** Prototype snap toggle: borderless `Label: On` switch, fixed-width value
+ *  so the bar never reflows as toggles flip. */
 const ToggleChip: React.FC<{
   label: string;
   on: boolean;
@@ -38,15 +46,18 @@ const ToggleChip: React.FC<{
 }> = ({ label, on, onClick, title }) => (
   <button
     type="button"
+    role="switch"
+    aria-checked={on}
     onClick={onClick}
     title={title}
-    className={`px-1.5 py-0.5 rounded border text-[11px] font-medium transition-colors cursor-pointer ${
-      on
-        ? "border-border bg-surface-muted text-body"
-        : "border-border bg-surface text-muted/70 hover:text-body"
-    }`}
+    className={`flex items-center gap-1 rounded-md px-2 py-1 font-medium transition-colors cursor-pointer ${
+      on ? "text-body" : "text-muted"
+    } hover:bg-overlay/10 hover:text-body`}
   >
-    {label} : {on ? "On" : "Off"}
+    <span>{label}:</span>
+    <span className="w-7 text-left font-semibold tabular-nums">
+      {on ? "On" : "Off"}
+    </span>
   </button>
 );
 
@@ -95,6 +106,13 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
   onFit,
   autoScrollEnabled,
   onToggleAutoScroll,
+  pdfSnapEnabled,
+  onTogglePdfSnap,
+  autoSnapEnabled,
+  onToggleAutoSnap,
+  crosshairEnabled,
+  onToggleCrosshair,
+  onCalibrateClick,
   mousePos,
 }) => {
   const scaleText = currentScale ? `1m : ${currentScale.toFixed(1)}px` : "Not Scaled";
@@ -105,7 +123,7 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
     : "X: –, Y: –";
 
   return (
-    <div className="shrink-0 flex flex-nowrap items-center gap-2.5 overflow-hidden whitespace-nowrap border-t border-border bg-surface px-3 py-1 text-[11px] font-medium text-muted select-none">
+    <div className="shrink-0 flex flex-nowrap items-center gap-3 overflow-hidden whitespace-nowrap border-t border-border bg-ink px-4 py-1.5 text-xs font-medium text-muted select-none">
       {/* Page navigation */}
       <div className="flex items-center gap-0.5">
         <button
@@ -143,31 +161,49 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
       )}
 
       <Divider />
-      <span
-        className={`inline-flex items-center gap-1 ${
+      <button
+        type="button"
+        onClick={onCalibrateClick}
+        title={currentScale ? "Recalibrate this page" : "Calibrate this page"}
+        className={`shrink-0 hover:underline cursor-pointer ${
           currentScale ? "text-body" : "text-muted"
         }`}
       >
-        {currentScale ? (
-          <Check className="h-3 w-3" strokeWidth={2.5} />
-        ) : (
-          <AlertCircle className="h-3 w-3" />
-        )}
         {scaleText}
-      </span>
+      </button>
 
       <Divider />
       <SyncSegment />
 
       <span className="flex-1" />
 
-      {/* Drafting toggles, zz-style */}
-      <ToggleChip
-        label="Auto Scroll"
-        on={autoScrollEnabled}
-        onClick={onToggleAutoScroll}
-        title="Pan the sheet automatically when the cursor reaches the edge while measuring"
-      />
+      {/* Canvas assists — snapping, scrolling, guides (prototype status bar) */}
+      <div className="flex shrink-0 items-center gap-0.5">
+        <ToggleChip
+          label="PDF Snap"
+          on={pdfSnapEnabled}
+          onClick={onTogglePdfSnap}
+          title="Snap new points to lines detected in the underlying drawing"
+        />
+        <ToggleChip
+          label="Auto Snap"
+          on={autoSnapEnabled}
+          onClick={onToggleAutoSnap}
+          title="Snap to your own measurements — vertices, perpendiculars, intersections"
+        />
+        <ToggleChip
+          label="Auto Scroll"
+          on={autoScrollEnabled}
+          onClick={onToggleAutoScroll}
+          title="Pan the sheet automatically when the cursor reaches the edge while measuring"
+        />
+        <ToggleChip
+          label="Crosshair"
+          on={crosshairEnabled}
+          onClick={onToggleCrosshair}
+          title="Full-height drawing crosshair while a tool is active"
+        />
+      </div>
 
       <Divider />
 
@@ -207,7 +243,7 @@ const CanvasStatusBar: React.FC<CanvasStatusBarProps> = ({
 
       <Divider />
 
-      <span className="hidden lg:block tabular-nums min-w-32 text-right">{cursorText}</span>
+      <span className="hidden w-[140px] shrink-0 overflow-hidden lg:block tabular-nums text-right">{cursorText}</span>
     </div>
   );
 };

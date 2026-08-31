@@ -201,7 +201,18 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     scales,
     currentPage,
   });
-  const [snapEnabled, setSnapEnabled] = useState(true);
+  // Snapping split per the prototype's status bar: PDF Snap follows the
+  // drawing's vector geometry; Auto Snap follows Reckon's own measurements
+  // (vertices, perpendiculars, intersections). Both persisted per browser.
+  const [pdfSnapEnabled, setPdfSnapEnabled] = useState(() => {
+    try { return localStorage.getItem("reckon_pdfsnap") !== "0"; } catch { return true; }
+  });
+  const [autoSnapEnabled, setAutoSnapEnabled] = useState(() => {
+    try { return localStorage.getItem("reckon_autosnap") !== "0"; } catch { return true; }
+  });
+  const [crosshairEnabled, setCrosshairEnabled] = useState(() => {
+    try { return localStorage.getItem("reckon_crosshair") !== "0"; } catch { return true; }
+  });
   // Single-click area detection ("magic wand"): while on, a click with the
   // area tool runs flood-fill room detection instead of placing a vertex.
   const [autoAreaMode, setAutoAreaMode] = useState(false);
@@ -293,11 +304,12 @@ if (!prev && activeTool) {
   const confirm = useConfirm();
   const snapSettings = useMemo(
     () => ({
-      vertex: snapEnabled,
-      perpendicular: snapEnabled,
-      intersection: snapEnabled,
+      vertex: autoSnapEnabled,
+      perpendicular: autoSnapEnabled,
+      intersection: autoSnapEnabled,
+      pdfSnap: pdfSnapEnabled,
     }),
-    [snapEnabled]
+    [autoSnapEnabled, pdfSnapEnabled]
   );
   const [pendingCalibration, setPendingCalibration] = useState<
     { p1: Point; p2: Point } | null
@@ -606,8 +618,23 @@ if (!prev && activeTool) {
     });
   }, [containerRef, selectedMeasurementShape, setStagePos, setStageScale, imageScale]);
 
-  const handleToggleSnap = useCallback(() => {
-    setSnapEnabled((prev) => !prev);
+  const togglePdfSnap = useCallback(() => {
+    setPdfSnapEnabled((on) => {
+      try { localStorage.setItem("reckon_pdfsnap", on ? "0" : "1"); } catch { /* ignore */ }
+      return !on;
+    });
+  }, []);
+  const toggleAutoSnap = useCallback(() => {
+    setAutoSnapEnabled((on) => {
+      try { localStorage.setItem("reckon_autosnap", on ? "0" : "1"); } catch { /* ignore */ }
+      return !on;
+    });
+  }, []);
+  const toggleCrosshair = useCallback(() => {
+    setCrosshairEnabled((on) => {
+      try { localStorage.setItem("reckon_crosshair", on ? "0" : "1"); } catch { /* ignore */ }
+      return !on;
+    });
   }, []);
 
   // Handle canvas click
@@ -2357,8 +2384,6 @@ if (!prev && activeTool) {
             setCurrentPoints([]);
           }
         }}
-        snapEnabled={snapEnabled}
-        onToggleSnap={handleToggleSnap}
         onUndo={undo}
         onRedo={redo}
         canUndo={canUndo}
@@ -3666,7 +3691,7 @@ if (!prev && activeTool) {
             {/* Custom on-canvas crosshair — replaces the OS pointer while a drawing
                 tool is active so the native cursor never covers the line endpoint.
                 Position follows Shift-lock and endpoint snapping to match commit. */}
-            {mousePos && !isPanningMode && (activeTool || calibrationMode) && (() => {
+            {crosshairEnabled && mousePos && !isPanningMode && (activeTool || calibrationMode) && (() => {
               let cx = mousePos.x;
               let cy = mousePos.y;
               const lastPoint =
@@ -3825,6 +3850,22 @@ if (!prev && activeTool) {
         onFit={() => refitToView(image)}
         autoScrollEnabled={autoScrollEnabled}
         onToggleAutoScroll={handleToggleAutoScroll}
+        pdfSnapEnabled={pdfSnapEnabled}
+        onTogglePdfSnap={togglePdfSnap}
+        autoSnapEnabled={autoSnapEnabled}
+        onToggleAutoSnap={toggleAutoSnap}
+        crosshairEnabled={crosshairEnabled}
+        onToggleCrosshair={toggleCrosshair}
+        onCalibrateClick={() => {
+          setCalibrationMode(true);
+          setKnownCalibration(null);
+          setCalibrationPoint1(null);
+          setPendingCalibration(null);
+          setIsPanningMode(false);
+          setIsSelectMode(false);
+          setActiveTool(null);
+          setCurrentPoints([]);
+        }}
         mousePos={mousePos}
       />
       {(() => {

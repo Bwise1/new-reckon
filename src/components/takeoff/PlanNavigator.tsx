@@ -2,7 +2,6 @@ import React, { useMemo, useRef, useState } from 'react';
 import { ChevronRight, Eye, EyeOff, FileText, Link2, Moon, Sun, Trash2, UploadCloud, X } from 'lucide-react';
 import PanelEdgeToggle from './PanelEdgeToggle';
 import { useProjectTheme } from '@/hooks/useProjectTheme';
-import { AreaIcon, LinearIcon, CountIcon } from './icons/ToolIcons';
 import type { PlanDiscipline, TakeoffItem, TakeoffMode, ProjectPlan } from '@/types/takeoff';
 import {
   getMeasurementColor,
@@ -421,27 +420,21 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                           entry.type === 'count'
                             ? String(Math.round(entry.quantity))
                             : entry.quantity.toFixed(2);
-                        const TypeIcon =
-                          entry.type === 'area'
-                            ? AreaIcon
-                            : entry.type === 'count'
-                              ? CountIcon
-                              : LinearIcon;
                         return (
                           <div
                             key={entry.measurementId}
-                            className="group flex items-center gap-2 rounded-lg border border-overlay/5 bg-overlay/5 px-2.5 py-2 hover:bg-overlay/10 transition-colors cursor-pointer"
+                            className="group flex items-center gap-2.5 rounded-lg border border-border bg-overlay/5 px-3 py-2.5 hover:bg-overlay/10 transition-colors cursor-pointer"
                             onClick={() =>
                               onSelectMeasurement(entry.itemId, entry.measurementId)
                             }
                           >
                             <span
-                              className={`flex h-4 w-4 shrink-0 items-center justify-center ${
+                              className={`h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-overlay/15 transition-opacity ${
                                 entry.hidden ? 'opacity-40' : ''
                               }`}
-                            >
-                              <TypeIcon className="h-4 w-4" />
-                            </span>
+                              style={{ backgroundColor: entry.color }}
+                              title="Markup color"
+                            />
                             {/* Always-editable name (prototype pattern): click
                                 and type; commits on blur/Enter, Escape reverts.
                                 Keyed on the label so external renames re-seed. */}
@@ -474,11 +467,7 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
                                 entry.hidden ? 'text-muted' : 'text-body'
                               }`}
                             />
-                            <span
-                              className="h-2 w-2 rounded-full shrink-0"
-                              style={{ backgroundColor: entry.color }}
-                              title="Markup color"
-                            />
+
                             <span
                               className={`shrink-0 whitespace-nowrap text-[10px] font-medium tabular-nums ${
                                 entry.hidden ? 'text-muted/50' : 'text-muted'
