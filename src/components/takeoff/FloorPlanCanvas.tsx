@@ -26,6 +26,7 @@ import { useCanvasMedia } from "@/components/takeoff/hooks/useCanvasMedia";
 import { useCanvasInteractions } from "@/components/takeoff/hooks/useCanvasInteractions";
 import CanvasToolbar from "@/components/takeoff/CanvasToolbar";
 import CalibrationDialog from "@/components/takeoff/CalibrationDialog";
+import { createPortal } from "react-dom";
 import CanvasStatusBar from "@/components/takeoff/CanvasStatusBar";
 import KnownDimensionDialog from "@/components/takeoff/KnownDimensionDialog";
 import CanvasViewport from "@/components/takeoff/CanvasViewport";
@@ -204,6 +205,13 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   // Snapping split per the prototype's status bar: PDF Snap follows the
   // drawing's vector geometry; Auto Snap follows Reckon's own measurements
   // (vertices, perpendiculars, intersections). Both persisted per browser.
+  // The status bar renders through a portal into the shell's full-width slot
+  // (prototype "base" layout) while its state stays in this component.
+  const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setStatusSlot(document.getElementById("reckon-status-slot"));
+  }, []);
+
   const [pdfSnapEnabled, setPdfSnapEnabled] = useState(() => {
     try { return localStorage.getItem("reckon_pdfsnap") !== "0"; } catch { return true; }
   });
@@ -3839,7 +3847,9 @@ if (!prev && activeTool) {
       {/* Pointer/snap/undo controls now live in the top toolbar (Reckon-Bill
           layout); the floating pill is gone. */}
 
-      <CanvasStatusBar
+      {statusSlot &&
+        createPortal(
+          <CanvasStatusBar
         numPages={numPages}
         currentPage={currentPage}
         onChangePage={changePage}
@@ -3867,7 +3877,9 @@ if (!prev && activeTool) {
           setCurrentPoints([]);
         }}
         mousePos={mousePos}
-      />
+      />,
+          statusSlot
+        )}
       {(() => {
         // Slim status pill — top-center of viewport. Only appears when a
         // tool that benefits from hints is armed (linear / area / deduction).

@@ -259,7 +259,12 @@ const ProjectDetail = () => {
     // The project shell runs the prototype token set — dark by default, the
     // sun/moon toggle in the sidebar flips it. The canvas viewport re-scopes
     // itself light regardless: the sheet is paper, not chrome.
-    <div data-theme={projectTheme} className="relative flex h-screen bg-ink text-body overflow-hidden">
+    // Column shell: the panels row on top, and the status bar as the full-
+    // width "base" underneath EVERYTHING (rail included) — prototype layout.
+    // FloorPlanCanvas portals its CanvasStatusBar into the slot below so all
+    // canvas state wiring stays where it lives.
+    <div data-theme={projectTheme} className="relative flex h-screen flex-col bg-ink text-body overflow-hidden">
+    <div className="flex flex-1 min-h-0 overflow-hidden">
       {!isPlanReady && (
         <div className="absolute inset-0 z-[100] flex items-center justify-center bg-ink">
           <div className="rounded-lg bg-surface px-5 py-4 shadow-lg border border-border text-center">
@@ -298,6 +303,10 @@ const ProjectDetail = () => {
       </div>
 
       <TakeoffRightSidebar />
+    </div>
+
+      {/* Full-width status-bar slot — filled by FloorPlanCanvas via portal. */}
+      <div id="reckon-status-slot" className="shrink-0" />
 
       {/* First-run walkthrough + Help button to replay it. */}
       <TakeoffTour />
