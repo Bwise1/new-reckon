@@ -11,9 +11,11 @@ import type { AuthResponse, LoginRequest, SignupRequest, VerifyEmailRequest } fr
  * reckon_api from the same build, and rolling back is a config change rather
  * than a redeploy.
  *
- * Only LOGIN moves. Registration, email verification, password reset, Google
- * and Apple all still go to Reckon Bill — social sign-in has not been ported
- * to accounts yet, so pointing it there would break it.
+ * Only LOGIN moves. Registration, email verification and password reset still
+ * go to Reckon Bill. The accounts service does expose /auth/google and
+ * /auth/apple, but no client uses them yet: a brand-new social sign-up there
+ * gets an account with no reckon-bill product link, so it cannot reach the
+ * Bill API until accounts can provision (or lazily link) a Bill user.
  */
 const AUTH_URL = import.meta.env.VITE_AUTH_URL || null;
 
