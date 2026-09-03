@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, MessageCircle, Send, Trash2, X } from 'lucide-react';
-import type { CommentEntry } from '@/types/comments';
+import { Check, MessageCircle, Trash2, X } from 'lucide-react';
+import { splitMentions, type CommentEntry, type CommentMember } from '@/types/comments';
+import MentionInput from './MentionInput';
 
 export const COMMENT_POPOVER_WIDTH = 340;
 export const COMMENT_POPOVER_HEIGHT = 420;
@@ -14,9 +15,10 @@ type Props = {
   anchorRect: DOMRect;
   portalTheme: string;
   currentUserId: number | null;
+  members: CommentMember[];
   onClose: () => void;
   onResolve: () => void;
-  onSend: (message: string) => void;
+  onSend: (message: string, mentions: number[]) => void;
   onDelete: (clientUuid: string) => void;
 };
 
@@ -45,15 +47,14 @@ export default function CommentPopover({
   anchorRect,
   portalTheme,
   currentUserId,
+  members,
   onClose,
   onResolve,
   onSend,
   onDelete,
 }: Props) {
-  const [draft, setDraft] = useState('');
   const popoverRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // Open to the left of the trigger (the sidebar is on the right edge), and
   // clamp so the popover never leaves the viewport.
@@ -86,16 +87,6 @@ export default function CommentPopover({
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [comments.length]);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  const submit = () => {
-    const value = draft.trim();
-    if (!value) return;
-    onSend(value);
-    setDraft('');
-  };
 
   return createPortal(
     <div
@@ -179,7 +170,20 @@ export default function CommentPopover({
                   )}
                 </div>
                 <div className="mt-1 whitespace-pre-wrap break-words rounded-lg rounded-tl-sm bg-surface-muted px-2.5 py-1.5 text-xs text-body">
-                  {comment.body}
+                  {splitMentions(comment.body).map((part, i) =>
+                    part.type === 'mention' ? (
+                      <span
+                        key={i}
+                        className={`rounded px-1 font-medium ${
+                          part.userId === currentUserId ? 'bg-accent/15 text-accent' : 'bg-overlay/10 text-body'
+                        }`}
+                      >
+                        {part.text}
+                      </span>
+                    ) : (
+                      <span key={i}>{part.text}</span>
+                    )
+                  )}
                 </div>
               </div>
             </div>
@@ -188,30 +192,14 @@ export default function CommentPopover({
       </div>
 
       <div className="border-t border-border px-3 py-2.5">
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-2.5 py-1.5 transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
-          <input
-            ref={inputRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                submit();
-              }
-            }}
-            placeholder={comments.length === 0 ? 'Add a comment… Press Enter' : 'Type a reply… Press Enter'}
-            className="min-w-0 flex-1 bg-transparent text-xs text-body outline-none placeholder:text-muted"
-          />
-          <button
-            type="button"
-            aria-label="Send comment"
-            onClick={submit}
-            disabled={!draft.trim()}
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-body transition-colors hover:bg-overlay/10 disabled:text-muted disabled:hover:bg-transparent cursor-pointer"
-          >
-            <Send className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <MentionInput
+          members={members}
+          autoFocus
+          placeholder={
+            comments.length === 0 ? 'Add a comment… @ to mention, Enter to post' : 'Type a reply… @ to mention, Enter to post'
+          }
+          onSubmit={onSend}
+        />
       </div>
     </div>,
     document.body

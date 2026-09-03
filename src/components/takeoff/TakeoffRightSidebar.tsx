@@ -54,6 +54,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
   const addComment = useCommentsStore((s) => s.addComment);
   const setCommentResolved = useCommentsStore((s) => s.setResolved);
   const deleteComment = useCommentsStore((s) => s.deleteComment);
+  const commentMembers = useCommentsStore((s) => s.members);
   const { data: profileResponse } = useProfile();
   const profile = profileResponse?.data?.user;
   const { theme: portalTheme } = useProjectTheme();
@@ -482,6 +483,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
           anchorRect={openComment.rect}
           portalTheme={portalTheme}
           currentUserId={currentUserId}
+          members={commentMembers}
           onClose={() => setOpenComment(null)}
           onResolve={() =>
             setCommentResolved(
@@ -490,7 +492,9 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
               threadOf(openComment.kind, openComment.id)?.status !== "resolved"
             )
           }
-          onSend={(message) => addComment(openComment.kind, openComment.id, message, commentAuthor())}
+          onSend={(message, mentions) =>
+            addComment(openComment.kind, openComment.id, message, commentAuthor(), mentions)
+          }
           onDelete={(uuid) => deleteComment(openComment.kind, openComment.id, uuid)}
         />
       )}

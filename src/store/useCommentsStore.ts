@@ -6,6 +6,7 @@ import {
   type CommentAnchorKind,
   type CommentAuthor,
   type CommentEntry,
+  type CommentMember,
   type CommentThread,
 } from '@/types/comments';
 
@@ -18,6 +19,8 @@ import {
 interface CommentsState {
   projectId: string | null;
   threads: Record<string, CommentThread>;
+  /** People who can see the project — the mention picker's list. */
+  members: CommentMember[];
   load: (projectId: string) => Promise<void>;
   clear: () => void;
   threadFor: (kind: CommentAnchorKind, anchorClientUuid: string) => CommentThread | undefined;
@@ -25,7 +28,8 @@ interface CommentsState {
     kind: CommentAnchorKind,
     anchorClientUuid: string,
     body: string,
-    author: CommentAuthor
+    author: CommentAuthor,
+    mentions?: number[]
   ) => void;
   setResolved: (kind: CommentAnchorKind, anchorClientUuid: string, resolved: boolean) => void;
   deleteComment: (kind: CommentAnchorKind, anchorClientUuid: string, commentClientUuid: string) => void;
@@ -36,9 +40,14 @@ const uuid = () => crypto.randomUUID();
 export const useCommentsStore = create<CommentsState>((set, get) => ({
   projectId: null,
   threads: {},
+  members: [],
 
   load: async (projectId) => {
     set({ projectId });
+    commentSync
+      .members(projectId)
+      .then((r) => set({ members: r.data.members }))
+      .catch((error) => console.warn('[comments] members failed', error));
     try {
       const res = await commentSync.list(projectId);
       const threads: Record<string, CommentThread> = {};
@@ -53,11 +62,11 @@ export const useCommentsStore = create<CommentsState>((set, get) => ({
     }
   },
 
-  clear: () => set({ projectId: null, threads: {} }),
+  clear: () => set({ projectId: null, threads: {}, members: [] }),
 
   threadFor: (kind, anchorClientUuid) => get().threads[commentTargetKey(kind, anchorClientUuid)],
 
-  addComment: (kind, anchorClientUuid, body, author) => {
+  addComment: (kind, anchorClientUuid, body, author, mentions = []) => {
     const { projectId } = get();
     if (!projectId) return;
     const key = commentTargetKey(kind, anchorClientUuid);
@@ -66,6 +75,7 @@ export const useCommentsStore = create<CommentsState>((set, get) => ({
     const entry: CommentEntry = {
       clientUuid: uuid(),
       body,
+      mentions,
       author,
       createdAt: new Date().toISOString(),
       pending: true,
@@ -81,7 +91,7 @@ export const useCommentsStore = create<CommentsState>((set, get) => ({
       clientUuid: entry.clientUuid,
       body: {
         thread: { client_uuid: threadClientUuid, anchor_kind: kind, anchor_client_uuid: anchorClientUuid },
-        comment: { client_uuid: entry.clientUuid, body },
+        comment: { client_uuid: entry.clientUuid, body, mentions },
       },
     });
     // Mark it landed on the next successful drain cycle.
