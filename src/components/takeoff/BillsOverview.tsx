@@ -74,7 +74,7 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
       {/* Bills ledger */}
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-3 py-3">
         {withElements.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+          <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
             <FileStack className="h-6 w-6 text-muted" strokeWidth={1.5} />
             <p className="text-sm text-muted">No bills yet. Add one to get started.</p>
           </div>
@@ -102,11 +102,15 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
             ))}
           </div>
         )}
+      </div>
 
+      {/* Always reachable: outside the scrolling ledger, so an empty list or a
+          long one never hides it. */}
+      <div className="shrink-0 border-t border-border px-3 py-3">
         <button
           type="button"
           onClick={() => addBill()}
-          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-fg shadow-sm transition-opacity hover:opacity-90 cursor-pointer"
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-fg shadow-sm transition-opacity hover:opacity-90 cursor-pointer"
         >
           <Plus className="h-4 w-4" />
           Add Bill
