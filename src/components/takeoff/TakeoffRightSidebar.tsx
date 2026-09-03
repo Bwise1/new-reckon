@@ -11,6 +11,12 @@ import { useBoqExport } from "@/hooks/useBoqExport";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import type { EstimationCardData } from "@/types/takeoff";
 import { itemLabelFromIndex } from "@/utils/boqCalculations";
+import CommentTrigger from "@/components/comments/CommentTrigger";
+import CommentPopover from "@/components/comments/CommentPopover";
+import { useCommentsStore } from "@/store/useCommentsStore";
+import { useProfile } from "@/hooks/useProfile";
+import { useProjectTheme } from "@/hooks/useProjectTheme";
+import { commentTargetKey, type CommentAnchorKind } from "@/types/comments";
 
 interface TakeoffRightSidebarProps {
   className?: string;
@@ -35,6 +41,35 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
   // The bills ledger is the landing view (prototype behaviour).
   const [billView, setBillView] = useState<"list" | "detail">("list");
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+
+  // Comments on elements and items (docs/comments-plan.md). One popover open
+  // at a time, anchored beside the trigger that opened it.
+  const [openComment, setOpenComment] = useState<{
+    kind: CommentAnchorKind;
+    id: string;
+    title: string;
+    rect: DOMRect;
+  } | null>(null);
+  const commentThreads = useCommentsStore((s) => s.threads);
+  const addComment = useCommentsStore((s) => s.addComment);
+  const setCommentResolved = useCommentsStore((s) => s.setResolved);
+  const deleteComment = useCommentsStore((s) => s.deleteComment);
+  const { data: profileResponse } = useProfile();
+  const profile = profileResponse?.data?.user;
+  const { theme: portalTheme } = useProjectTheme();
+  const currentUserId = profile?.id != null ? Number(profile.id) : null;
+  const commentAuthor = () => {
+    const name =
+      [profile?.firstName, profile?.lastName].filter(Boolean).join(" ").trim() || "You";
+    return {
+      id: currentUserId ?? 0,
+      name,
+      initials: name.split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join(""),
+      avatarUrl: profile?.profilePicture ?? null,
+    };
+  };
+  const threadOf = (kind: CommentAnchorKind, id: string) =>
+    commentThreads[commentTargetKey(kind, id)];
   const bills = useTakeoffStore((s) => s.bills);
   const activeBillId = useTakeoffStore((s) => s.activeBillId);
   const switchBill = useTakeoffStore((s) => s.switchBill);
@@ -253,14 +288,21 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
 
           return (
             <div key={element.id} className="border-b border-border">
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() =>
                   setExpandedElements((prev) => ({
                     ...prev,
                     [element.id]: !isExpanded,
                   }))
                 }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setExpandedElements((prev) => ({ ...prev, [element.id]: !isExpanded }));
+                  }
+                }}
                 className="w-full px-4 py-3 flex items-center justify-between shrink-0 hover:bg-overlay/5/80 cursor-pointer"
               >
                 <span className="text-lg font-bold text-body flex items-center gap-1.5 min-w-0">
@@ -282,12 +324,31 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                     className="bg-transparent border-none outline-none font-bold text-lg text-body min-w-0 flex-1"
                   />
                 </span>
-                <ChevronDown
-                  className={`w-5 h-5 text-muted transition-transform shrink-0 ${
-                    isExpanded ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
+                <span className="flex items-center gap-1 shrink-0">
+                  <CommentTrigger
+                    count={threadOf("boq_element", element.id)?.comments.length ?? 0}
+                    resolved={threadOf("boq_element", element.id)?.status === "resolved"}
+                    label={
+                      threadOf("boq_element", element.id)?.comments.length
+                        ? `Comments on ${element.title || "element"}`
+                        : `Comment on ${element.title || "element"}`
+                    }
+                    onOpen={(rect) =>
+                      setOpenComment({
+                        kind: "boq_element",
+                        id: element.id,
+                        title: element.title || "Element",
+                        rect,
+                      })
+                    }
+                  />
+                  <ChevronDown
+                    className={`w-5 h-5 text-muted transition-transform shrink-0 ${
+                      isExpanded ? "rotate-180" : ""
+                    }`}
+                  />
+                </span>
+              </div>
 
               {isExpanded && (
                 <div className="px-3 pb-3 space-y-3">
@@ -322,6 +383,18 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                       : pendingCommitForThis?.value ?? null;
                     return (
                     <EstimationCard
+                      commentCount={threadOf("boq_item", card.id)?.comments.length ?? 0}
+                      commentResolved={threadOf("boq_item", card.id)?.status === "resolved"}
+                      onOpenComments={(rect) =>
+                        setOpenComment({
+                          kind: "boq_item",
+                          id: card.id,
+                          title: card.description
+                            ? `Item ${itemLabelFromIndex(index)} · ${card.description}`
+                            : `Item ${itemLabelFromIndex(index)}`,
+                          rect,
+                        })
+                      }
                       key={card.id}
                       data={card}
                       itemLabel={itemLabelFromIndex(index)}
@@ -401,6 +474,26 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
       </div>
       )}
 
+      {openComment && (
+        <CommentPopover
+          title={openComment.title}
+          comments={threadOf(openComment.kind, openComment.id)?.comments ?? []}
+          resolved={threadOf(openComment.kind, openComment.id)?.status === "resolved"}
+          anchorRect={openComment.rect}
+          portalTheme={portalTheme}
+          currentUserId={currentUserId}
+          onClose={() => setOpenComment(null)}
+          onResolve={() =>
+            setCommentResolved(
+              openComment.kind,
+              openComment.id,
+              threadOf(openComment.kind, openComment.id)?.status !== "resolved"
+            )
+          }
+          onSend={(message) => addComment(openComment.kind, openComment.id, message, commentAuthor())}
+          onDelete={(uuid) => deleteComment(openComment.kind, openComment.id, uuid)}
+        />
+      )}
       <BoqExportModal
         key={`${exportModalMode}-${pricing.vatRate}-${pricing.contingency}`}
         open={exportModalMode !== null}

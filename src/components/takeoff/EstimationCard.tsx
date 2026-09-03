@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useRef } from "react";
 import { Copy, Link2, RotateCcw, Trash2, X } from "lucide-react";
+import CommentTrigger from "@/components/comments/CommentTrigger";
 import UnitSelector from "./UnitSelector";
 import FormulaInput, { type FormulaInputHandle } from "./FormulaInput";
 import DescriptionField from "./DescriptionField";
@@ -17,6 +18,10 @@ import {
 interface EstimationCardProps {
   data?: Partial<EstimationCardData>;
   itemLabel: string;
+  /** Comment thread state for this item (docs/comments-plan.md). */
+  commentCount?: number;
+  commentResolved?: boolean;
+  onOpenComments?: (rect: DOMRect) => void;
   onDelete?: (id: string) => void;
   onCopy?: (id: string) => void;
   onUpdate?: (id: string, data: Partial<EstimationCardData>) => void;
@@ -64,6 +69,9 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
   itemLabel,
   onDelete,
   onCopy,
+  commentCount = 0,
+  commentResolved = false,
+  onOpenComments,
   onUpdate,
   onAddElement,
   onAddItem,
@@ -402,6 +410,14 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
             </button>
           </div>
           <div className="flex items-center gap-1">
+            {onOpenComments && (
+              <CommentTrigger
+                count={commentCount}
+                resolved={commentResolved}
+                label={commentCount > 0 ? `Comments (${commentCount})` : "Add a comment"}
+                onOpen={onOpenComments}
+              />
+            )}
             <button
               type="button"
               onClick={(e) => {

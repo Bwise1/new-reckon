@@ -10,6 +10,7 @@ import {
   type MeasurementCreateBody,
   type MeasurementPatchBody,
 } from '@/services/entitySync.service';
+import { commentSync, type AddCommentBody } from '@/services/comments.service';
 import { ApiError } from '@/lib/api-client';
 
 /**
@@ -108,6 +109,25 @@ export type SyncOp =
       kind: 'boq.history.delete';
       projectId: string;
       clientUuid: string;
+    }
+  | {
+      kind: 'comment.create';
+      projectId: string;
+      /** The comment's client uuid (dedup key). */
+      clientUuid: string;
+      body: AddCommentBody;
+    }
+  | {
+      kind: 'comment.delete';
+      projectId: string;
+      clientUuid: string;
+    }
+  | {
+      kind: 'comment.thread.status';
+      projectId: string;
+      /** The thread's client uuid (collapses to the latest status). */
+      clientUuid: string;
+      status: 'open' | 'resolved';
     };
 
 const QUEUE_KEY = (projectId: string) => `reckon_sync_queue_${projectId}`;
@@ -285,6 +305,24 @@ const dedupOnEnqueue = (
       queue.push(op);
       return queue;
     }
+    // Comment status collapses to the latest per thread; a delete cancels a
+    // not-yet-flushed create of the same comment but is still sent (see the
+    // measurement.delete rationale above).
+    case 'comment.thread.status': {
+      const filtered = queue.filter(
+        (q) => !pending(q) || !(q.kind === 'comment.thread.status' && q.clientUuid === op.clientUuid)
+      );
+      filtered.push(op);
+      return filtered;
+    }
+    case 'comment.delete': {
+      const idx = queue.findIndex(
+        (q) => pending(q) && q.kind === 'comment.create' && q.clientUuid === op.clientUuid
+      );
+      if (idx !== -1) queue.splice(idx, 1);
+      queue.push(op);
+      return queue;
+    }
     case 'measurement.create':
     default:
       queue.push(op);
@@ -332,6 +370,15 @@ const runOp = async (op: SyncOp): Promise<void> => {
       return;
     case 'boq.history.delete':
       await boqSync.deleteHistory(op.projectId, op.clientUuid);
+      return;
+    case 'comment.create':
+      await commentSync.add(op.projectId, op.body);
+      return;
+    case 'comment.delete':
+      await commentSync.remove(op.projectId, op.clientUuid);
+      return;
+    case 'comment.thread.status':
+      await commentSync.setStatus(op.projectId, op.clientUuid, op.status);
       return;
   }
 };

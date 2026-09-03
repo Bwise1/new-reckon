@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useCommentsStore } from '@/store/useCommentsStore';
 import { fetchAndMergeProjectPlans } from '@/services/planSync.service';
 import {
   boqSync,
@@ -94,6 +95,9 @@ export const useProjectData = (
             );
           }
         }
+
+        // Comments hydrate alongside the BOQ tree; failures are logged inside.
+        void useCommentsStore.getState().load(projectId);
 
         const [boqResponse, plansPromise, calibrationsResponse, measurementsResponse] =
           await Promise.all([

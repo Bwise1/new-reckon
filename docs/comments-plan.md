@@ -6,7 +6,12 @@ that bring them back to the exact spot. Built to make working together on a
 bid smooth — the first collaboration feature, shipped ahead of project
 sharing and designed so nothing is redone when sharing lands.
 
-Status: **plan, 2026-09-03 — for review before build.** Supersedes §3 of
+Status: **first release built 2026-09-03 — BOQ elements and items only**
+(prototype parity: trigger + popover, replies, resolve/reopen, delete own,
+offline via the sync queue; reckon_api commit on `Update`, Reckon-app on
+`main`). Canvas pins, @mentions, notifications and the comments panel are
+**deferred** at the user's request; the data model below is what shipped,
+so they land without a migration. Supersedes §3 of
 `takeoff-comments-plan.md` (which stays for the takeoff-card parity notes).
 Backend goes on reckon_api `Update`; web on Reckon-app `main`. Prototype
 reference for the UI: `CommentPopover.tsx` / `CommentTrigger` in
