@@ -44,6 +44,10 @@ Reckon's EstimationCard now mirrors the prototype's ItemBlock:
 
 ## 3. Comments — the plan (built FOR collaboration)
 
+> **Superseded 2026-09-03** by [comments-plan.md](./comments-plan.md) — the
+> Figma-style plan (canvas pins, @mentions, notifications, deep links). The
+> notes below are kept for the prototype popover/trigger reference only.
+
 Prototype reference: `CommentTarget = element | item`, `CommentTrigger`
 (7×7 icon, count badge in `bg-body text-canvas`, resolved = check in a muted
 ring), `CommentPopover` (340×420 fixed popover: header with title +
