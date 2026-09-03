@@ -13,13 +13,19 @@
         var h = window.location.hostname;
         if (h === 'localhost' || h === '127.0.0.1' || h === '::1' || h.endsWith('.local')) return;
 
+        /* Beta testers generate very different traffic from real users — lots
+           of feature-poking and bug-hunting — so it reports to its own Matomo
+           site rather than skewing production's numbers. Unknown hosts fall
+           through to production. */
+        var siteId = (h === 'beta.reckonio.com') ? '2' : '1';
+
         var _paq = window._paq = window._paq || [];
         /* tracker methods like "setCustomDimension" should be called before "trackPageView" */
         _paq.push(['trackPageView']);
         _paq.push(['enableLinkTracking']);
         var u="//matomo.benjys.me/";
         _paq.push(['setTrackerUrl', u+'matomo.php']);
-        _paq.push(['setSiteId', '1']);
+        _paq.push(['setSiteId', siteId]);
         var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
         g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
       })();
