@@ -7,6 +7,7 @@ import { useLogout } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/auth.store';
 import { initials } from '@/lib/avatar';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
+import ThemeToggle from '@/components/ThemeToggle';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Projects', icon: Folder },
@@ -34,6 +35,7 @@ export default function DashboardSidebar() {
       <div className="flex items-center gap-2 px-1 pb-4">
         <img src={Logo} alt="" className="h-6 w-6 shrink-0" />
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-body">Reckon Bill</span>
+        <ThemeToggle />
       </div>
 
       <WorkspaceSwitcher ownerName={name} />

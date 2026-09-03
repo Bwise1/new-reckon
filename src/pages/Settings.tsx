@@ -10,6 +10,46 @@ import { useLogout } from "@/hooks/useAuth";
 import { useConfirm } from "@/contexts/ConfirmProvider";
 import DashboardLayout from "@/layouts/DashboardLayout";
 import { getCanvasFitMode, setCanvasFitMode, type CanvasFitMode } from "@/utils/canvasPrefs";
+import { useTheme, type ThemePreference } from "@/hooks/useProjectTheme";
+import { Monitor, Moon, Sun } from "lucide-react";
+
+/** Appearance — Light, Dark, or follow the device. Applies to the whole app. */
+function AppearanceCard() {
+  const { preference, setPreference } = useTheme();
+  const options: { value: ThemePreference; label: string; hint: string; icon: React.ReactNode }[] = [
+    { value: "light", label: "Light", hint: "Always light", icon: <Sun className="h-4 w-4" /> },
+    { value: "dark", label: "Dark", hint: "Always dark", icon: <Moon className="h-4 w-4" /> },
+    { value: "system", label: "System", hint: "Match your device", icon: <Monitor className="h-4 w-4" /> },
+  ];
+  return (
+    <div className="bg-surface rounded-2xl border border-border p-5 shadow-sm">
+      <p className="text-sm font-medium text-body mb-1">Appearance</p>
+      <p className="text-xs text-muted/70 mb-3">Theme for every page, including the takeoff.</p>
+      <div className="grid grid-cols-3 gap-2">
+        {options.map((o) => {
+          const active = preference === o.value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setPreference(o.value)}
+              className={`text-left rounded-xl border p-3 transition-colors cursor-pointer ${
+                active ? "border-secondary bg-secondary/5" : "border-border hover:bg-overlay/5"
+              }`}
+            >
+              <span className={`flex items-center gap-1.5 text-sm font-semibold ${active ? "text-secondary" : "text-body"}`}>
+                {o.icon}
+                {o.label}
+              </span>
+              <span className="block text-[11px] text-muted/70 mt-0.5">{o.hint}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 /** Canvas display preferences — how a plan fits the takeoff view by default. */
 function CanvasPrefsCard() {
@@ -320,6 +360,9 @@ export default function Settings() {
                 />
               </div>
             )}
+
+            {/* Appearance */}
+            <AppearanceCard />
 
             {/* Canvas display preferences */}
             <CanvasPrefsCard />

@@ -54,8 +54,8 @@ const AuthLayout = ({ children }: AuthLayoutProps) => {
               <button
                 className={`flex-1 text-base font-normal pb-4 transition-colors text-center ${
                   isLoginPage
-                    ? "border-black border-b-2 text-black"
-                    : "text-[#B2B2B2] hover:text-black"
+                    ? "border-body border-b-2 text-body"
+                    : "text-muted hover:text-body"
                 }`}
                 onClick={() => navigate('/login')}
               >
@@ -65,8 +65,8 @@ const AuthLayout = ({ children }: AuthLayoutProps) => {
               <button
                 className={`flex-1 text-base font-normal pb-4 transition-colors text-center ${
                   isSignupPage
-                    ? "border-black border-b-2 text-black"
-                    : "text-[#B2B2B2] hover:text-black"
+                    ? "border-body border-b-2 text-body"
+                    : "text-muted hover:text-body"
                 }`}
                 onClick={() => navigate('/signup')}
               >
