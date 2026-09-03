@@ -1,113 +1,192 @@
-import { useState } from "react";
-import DashboardLayout from "@/layouts/DashboardLayout";
-import StatsCards from "@/components/dashboard/StatsCards";
-import ProjectList from "@/components/dashboard/ProjectList";
-import NewProjectModal from "@/components/dashboard/NewProjectModal";
-import { useProjects, useCreateProject } from "@/hooks/useProjects";
-import { useProfile } from "@/hooks/useProfile";
-import { generateClientId } from "@/utils/id";
-import { saveProjectMeta } from "@/utils/projectMeta";
-import { useNavigate } from "react-router-dom";
-import type { Project } from "@/types/project";
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import DashboardLayout from '@/layouts/DashboardLayout';
+import ProjectsToolbar, {
+  type ProjectTab,
+  type SortOption,
+  type ViewMode,
+} from '@/components/dashboard/ProjectsToolbar';
+import ProjectsView from '@/components/dashboard/ProjectsView';
+import NewProjectModal from '@/components/dashboard/NewProjectModal';
+import {
+  useProjects,
+  useCreateProject,
+  useDeleteProject,
+  useDuplicateProject,
+  useUpdateProject,
+} from '@/hooks/useProjects';
+import { useConfirm } from '@/contexts/ConfirmProvider';
+import { generateClientId } from '@/utils/id';
+import { saveProjectMeta } from '@/utils/projectMeta';
+import type { Project } from '@/types/project';
 
+const VIEW_KEY = 'reckon_projects_view';
+
+/**
+ * The projects dashboard, laid out like the prototype: workspace header,
+ * toolbar (search, sort, grid/list, New Project, tabs), then cards or rows.
+ * "Shared with Me" is empty until project sharing ships.
+ */
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("files");
+  const confirm = useConfirm();
+  const { data: projectsData, isLoading } = useProjects();
+  const { mutateAsync: createProject, isPending: isCreating } = useCreateProject();
+  const { mutate: updateProject, isPending: isUpdating } = useUpdateProject();
+  const { mutate: duplicateProject } = useDuplicateProject();
+  const { mutate: deleteProject } = useDeleteProject();
+
+  const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState<SortOption>('lastModified');
+  const [viewMode, setViewModeState] = useState<ViewMode>(() => {
+    try {
+      return (localStorage.getItem(VIEW_KEY) as ViewMode) || 'grid';
+    } catch {
+      return 'grid';
+    }
+  });
+  const setViewMode = (v: ViewMode) => {
+    setViewModeState(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  const [activeTab, setActiveTab] = useState<ProjectTab>('all');
   const [showNewProject, setShowNewProject] = useState(false);
-  const [newProjectModalKey, setNewProjectModalKey] = useState(0);
-  const { data: projectsData } = useProjects();
-  const { data: profileData } = useProfile();
-  const { mutateAsync: createProject, isPending: isCreatingProject } = useCreateProject();
+  const [editing, setEditing] = useState<Project | null>(null);
 
-  const projectCount = projectsData?.data?.projects?.length ?? 0;
-  const profile = profileData?.data?.user;
-  const firstName = profile?.firstName ?? profile?.email?.split("@")[0] ?? "there";
+  const projects = useMemo(() => projectsData?.data?.projects ?? [], [projectsData]);
 
-  const handleCreate = async ({ title, location }: { title: string; location: string; file?: File }) => {
+  const visible = useMemo(() => {
+    // Every project is mine until sharing exists; "shared" is therefore empty.
+    let result = activeTab === 'shared' ? [] : projects;
+    const q = search.trim().toLowerCase();
+    if (q) {
+      result = result.filter(
+        (p) => p.title.toLowerCase().includes(q) || (p.location ?? '').toLowerCase().includes(q)
+      );
+    }
+    result = [...result];
+    if (sortBy === 'name') result.sort((a, b) => a.title.localeCompare(b.title));
+    else
+      result.sort(
+        (a, b) =>
+          new Date(b.updatedAt ?? b.createdAt ?? 0).getTime() -
+          new Date(a.updatedAt ?? a.createdAt ?? 0).getTime()
+      );
+    return result;
+  }, [projects, activeTab, search, sortBy]);
+
+  const handleCreate = async ({ title, location }: { title: string; location: string }) => {
     const clientUuid = generateClientId();
     try {
       const created = await createProject({
         title,
-        project_type: "bill_of_qty",
-        location: location || "Lagos, Nigeria",
+        project_type: 'bill_of_qty',
+        location: location || 'Lagos, Nigeria',
         client_uuid: clientUuid,
       } as Partial<Project>);
-
       setShowNewProject(false);
-      setNewProjectModalKey((k) => k + 1);
-      const newProjectId = created.data?.project?.id;
-      if (newProjectId) {
-        saveProjectMeta(String(newProjectId), { clientUuid });
-        navigate(`/project/${newProjectId}`);
+      const id = created.data?.project?.id;
+      if (id) {
+        saveProjectMeta(String(id), { clientUuid });
+        navigate(`/project/${id}`);
       }
     } catch {
-      // mutation failed — leave modal open so user can retry
+      // Leave the dialog open so the user can retry.
     }
   };
 
-  const handleCloseNewProject = () => {
-    setShowNewProject(false);
-    setNewProjectModalKey((k) => k + 1);
+  const handleRename = ({ title, location }: { title: string; location: string }) => {
+    if (!editing) return;
+    updateProject({ id: String(editing.id), data: { title, location } });
+    setEditing(null);
   };
+
+  const handleDelete = async (project: Project) => {
+    const ok = await confirm({
+      title: 'Delete project?',
+      message: (
+        <>
+          <p>
+            <span className="font-medium text-body">{project.title}</span> will be removed permanently.
+          </p>
+          <p className="mt-1 text-xs text-muted">This cannot be undone.</p>
+        </>
+      ),
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (ok) deleteProject(String(project.id));
+  };
+
+  const emptyMessage =
+    activeTab === 'shared'
+      ? 'Nothing shared with you yet.'
+      : search
+        ? 'No projects match your search.'
+        : 'No projects yet. Create your first project.';
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col" style={{ paddingLeft: "calc(50% - 235px)" }}>
-        <div className="mb-10">
-          <StatsCards projectCount={projectCount} />
+      <div className="flex h-full flex-col">
+        <div className="border-b border-border bg-surface px-6 py-5">
+          <h1 className="text-lg font-semibold text-body">Personal Workspace</h1>
+          <p className="mt-0.5 text-sm text-muted">
+            {projects.length} active project{projects.length === 1 ? '' : 's'}
+          </p>
         </div>
 
-        <div style={{ width: "470px" }}>
-          <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-body">Welcome {firstName}</h2>
-            <button
-              onClick={() => setShowNewProject(true)}
-              className="px-4 py-2 bg-primary text-primary-fg text-sm font-medium rounded-md hover:bg-primary/90 transition-colors"
-            >
-              New Project
-            </button>
-          </div>
+        <ProjectsToolbar
+          search={search}
+          onSearchChange={setSearch}
+          sortBy={sortBy}
+          onSortByChange={setSortBy}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onNewProject={() => setShowNewProject(true)}
+          canCreateProject
+        />
 
-          <div className="flex border-b border-border mb-4">
-            <button
-              onClick={() => setActiveTab("files")}
-              className={`flex-1 pb-3 text-sm text-center transition-colors ${
-                activeTab === "files"
-                  ? "text-body font-medium border-b-2 border-primary -mb-px"
-                  : "text-muted/70"
-              }`}
-            >
-              My Files
-            </button>
-            <button
-              onClick={() => setActiveTab("community")}
-              className={`flex-1 pb-3 text-sm text-center transition-colors ${
-                activeTab === "community"
-                  ? "text-body font-medium border-b-2 border-primary -mb-px"
-                  : "text-muted/70"
-              }`}
-            >
-              Community
-            </button>
-          </div>
-
-          <div className="pb-16 min-h-screen">
-            {activeTab === "files" && <ProjectList />}
-            {activeTab === "community" && (
-              <div className="text-center text-muted/70 py-12 text-sm">
-                Community projects coming soon
-              </div>
-            )}
-          </div>
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {isLoading ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="h-36 animate-pulse rounded-xl border border-border bg-surface" />
+              ))}
+            </div>
+          ) : (
+            <ProjectsView
+              projects={visible}
+              viewMode={viewMode}
+              emptyMessage={emptyMessage}
+              onOpen={(id) => navigate(`/project/${id}`)}
+              onDuplicate={(id) => duplicateProject({ id })}
+              onRename={(project) => setEditing(project)}
+              onDelete={handleDelete}
+            />
+          )}
         </div>
       </div>
 
       <NewProjectModal
-        key={newProjectModalKey}
         isOpen={showNewProject}
-        isPending={isCreatingProject}
-        onClose={handleCloseNewProject}
+        isPending={isCreating}
+        onClose={() => setShowNewProject(false)}
         onCreate={handleCreate}
+      />
+      <NewProjectModal
+        mode="edit"
+        isOpen={editing !== null}
+        isPending={isUpdating}
+        initialTitle={editing?.title ?? ''}
+        initialLocation={editing?.location ?? ''}
+        onClose={() => setEditing(null)}
+        onCreate={handleRename}
       />
     </DashboardLayout>
   );

@@ -1,31 +1,34 @@
-import { useState, useEffect } from "react";
-import { FiX } from "react-icons/fi";
+import { useEffect, useState, type FormEvent } from 'react';
+import { X } from 'lucide-react';
 
 interface NewProjectModalProps {
   isOpen: boolean;
   isPending: boolean;
   onClose: () => void;
-  onCreate: (data: { title: string; location: string; file?: File }) => void;
+  onCreate: (data: { title: string; location: string }) => void;
   /** Edit mode: pre-fill fields and switch labels to "Save changes". */
-  mode?: "create" | "edit";
+  mode?: 'create' | 'edit';
   initialTitle?: string;
   initialLocation?: string;
 }
 
+const fieldClass =
+  'mt-1.5 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-body outline-none placeholder:text-muted/70 focus:border-accent focus:ring-2 focus:ring-accent/20 transition';
+const labelClass = 'text-xs font-semibold uppercase tracking-wide text-muted';
+
+/** The prototype's New Project dialog, with our edit mode kept. */
 const NewProjectModal = ({
   isOpen,
   isPending,
   onClose,
   onCreate,
-  mode = "create",
-  initialTitle = "",
-  initialLocation = "",
+  mode = 'create',
+  initialTitle = '',
+  initialLocation = '',
 }: NewProjectModalProps) => {
   const [title, setTitle] = useState(initialTitle);
   const [location, setLocation] = useState(initialLocation);
 
-  // Re-seed when the modal opens (so editing a different project shows its
-  // current values rather than stale ones).
   useEffect(() => {
     if (isOpen) {
       setTitle(initialTitle);
@@ -33,79 +36,90 @@ const NewProjectModal = ({
     }
   }, [isOpen, initialTitle, initialLocation]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
+  const isEdit = mode === 'edit';
 
-  const isEdit = mode === "edit";
-
-  const handleSubmit = () => {
-    if (!title.trim()) return;
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || isPending) return;
     onCreate({ title: title.trim(), location: location.trim() });
-  };
-
-  const handleClose = () => {
-    setTitle(initialTitle);
-    setLocation(initialLocation);
-    onClose();
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-      onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 px-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      <div className="bg-surface rounded-xl shadow-xl w-full max-w-sm mx-4">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-sm font-semibold text-body">
-            {isEdit ? "Edit Project" : "New Project"}
-          </h2>
-          <button onClick={handleClose} className="text-muted/70 hover:text-body transition-colors">
-            <FiX className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="px-5 py-4 space-y-3">
-          <input
-            type="text"
-            placeholder="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            autoFocus
-            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-muted/60 placeholder-muted/70"
-          />
-
-          <input
-            type="text"
-            placeholder="Location"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            className="w-full px-3 py-2.5 text-sm border border-border rounded-lg focus:outline-none focus:border-muted/60 placeholder-muted/70"
-          />
-
-        </div>
-
-        <div className="flex gap-3 px-5 pb-5">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={isEdit ? 'Edit Project' : 'New Project'}
+        className="w-full max-w-lg rounded-xl border border-border bg-surface shadow-xl"
+      >
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <h2 className="text-sm font-semibold text-body">{isEdit ? 'Edit Project' : 'New Project'}</h2>
           <button
-            onClick={handleClose}
-            className="flex-1 py-2.5 text-sm font-medium text-muted bg-surface-muted rounded-lg hover:bg-overlay/15 transition-colors"
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-muted hover:text-body cursor-pointer"
           >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!title.trim() || isPending}
-            className="flex-1 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            {isPending
-              ? isEdit
-                ? "Saving…"
-                : "Creating…"
-              : isEdit
-                ? "Save changes"
-                : "Create"}
+            <X className="h-4 w-4" />
           </button>
         </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="space-y-4 px-5 py-5">
+            <div>
+              <label className={labelClass}>Project Title</label>
+              <input
+                autoFocus
+                required
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Lekki Waterfront Residences"
+                className={fieldClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Location</label>
+              <input
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Lekki, Lagos"
+                className={fieldClass}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-muted hover:text-body cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!title.trim() || isPending}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-fg transition-opacity hover:opacity-90 disabled:opacity-40 cursor-pointer"
+            >
+              {isPending ? (isEdit ? 'Saving…' : 'Creating…') : isEdit ? 'Save changes' : 'Create Project'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
