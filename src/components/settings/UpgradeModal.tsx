@@ -1,0 +1,93 @@
+import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { Check, X } from 'lucide-react';
+import { useTheme } from '@/hooks/useProjectTheme';
+import type { Plan } from '@/lib/workspace-settings';
+
+type Props = {
+  open: boolean;
+  plan: Plan | null;
+  billingCycle: 'monthly' | 'annual';
+  onClose: () => void;
+  onConfirm: () => void;
+};
+
+/** Confirm/checkout for a plan change — demo only. Ported from the prototype. */
+export default function UpgradeModal({ open, plan, billingCycle, onClose, onConfirm }: Props) {
+  const { theme } = useTheme();
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+  if (!open || !plan) return null;
+
+  const isContact = plan.monthly === null;
+  const amount = plan.monthly === null || plan.monthly === 0 ? null : billingCycle === 'annual' ? plan.monthly * 10 : plan.monthly;
+
+  return createPortal(
+    <div data-theme={theme} className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 px-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div role="dialog" aria-modal="true" aria-label={isContact ? 'Contact sales' : `Switch to ${plan.name}`}
+        className="w-full max-w-md rounded-xl border border-border bg-surface text-body shadow-xl">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <h2 className="text-sm font-semibold text-body">{isContact ? 'Contact sales' : `Switch to ${plan.name}`}</h2>
+          <button type="button" aria-label="Close" onClick={onClose}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-muted hover:text-body">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-4 px-5 py-5">
+          <div className="rounded-lg border border-border bg-surface-muted/50 p-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-sm font-semibold text-body">{plan.name}</span>
+              {amount !== null ? (
+                <span className="text-sm font-semibold tabular-nums text-body">
+                  ₦{amount.toLocaleString('en-US')}
+                  <span className="text-xs font-normal text-muted">{billingCycle === 'annual' ? ' / yr' : ' / mo'}</span>
+                </span>
+              ) : (
+                <span className="text-sm font-semibold text-body">Custom</span>
+              )}
+            </div>
+            <ul className="mt-3 space-y-1.5">
+              {plan.features.map((feature) => (
+                <li key={feature} className="flex items-start gap-2 text-xs text-muted">
+                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted" />
+                  {feature}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {!isContact ? (
+            <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5 text-xs">
+              <span className="text-muted">Payment method</span>
+              <span className="font-medium text-body">Not set up yet</span>
+            </div>
+          ) : null}
+
+          <p className="text-[11px] leading-relaxed text-muted">
+            {isContact
+              ? 'Our team will reach out to set up your Organization workspace and invoicing.'
+              : 'Payments are not live yet. This records your choice locally; no card is charged.'}
+          </p>
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
+          <button type="button" onClick={onClose}
+            className="rounded-md px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-muted hover:text-body">
+            Cancel
+          </button>
+          <button type="button" onClick={() => { onConfirm(); onClose(); }}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-fg transition-opacity hover:opacity-90">
+            {isContact ? 'Request contact' : 'Confirm change'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}

@@ -114,6 +114,11 @@ export const accountsService = {
   listOrgs: () => request<{ orgs: OrgSummary[] }>('/orgs'),
   createOrg: (name: string, teamSize?: string) =>
     request<{ orgId: string; token: string }>('/orgs', { method: 'POST', body: JSON.stringify({ name, teamSize }) }),
+  createEducational: (name: string, education: EducationPayload) =>
+    request<{ orgId: string; token: string }>('/orgs', {
+      method: 'POST',
+      body: JSON.stringify({ name, kind: 'educational', education }),
+    }),
   convertOrg: (orgId: string, name: string, teamSize?: string) =>
     request<{ orgId: string; token: string }>(`/orgs/${orgId}/convert`, { method: 'POST', body: JSON.stringify({ name, teamSize }) }),
   orgDetail: (orgId: string) => request<OrgDetail>(`/orgs/${orgId}`),
@@ -136,4 +141,27 @@ export const accountsService = {
     request<{ invite: { orgName: string; inviter: string; role: string; email: string; state: 'open' | 'accepted' | 'expired' } }>(`/org-invites/${token}`),
   acceptInvite: (token: string) =>
     request<{ orgId: string; token: string }>(`/org-invites/${token}/accept`, { method: 'POST', body: '{}' }),
+
+  // Active sessions (Security settings).
+  listSessions: () => request<{ sessions: AccountSession[] }>('/sessions'),
+  revokeSession: (id: string) => request<unknown>(`/sessions/${id}`, { method: 'DELETE' }),
+  logoutOthers: () => request<unknown>('/logout-all', { method: 'POST', body: '{}' }),
 };
+
+export interface EducationPayload {
+  institutionName: string;
+  institutionType: string;
+  courseTitle: string;
+  courseCode: string;
+  level: string;
+}
+
+export interface AccountSession {
+  id: string;
+  userAgent: string | null;
+  ip: string | null;
+  client: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  current: boolean;
+}

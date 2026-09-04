@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Clock, RotateCw, Trash2, UserPlus } from 'lucide-react';
-import DashboardLayout from '@/layouts/DashboardLayout';
+import SettingsLayout from '@/layouts/SettingsLayout';
 import TeamTable from '@/components/dashboard/TeamTable';
 import InviteMemberModal from '@/components/dashboard/InviteMemberModal';
 import AccessPolicyCard from '@/components/dashboard/AccessPolicyCard';
@@ -32,10 +32,10 @@ export default function TeamSettings() {
   useEffect(() => { void refresh(); }, [refresh]);
 
   if (!accountsEnabled()) {
-    return <DashboardLayout><Shell><Empty text="Organizations are available when you sign in through Reckon accounts." /></Shell></DashboardLayout>;
+    return <SettingsLayout><Shell><Empty text="Organizations are available when you sign in through Reckon accounts." /></Shell></SettingsLayout>;
   }
   if (!orgId) {
-    return <DashboardLayout><Shell><Empty text="Switch to an organization to manage its team. Your personal workspace has no team." /></Shell></DashboardLayout>;
+    return <SettingsLayout><Shell><Empty text="Switch to an organization to manage its team. Your personal workspace has no team." /></Shell></SettingsLayout>;
   }
 
   const canManage = detail?.me.canManage ?? false;
@@ -59,7 +59,7 @@ export default function TeamSettings() {
   };
 
   return (
-    <DashboardLayout>
+    <SettingsLayout>
       <Shell>
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -113,12 +113,13 @@ export default function TeamSettings() {
 
         <InviteMemberModal open={inviteOpen} onClose={() => setInviteOpen(false)} onInvite={invite} />
       </Shell>
-    </DashboardLayout>
+    </SettingsLayout>
   );
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto max-w-2xl px-6 py-8">{children}</div>;
+  // SettingsLayout already provides the outer container; this is a passthrough.
+  return <>{children}</>;
 }
 function Empty({ text }: { text: string }) {
   return <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-overlay/15 py-16 text-center"><p className="max-w-sm text-sm text-muted">{text}</p></div>;

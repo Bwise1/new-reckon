@@ -75,7 +75,10 @@ export default function ProjectsView({
           >
             <div className="min-w-0 flex-1">
               <h3 className="truncate text-sm font-semibold text-body">{project.title}</h3>
-              <p className="mt-0.5 truncate text-xs text-muted">{project.location || 'No location'}</p>
+              <p className="mt-0.5 truncate text-xs text-muted">
+                {project.client ? `${project.client} · ` : ''}
+                {project.location || 'No location'}
+              </p>
             </div>
             <span className="hidden w-32 shrink-0 text-right text-xs text-muted sm:block">
               {elementsLabel(project.elements)}
@@ -113,6 +116,7 @@ export default function ProjectsView({
           </div>
           <h3 className="mt-3 truncate text-sm font-semibold text-body">{project.title}</h3>
           <p className="mt-0.5 truncate text-xs text-muted">
+            {project.client ? `${project.client} · ` : ''}
             {project.location || 'No location'}
             {project.owner && <> · {project.owner.name}</>}
           </p>

@@ -5,6 +5,8 @@ export interface Project {
   client_uuid?: string;
   title: string;
   location: string;
+  /** The client/company the project is prepared for (optional). */
+  client?: string | null;
   project_type?: 'bill_of_qty' | 'material_schedule';
   elements?: number;
   createdAt?: string;

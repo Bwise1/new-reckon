@@ -5,11 +5,12 @@ interface NewProjectModalProps {
   isOpen: boolean;
   isPending: boolean;
   onClose: () => void;
-  onCreate: (data: { title: string; location: string }) => void;
+  onCreate: (data: { title: string; location: string; client: string }) => void;
   /** Edit mode: pre-fill fields and switch labels to "Save changes". */
   mode?: 'create' | 'edit';
   initialTitle?: string;
   initialLocation?: string;
+  initialClient?: string;
 }
 
 const fieldClass =
@@ -25,16 +26,19 @@ const NewProjectModal = ({
   mode = 'create',
   initialTitle = '',
   initialLocation = '',
+  initialClient = '',
 }: NewProjectModalProps) => {
   const [title, setTitle] = useState(initialTitle);
   const [location, setLocation] = useState(initialLocation);
+  const [client, setClient] = useState(initialClient);
 
   useEffect(() => {
     if (isOpen) {
       setTitle(initialTitle);
       setLocation(initialLocation);
+      setClient(initialClient);
     }
-  }, [isOpen, initialTitle, initialLocation]);
+  }, [isOpen, initialTitle, initialLocation, initialClient]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -51,7 +55,7 @@ const NewProjectModal = ({
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!title.trim() || isPending) return;
-    onCreate({ title: title.trim(), location: location.trim() });
+    onCreate({ title: title.trim(), location: location.trim(), client: client.trim() });
   };
 
   return (
@@ -89,6 +93,15 @@ const NewProjectModal = ({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Lekki Waterfront Residences"
+                className={fieldClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Client</label>
+              <input
+                value={client}
+                onChange={(e) => setClient(e.target.value)}
+                placeholder="Dangote Group"
                 className={fieldClass}
               />
             </div>

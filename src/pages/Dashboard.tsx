@@ -94,13 +94,14 @@ const Dashboard = () => {
     return result;
   }, [projects, activeTab, search, sortBy]);
 
-  const handleCreate = async ({ title, location }: { title: string; location: string }) => {
+  const handleCreate = async ({ title, location, client }: { title: string; location: string; client: string }) => {
     const clientUuid = generateClientId();
     try {
       const created = await createProject({
         title,
         project_type: 'bill_of_qty',
         location: location || 'Lagos, Nigeria',
+        client: client || null,
         client_uuid: clientUuid,
       } as Partial<Project>);
       setShowNewProject(false);
@@ -114,9 +115,9 @@ const Dashboard = () => {
     }
   };
 
-  const handleRename = ({ title, location }: { title: string; location: string }) => {
+  const handleRename = ({ title, location, client }: { title: string; location: string; client: string }) => {
     if (!editing) return;
-    updateProject({ id: String(editing.id), data: { title, location } });
+    updateProject({ id: String(editing.id), data: { title, location, client: client || null } });
     setEditing(null);
   };
 
@@ -210,6 +211,7 @@ const Dashboard = () => {
         isPending={isUpdating}
         initialTitle={editing?.title ?? ''}
         initialLocation={editing?.location ?? ''}
+        initialClient={editing?.client ?? ''}
         onClose={() => setEditing(null)}
         onCreate={handleRename}
       />
