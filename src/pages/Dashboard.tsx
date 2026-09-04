@@ -17,6 +17,7 @@ import {
   useUpdateProject,
 } from '@/hooks/useProjects';
 import { useConfirm } from '@/contexts/ConfirmProvider';
+import { useWorkspaceStore } from '@/store/useWorkspaceStore';
 import { generateClientId } from '@/utils/id';
 import { saveProjectMeta } from '@/utils/projectMeta';
 import type { Project } from '@/types/project';
@@ -31,6 +32,14 @@ const VIEW_KEY = 'reckon_projects_view';
 const Dashboard = () => {
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const orgs = useWorkspaceStore((s) => s.orgs);
+  const activeOrgId = useWorkspaceStore((s) => s.activeOrgId);
+  const activeWorkspace =
+    orgs.find((o) => o.id === activeOrgId) ?? orgs.find((o) => o.kind === 'personal') ?? null;
+  const workspaceName =
+    !activeWorkspace || activeWorkspace.kind === 'personal'
+      ? 'Personal Workspace'
+      : activeWorkspace.name;
   const { data: projectsData, isLoading } = useProjects();
   const { mutateAsync: createProject, isPending: isCreating } = useCreateProject();
   const { mutate: updateProject, isPending: isUpdating } = useUpdateProject();
@@ -139,7 +148,7 @@ const Dashboard = () => {
     <DashboardLayout>
       <div className="flex h-full flex-col">
         <div className="border-b border-border bg-surface px-6 py-5">
-          <h1 className="text-lg font-semibold text-body">Personal Workspace</h1>
+          <h1 className="text-lg font-semibold text-body">{workspaceName}</h1>
           <p className="mt-0.5 text-sm text-muted">
             {projects.filter((p) => !p.role || p.role === 'owner').length} active project
             {projects.filter((p) => !p.role || p.role === 'owner').length === 1 ? '' : 's'}

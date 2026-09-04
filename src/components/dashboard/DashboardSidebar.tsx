@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Folder, LogOut, Settings } from 'lucide-react';
+import { Folder, LogOut, Settings, Users } from 'lucide-react';
 import Logo from '@/assets/images/logo_blue.svg';
 import { useProfile } from '@/hooks/useProfile';
 import { useLogout } from '@/hooks/useAuth';
@@ -11,6 +11,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Projects', icon: Folder },
+  { href: '/settings/team', label: 'Team', icon: Users },
   { href: '/settings', label: 'Settings', icon: Settings },
 ] as const;
 

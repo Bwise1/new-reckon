@@ -20,7 +20,12 @@ export function useLogin() {
       setAuth(user, token, refreshToken);
       // An invite link that sent the person here resumes after sign-in.
       const pendingInvite = localStorage.getItem('reckon_pending_invite');
-      navigate(pendingInvite ? `/invite/${pendingInvite}` : '/dashboard');
+      const pendingOrgInvite = localStorage.getItem('reckon_pending_org_invite');
+      navigate(
+        pendingInvite ? `/invite/${pendingInvite}`
+          : pendingOrgInvite ? `/org-invite/${pendingOrgInvite}`
+          : '/dashboard'
+      );
     },
   });
 }
