@@ -19,7 +19,7 @@ export const accountsEnabled = () => Boolean(AUTH_URL && localStorage.getItem('i
  * spend the single-use refresh token more than once.
  */
 let refreshing: Promise<string | null> | null = null;
-const refreshIdentityToken = async (): Promise<string | null> => {
+export const refreshIdentityToken = async (): Promise<string | null> => {
   if (refreshing) return refreshing;
   refreshing = (async () => {
     if (!AUTH_URL) return null;

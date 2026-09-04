@@ -28,6 +28,7 @@ const handleUnauthorized = (message?: string): void => {
     normalized.includes('authentication failed') ||
     normalized.includes('invalid token') ||
     normalized.includes('jwt') ||
+    normalized.includes('expired') ||
     normalized.includes('unauthorized');
 
   if (!isAuthMessage && !normalized) return;
@@ -88,6 +89,20 @@ class APIClient {
       async (error: AxiosError<{ message?: string; status?: string } | Blob>) => {
         const data = error.response?.data;
         if (error.response?.status === 401) {
+          // The Bill API token is the short-lived (15 min) suite token, and an
+          // expired one 401s with "Token has expired" — a message the auth
+          // filter below does not treat as a logout. So before anything else,
+          // try to refresh the suite token once and replay the request; the
+          // list silently blanking on expiry was this path doing nothing.
+          const cfg = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
+          if (cfg && !cfg._retried) {
+            const { refreshIdentityToken } = await import('@/services/accounts.service');
+            const fresh = await refreshIdentityToken();
+            if (fresh) {
+              cfg._retried = true;
+              return this.client(withRequestHeaders(cfg));
+            }
+          }
           const rawMessage =
             data && typeof data === 'object' && !('arrayBuffer' in data)
               ? (data as { message?: string }).message

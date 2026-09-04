@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type AxiosError } from 'axios';
 import { apiClient } from '@/lib/api-client';
 import type { AuthResponse, LoginRequest, SignupRequest, VerifyEmailRequest } from '@/types/auth';
 
@@ -52,11 +52,29 @@ interface AccountsLoginResponse {
  * product's token working against another.
  */
 const loginViaAccounts = async (data: LoginRequest): Promise<AuthResponse> => {
-  const response = await axios.post<AccountsLoginResponse>(
-    `${AUTH_URL}/login`,
-    data,
-    { headers: { 'Content-Type': 'application/json' } }
-  );
+  let response;
+  try {
+    response = await axios.post<AccountsLoginResponse>(
+      `${AUTH_URL}/login`,
+      data,
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+  } catch (err) {
+    // Surface a human message, not axios's "Request failed with status code
+    // 401". Prefer the server's own message; fall back per status.
+    const ax = err as AxiosError<{ message?: string }>;
+    const serverMessage = ax.response?.data?.message;
+    const status = ax.response?.status;
+    const fallback =
+      status === 401
+        ? 'Incorrect email or password.'
+        : status === 429
+          ? 'Too many attempts. Please try again in a few minutes.'
+          : ax.response
+            ? 'Sign-in failed. Please try again.'
+            : 'Cannot reach the server. Check your connection and try again.';
+    throw new Error(serverMessage || fallback);
+  }
 
   const { account, token, refreshToken, productTokens } = response.data.data;
   const billToken = productTokens?.['reckon-bill'];
