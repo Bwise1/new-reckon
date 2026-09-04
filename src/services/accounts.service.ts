@@ -142,8 +142,14 @@ export const accountsService = {
   acceptInvite: (token: string) =>
     request<{ orgId: string; token: string }>(`/org-invites/${token}/accept`, { method: 'POST', body: '{}' }),
 
-  // Active sessions (Security settings).
-  listSessions: () => request<{ sessions: AccountSession[] }>('/sessions'),
+  // Active sessions (Security settings). Sending the stored refresh token lets
+  // the server flag which row is THIS device (the one you must not revoke).
+  listSessions: () => {
+    const rt = (() => { try { return localStorage.getItem('refreshToken'); } catch { return null; } })();
+    return request<{ sessions: AccountSession[] }>('/sessions', {
+      headers: rt ? { 'x-refresh-token': rt } : {},
+    });
+  },
   revokeSession: (id: string) => request<unknown>(`/sessions/${id}`, { method: 'DELETE' }),
   logoutOthers: () => request<unknown>('/logout-all', { method: 'POST', body: '{}' }),
 };
