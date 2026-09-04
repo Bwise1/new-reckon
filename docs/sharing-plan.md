@@ -4,7 +4,7 @@ Invite people to a project by email with a role; they work on it with you.
 Built on the personal workspace every account already has, so it needs no
 company organizations — those come next and reuse these tables.
 
-Status: **in progress, 2026-09-03.** Contract: `reckon-accounts/docs/access-and-billing.md`
+Status: **built 2026-09-04 (all three slices).** Invite links are bearer links: whoever opens one signed in joins — forward with care (matches Figma/Google Docs link invites). Attribution (`created_by`), member colours, share links for clients and seats come later. Contract: `reckon-accounts/docs/access-and-billing.md`
 §4 (roles) · comments/mentions become multi-person through this.
 
 ## Roles (the suite vocabulary, Bill's powers)
@@ -65,10 +65,9 @@ automatically. Invites expire in 14 days; Admins can resend or cancel.
 
 ## Slices
 
-1. **Backend** — schema, `projectAccess`, member/invite endpoints, list with
-   shared, write guard + cost stripping, invite email. *(this commit)*
-2. **Web** — Collaborate modal, dashboard tab/avatars/badge, invite page.
-3. **Role gates** — read-only shell and cost hiding in the takeoff.
+1. ✅ **Backend** — reckon_api `ebd7023`.
+2. ✅ **Web** — Collaborate modal, dashboard tab/avatars/badge, invite page.
+3. ✅ **Role gates** — read-only shell and cost hiding in the takeoff (`useProjectAccessStore`, filled from `GET /boq`'s `access`).
 
 Later: `created_by` attribution on measurements/items, member colours,
 share links for clients, seats when orgs land.
