@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCommentsStore } from '@/store/useCommentsStore';
 import { useProjectAccessStore } from '@/store/useProjectAccessStore';
+import type { ProjectCapabilities, ProjectRole } from '@/types/members';
 import { fetchAndMergeProjectPlans } from '@/services/planSync.service';
 import {
   boqSync,
@@ -133,9 +134,12 @@ export const useProjectData = (
         void plansPromise;
 
         // My role on this project (owner until the server says otherwise).
-        const access = (boqResponse?.data as { access?: { role: never; can: never } } | undefined)?.access;
+        const access = (boqResponse?.data as { access?: { role: ProjectRole; can: ProjectCapabilities } } | undefined)?.access;
         if (access) useProjectAccessStore.getState().set(access);
         else useProjectAccessStore.getState().reset();
+        // Anything queued before the role was known (e.g. the bill upsert the
+        // store issues on open) can never land for a read-only role.
+        if (access && !access.can.edit) syncQueue.clear(projectId);
 
         const serverBoqTree = boqResponse?.data?.elements ?? null;
         const serverBills = boqResponse?.data?.bills ?? [];

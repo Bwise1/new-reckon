@@ -402,7 +402,19 @@ const RETRYABLE_CLIENT_STATUSES = new Set([401, 403, 408, 429]);
 const isRetryableStatus = (status: number | undefined): boolean =>
   typeof status === 'number' && RETRYABLE_CLIENT_STATUSES.has(status);
 
+/**
+ * A 403 for a ROLE (docs/sharing-plan.md) is permanent, unlike a 403 for a
+ * stale token: the server names the role in its message, and retrying would
+ * only ever get the same answer.
+ */
+const isRoleDenial = (error: unknown): boolean => {
+  if (statusOf(error) !== 403) return false;
+  const message = (error as { message?: string })?.message ?? '';
+  return /read-only|role on this project|Project Admin|Viewers/i.test(message);
+};
+
 const isClientError = (error: unknown): boolean => {
+  if (isRoleDenial(error)) return true;
   const status = statusOf(error);
   if (isRetryableStatus(status)) return false;
   return typeof status === 'number' && status >= 400 && status < 500;
@@ -514,6 +526,13 @@ export const syncQueue = {
 
   /** Number of pending ops (for debugging). */
   size: (projectId: string): number => ensureQueue(projectId).length,
+
+  /** Drop every pending op — used when the server says this role cannot write. */
+  clear: (projectId: string): void => {
+    queues[projectId] = [];
+    writePersisted(projectId);
+    notifyListeners();
+  },
 
   /** Restart drain for a project that had queued ops from a previous session. */
   resume: (projectId: string): void => {
