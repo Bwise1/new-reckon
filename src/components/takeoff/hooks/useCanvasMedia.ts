@@ -92,6 +92,24 @@ export const useCanvasMedia = ({
     const loadGenerationRef = useRef(0);
     const recoveryAttemptedRef = useRef<Set<string>>(new Set());
 
+    // PDF page picker: when a multi-page PDF is uploaded we pause and ask which
+    // pages to import, so only those are kept and counted toward storage. The
+    // modal resolves this deferred promise with the chosen pages, or null on
+    // cancel. `pageSelectFile` drives the modal's visibility.
+    const [pageSelectFile, setPageSelectFile] = useState<File | null>(null);
+    const pageSelectResolver = useRef<((pages: number[] | null) => void) | null>(null);
+    const askPagesToImport = useCallback((file: File) => {
+        setPageSelectFile(file);
+        return new Promise<number[] | null>((resolve) => {
+            pageSelectResolver.current = resolve;
+        });
+    }, []);
+    const resolvePageSelect = useCallback((pages: number[] | null) => {
+        setPageSelectFile(null);
+        pageSelectResolver.current?.(pages);
+        pageSelectResolver.current = null;
+    }, []);
+
     const activePlan = plans.find((plan) => plan.id === activePlanId);
     const activePlanMediaKind = activePlan ? inferPlanMediaKind(activePlan) : "unknown";
 
@@ -780,10 +798,36 @@ export const useCanvasMedia = ({
                 return;
             }
 
-            const name = file.name.replace(/\.[^.]+$/, "");
+            // Multi-page PDFs: let the user pick which pages to import, then
+            // rebuild a PDF of just those (vector preserved, so no crispness
+            // loss). Only the kept pages are uploaded, so only they count
+            // toward storage. Single-page PDFs and images skip the picker.
+            let uploadFile = file;
+            if (file.type === "application/pdf") {
+                try {
+                    const pdfjsLib = await import("pdfjs-dist");
+                    const probe = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+                    const total = probe.numPages;
+                    void probe.destroy();
+                    if (total > 1) {
+                        const chosen = await askPagesToImport(file);
+                        if (!chosen) return; // cancelled — nothing uploaded
+                        if (chosen.length < total) {
+                            const { buildTrimmedPdf } = await import("@/utils/pdfPageSelect");
+                            uploadFile = await buildTrimmedPdf(file, chosen);
+                        }
+                    }
+                } catch {
+                    // If probing/splitting fails, fall back to the whole file —
+                    // the PDF branch below will surface any real open error.
+                    uploadFile = file;
+                }
+            }
+
+            const name = uploadFile.name.replace(/\.[^.]+$/, "");
             const planId = addPlanFromUpload(name, {
-                filename: file.name,
-                mimeType: file.type,
+                filename: uploadFile.name,
+                mimeType: uploadFile.type,
                 pageCount: 1,
             });
 
@@ -830,10 +874,12 @@ export const useCanvasMedia = ({
                         error
                     );
                 }
-            } else if (file.type === "application/pdf") {
+            } else if (uploadFile.type === "application/pdf") {
                 try {
                     const pdfjsLib = await import("pdfjs-dist");
-                    const buffer = await file.arrayBuffer();
+                    // Use the (possibly trimmed) upload file so the canvas shows
+                    // exactly what was imported and stored.
+                    const buffer = await uploadFile.arrayBuffer();
                     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
                     setPlanPdf(planId, pdf);
                     setPdfDoc(pdf);
@@ -843,7 +889,7 @@ export const useCanvasMedia = ({
                     setCurrentPage(1);
                     await renderPdfPage(pdf, 1, planId, rotations[1] ?? 0);
                     setPlanLoadStatus("ready");
-                    void uploadPlanToCloud(planId, file, pdf.numPages);
+                    void uploadPlanToCloud(planId, uploadFile, pdf.numPages);
                 } catch (error) {
                     failPlan(
                         "This PDF could not be opened. It may be corrupted or password-protected.",
@@ -1060,6 +1106,9 @@ export const useCanvasMedia = ({
 
     return {
         handleFileUpload,
+        // PDF page-picker modal wiring (consumed by PlanNavigator).
+        pageSelectFile,
+        resolvePageSelect,
         changePage,
         rerenderCurrentPage,
         refreshRegionPatch,

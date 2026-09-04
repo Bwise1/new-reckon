@@ -29,6 +29,7 @@ import CanvasToolbar from "@/components/takeoff/CanvasToolbar";
 import CalibrationDialog from "@/components/takeoff/CalibrationDialog";
 import { createPortal } from "react-dom";
 import CanvasStatusBar from "@/components/takeoff/CanvasStatusBar";
+import PageSelectModal from "@/components/takeoff/PageSelectModal";
 import KnownDimensionDialog from "@/components/takeoff/KnownDimensionDialog";
 import CanvasViewport from "@/components/takeoff/CanvasViewport";
 import { ratioToPxPerMeter } from "@/utils/pdfScaleDetector";
@@ -383,7 +384,7 @@ if (!prev && activeTool) {
   const rotateAllPages = useTakeoffStore((s) => s.rotateAllPages);
   const activeRealWidthLive = useTakeoffStore((s) => s.activeRealWidth);
 
-  const { handleFileUpload, changePage, rerenderCurrentPage, refreshRegionPatch, regionPatch, detectedScale, refitToView, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfDisplaySize, pdfSegmentIndexRef } =
+  const { handleFileUpload, pageSelectFile, resolvePageSelect, changePage, rerenderCurrentPage, refreshRegionPatch, regionPatch, detectedScale, refitToView, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfDisplaySize, pdfSegmentIndexRef } =
     useCanvasMedia({
     containerRef,
     backgroundImage,
@@ -4077,6 +4078,12 @@ if (!prev && activeTool) {
           </>
         );
       })()}
+
+      <PageSelectModal
+        file={pageSelectFile}
+        onCancel={() => resolvePageSelect(null)}
+        onConfirm={(pages) => resolvePageSelect(pages)}
+      />
     </div>
   );
 };
