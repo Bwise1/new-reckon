@@ -9,7 +9,50 @@ const AUTH_URL = import.meta.env.VITE_AUTH_URL || null;
 
 export const accountsEnabled = () => Boolean(AUTH_URL && localStorage.getItem('identityToken'));
 
-const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
+/**
+ * The identity token is short-lived (15 min). Exchange the stored refresh
+ * token for a fresh one. The suite token IS the Bill API token, so we store
+ * it under both keys — the same thing login does. Returns the new access
+ * token, or null when refresh is impossible (no refresh token, or it was
+ * itself rejected — the caller then surfaces the 401 and the user re-logs in).
+ * Concurrent callers share one in-flight refresh so a burst of 401s does not
+ * spend the single-use refresh token more than once.
+ */
+let refreshing: Promise<string | null> | null = null;
+const refreshIdentityToken = async (): Promise<string | null> => {
+  if (refreshing) return refreshing;
+  refreshing = (async () => {
+    if (!AUTH_URL) return null;
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (!refreshToken) return null;
+    try {
+      const res = await fetch(`${AUTH_URL}/refresh-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!res.ok) return null;
+      const body = (await res.json().catch(() => ({}))) as {
+        data?: { token?: string; refreshToken?: string };
+      };
+      const next = body?.data;
+      if (!next?.token) return null;
+      localStorage.setItem('identityToken', next.token);
+      localStorage.setItem('token', next.token);
+      if (next.refreshToken) localStorage.setItem('refreshToken', next.refreshToken);
+      return next.token;
+    } catch {
+      return null;
+    }
+  })();
+  try {
+    return await refreshing;
+  } finally {
+    refreshing = null;
+  }
+};
+
+const request = async <T>(path: string, init: RequestInit = {}, retried = false): Promise<T> => {
   if (!AUTH_URL) throw new Error('Accounts service is not configured');
   const token = localStorage.getItem('identityToken');
   const res = await fetch(`${AUTH_URL}${path}`, {
@@ -20,6 +63,12 @@ const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
       ...(init.headers ?? {}),
     },
   });
+  // An expired identity token comes back as 401; refresh once and retry. The
+  // refresh endpoint is not itself retried (it carries no bearer).
+  if (res.status === 401 && !retried && path !== '/refresh-token') {
+    const fresh = await refreshIdentityToken();
+    if (fresh) return request<T>(path, init, true);
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error((body as { message?: string })?.message || `Request failed (${res.status})`);
