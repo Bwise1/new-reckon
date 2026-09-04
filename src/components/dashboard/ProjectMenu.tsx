@@ -1,17 +1,21 @@
 import { useState } from 'react';
-import { Copy, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Copy, MoreHorizontal, Pencil, Trash2, Users } from 'lucide-react';
 
 type Props = {
   onDuplicate: () => void;
   onRename: () => void;
   onDelete: () => void;
+  /** Present when the caller may manage people on this project. */
+  onShare?: () => void;
+  /** Hide destructive items for projects the caller does not own/administer. */
+  canManage?: boolean;
 };
 
 /**
  * The card/row overflow menu. Share and Archive from the prototype arrive
  * with project sharing; Rename is ours (the prototype edits in settings).
  */
-export default function ProjectMenu({ onDuplicate, onRename, onDelete }: Props) {
+export default function ProjectMenu({ onDuplicate, onRename, onDelete, onShare, canManage = true }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -52,6 +56,20 @@ export default function ProjectMenu({ onDuplicate, onRename, onDelete }: Props) 
               <Copy className="h-3.5 w-3.5" />
               Duplicate
             </button>
+            {onShare && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onShare();
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-body transition-colors hover:bg-overlay/5 cursor-pointer"
+              >
+                <Users className="h-3.5 w-3.5" />
+                Share…
+              </button>
+            )}
+            {canManage && (
             <button
               type="button"
               onClick={() => {
@@ -63,7 +81,9 @@ export default function ProjectMenu({ onDuplicate, onRename, onDelete }: Props) 
               <Pencil className="h-3.5 w-3.5" />
               Rename
             </button>
-            <div className="my-1 h-px bg-surface-muted" />
+            )}
+            {canManage && <div className="my-1 h-px bg-surface-muted" />}
+            {canManage && (
             <button
               type="button"
               onClick={() => {
@@ -75,6 +95,7 @@ export default function ProjectMenu({ onDuplicate, onRename, onDelete }: Props) 
               <Trash2 className="h-3.5 w-3.5" />
               Delete
             </button>
+            )}
           </div>
         </>
       )}

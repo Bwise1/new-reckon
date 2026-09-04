@@ -6,6 +6,7 @@ import Signup from './pages/auth/Signup';
 import Dashboard from './pages/Dashboard';
 import ProjectDetail from './pages/ProjectDetail';
 import Settings from './pages/Settings';
+import InviteAccept from './pages/InviteAccept';
 import { GuestRoute, ProtectedRoute, RootRedirect } from './components/auth/RouteGuards';
 import PWAUpdatePrompt from './components/PWAUpdatePrompt';
 import './App.css';
@@ -25,6 +26,9 @@ function AppRoutes() {
         <Route path="/project/:id" element={<ProjectDetail />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
+
+      {/* Reachable signed in or out: it decides what to show. */}
+      <Route path="/invite/:token" element={<InviteAccept />} />
 
       <Route path="/verify-email" element={<div className="p-8">Verify Email - Coming Soon</div>} />
       <Route path="/forgot-password" element={<div className="p-8">Forgot Password - Coming Soon</div>} />

@@ -17,6 +17,10 @@ import { useCommentsStore } from "@/store/useCommentsStore";
 import { useProfile } from "@/hooks/useProfile";
 import { useProjectTheme } from "@/hooks/useProjectTheme";
 import { commentTargetKey, type CommentAnchorKind } from "@/types/comments";
+import CollaborateModal from "@/components/dashboard/CollaborateModal";
+import { useProjectAccessStore } from "@/store/useProjectAccessStore";
+import { ROLE_LABELS } from "@/types/members";
+import { useParams } from "react-router-dom";
 
 interface TakeoffRightSidebarProps {
   className?: string;
@@ -41,6 +45,12 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
   // The bills ledger is the landing view (prototype behaviour).
   const [billView, setBillView] = useState<"list" | "detail">("list");
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const { id: routeProjectId } = useParams();
+  const [collaborateOpen, setCollaborateOpen] = useState(false);
+  const accessRole = useProjectAccessStore((s) => s.role);
+  const can = useProjectAccessStore((s) => s.can);
+  const readOnly = !can.edit;
+  const hideCosts = !can.seeCosts;
 
   // Comments on elements and items (docs/comments-plan.md). One popover open
   // at a time, anchored beside the trigger that opened it.
@@ -213,6 +223,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
           </p>
         </div>
 
+        {!hideCosts && (
         <button
           type="button"
           title="Preview the BOQ document"
@@ -223,15 +234,17 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
         >
           <Play className="h-4 w-4" strokeWidth={1.75} />
         </button>
+        )}
         <button
           type="button"
-          title="Collaborate — coming soon"
+          title="Collaborate"
           aria-label="Collaborate"
-          onClick={() => window.alert("Collaboration is coming soon.")}
+          onClick={() => setCollaborateOpen(true)}
           className="rounded-lg border border-border p-2 text-muted hover:bg-overlay/5 hover:text-body transition-colors cursor-pointer"
         >
           <Users className="h-4 w-4" strokeWidth={1.75} />
         </button>
+        {!hideCosts && (
         <button
           type="button"
           data-tour="export"
@@ -242,7 +255,15 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
         >
           Export
         </button>
+        )}
       </div>
+
+      {(readOnly || hideCosts) && (
+        <div className="shrink-0 border-b border-border bg-surface-muted px-4 py-2 text-xs text-muted">
+          You're on this project as <span className="font-semibold text-body">{ROLE_LABELS[accessRole]}</span>
+          {readOnly ? " — read-only." : hideCosts ? " — quantities only, no rates." : "."}
+        </div>
+      )}
 
       {billView === "detail" && (
         <div className="shrink-0 flex items-center gap-1.5 px-4 py-2 border-b border-border text-sm">
@@ -267,6 +288,8 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
 
       {billView === "list" ? (
         <BillsOverview
+          readOnly={readOnly}
+          hideCosts={hideCosts}
           onOpenBill={(billId) => {
             switchBill(billId);
             setBillView("detail");
@@ -315,6 +338,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                         : element.title
                     }
                     onClick={(e) => e.stopPropagation()}
+                    disabled={readOnly}
                     onChange={(e) => {
                       // Store with the first letter capitalized (sentence case).
                       const v = e.target.value;
@@ -384,6 +408,8 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                       : pendingCommitForThis?.value ?? null;
                     return (
                     <EstimationCard
+                      readOnly={readOnly}
+                      hideCosts={hideCosts}
                       commentCount={threadOf("boq_item", card.id)?.comments.length ?? 0}
                       commentResolved={threadOf("boq_item", card.id)?.status === "resolved"}
                       onOpenComments={(rect) =>
@@ -475,6 +501,13 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
       </div>
       )}
 
+      {routeProjectId && (
+        <CollaborateModal
+          projectId={routeProjectId}
+          open={collaborateOpen}
+          onClose={() => setCollaborateOpen(false)}
+        />
+      )}
       {openComment && (
         <CommentPopover
           title={openComment.title}

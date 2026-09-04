@@ -18,6 +18,10 @@ import {
 interface EstimationCardProps {
   data?: Partial<EstimationCardData>;
   itemLabel: string;
+  /** Reviewer/Viewer: every input and action disabled (docs/sharing-plan.md). */
+  readOnly?: boolean;
+  /** Contributor/Viewer: rates and amounts are never shown. */
+  hideCosts?: boolean;
   /** Comment thread state for this item (docs/comments-plan.md). */
   commentCount?: number;
   commentResolved?: boolean;
@@ -69,6 +73,8 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
   itemLabel,
   onDelete,
   onCopy,
+  readOnly = false,
+  hideCosts = false,
   commentCount = 0,
   commentResolved = false,
   onOpenComments,
@@ -248,6 +254,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
       } ${className}`}
     >
       <div onClick={(e) => e.stopPropagation()} className="space-y-2.5">
+        <fieldset disabled={readOnly} className="contents">
         <UnitSelector selectedUnit={unit} onChange={updateUnit} />
 
         <HeaderField
@@ -356,10 +363,17 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
               </span>
             </span>
           </div>
+          {hideCosts ? (
+            <div className="min-w-0 flex flex-1 items-center justify-between gap-2 rounded-md border border-dashed border-border bg-surface px-2.5 py-1.5 overflow-hidden" title="Your role on this project does not include rates">
+              <span className="text-xs font-medium text-muted shrink-0">Rate</span>
+              <span className="text-xs text-muted/70">hidden</span>
+            </div>
+          ) : (
           <div className="min-w-0 flex flex-1 items-center justify-between gap-2 rounded-md border border-border bg-surface px-2.5 py-1.5 overflow-hidden">
             <span className="text-xs font-medium text-muted shrink-0">Rate</span>
             <span className="text-sm font-medium text-muted shrink-0">₦</span>
             <input
+              disabled={readOnly}
               type="text"
               inputMode="decimal"
               value={isEditingRate ? rate : formatRateDisplay(rate)}
@@ -380,13 +394,15 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 syncToParent({ rate: formatted });
               }}
               placeholder="0.00"
-              className="flex-1 min-w-0 w-0 text-right text-sm text-body outline-none bg-transparent"
+              className="flex-1 min-w-0 w-0 text-right text-sm text-body outline-none bg-transparent disabled:text-muted"
             />
           </div>
+          )}
         </div>
 
+        </fieldset>
         <div className="flex items-center justify-between pt-1">
-          <div className="flex items-center gap-2 text-xs font-medium text-muted">
+          <div className={`flex items-center gap-2 text-xs font-medium text-muted ${readOnly ? 'invisible' : ''}`}>
             <span>Add:</span>
             <button
               type="button"
@@ -418,6 +434,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
                 onOpen={onOpenComments}
               />
             )}
+            {!readOnly && (<>
             <button
               type="button"
               onClick={(e) => {
@@ -454,6 +471,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
+            </>)}
           </div>
         </div>
       </div>

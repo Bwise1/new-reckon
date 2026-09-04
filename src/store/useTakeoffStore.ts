@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { projectCan } from '@/store/useProjectAccessStore';
 import type {
   TakeoffItem,
   DrawTool,
@@ -1188,6 +1189,8 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   setActiveItemId: (id) => set({ activeItemId: id }),
 
   setActiveTool: (tool) => {
+    // Read-only roles (Reviewer, Viewer) never pick up a drawing tool.
+    if (tool !== null && !projectCan().edit) return;
     // If a measuring session is active and the user picks a tool whose
     // unit no longer matches the target, close the session first so the
     // running total is committed as one chip before switching.

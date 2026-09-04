@@ -31,6 +31,10 @@ const CURRENCY = "₦";
 interface BillsOverviewProps {
   /** Open a bill's element view. */
   onOpenBill: (billId: string) => void;
+  /** Reviewer/Viewer: no adding, renaming or deleting bills. */
+  readOnly?: boolean;
+  /** Contributor/Viewer: totals are never shown. */
+  hideCosts?: boolean;
 }
 
 /**
@@ -38,7 +42,7 @@ interface BillsOverviewProps {
  * one ledger of rows (caps label, live-editable name, per-bill total, hover
  * menu with Duplicate/Delete), and the Add Bill button.
  */
-const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
+const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill, readOnly = false, hideCosts = false }) => {
   const { bills, addBill, renameBill, duplicateBill, deleteBill, collectBills } =
     useTakeoffStore(
       useShallow((s) => ({
@@ -60,6 +64,7 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
   return (
     <>
       {/* Grand financial summary strip */}
+      {!hideCosts && (
       <div className="shrink-0 px-3 pt-3">
         <div className="rounded-lg border border-border bg-surface-muted p-3">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
@@ -70,6 +75,7 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
           </p>
         </div>
       </div>
+      )}
 
       {/* Bills ledger */}
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-3 py-3">
@@ -87,7 +93,8 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
                 name={
                   lookupBillName(bills, bill.id) ?? bill.name
                 }
-                total={billTotal(bill.elements)}
+                total={hideCosts ? null : billTotal(bill.elements)}
+                readOnly={readOnly}
                 isLast={index === withElements.length - 1}
                 canDelete={bills.length > 1}
                 onOpen={() => onOpenBill(bill.id)}
@@ -106,6 +113,7 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
 
       {/* Always reachable: outside the scrolling ledger, so an empty list or a
           long one never hides it. */}
+      {!readOnly && (
       <div className="shrink-0 border-t border-border px-3 py-3">
         <button
           type="button"
@@ -116,6 +124,7 @@ const BillsOverview: React.FC<BillsOverviewProps> = ({ onOpenBill }) => {
           Add Bill
         </button>
       </div>
+      )}
     </>
   );
 };
@@ -135,6 +144,7 @@ function BillRow({
   total,
   isLast,
   canDelete,
+  readOnly = false,
   onOpen,
   onRename,
   onDuplicate,
@@ -142,9 +152,10 @@ function BillRow({
 }: {
   label: string;
   name: string;
-  total: number;
+  total: number | null;
   isLast: boolean;
   canDelete: boolean;
+  readOnly?: boolean;
   onOpen: () => void;
   onRename: (name: string) => void;
   onDuplicate: () => void;
@@ -164,6 +175,7 @@ function BillRow({
           {label}
         </span>
 
+        {!readOnly && (
         <div className="relative shrink-0">
           <button
             type="button"
@@ -218,20 +230,24 @@ function BillRow({
             </>
           )}
         </div>
+        )}
       </div>
 
       <div className="mt-1 flex items-center justify-between gap-2">
         <input
           value={name}
           onChange={(e) => onRename(e.target.value)}
+          readOnly={readOnly}
           onClick={(e) => e.stopPropagation()}
           placeholder="Untitled Bill"
           className="min-w-0 w-1/2 rounded bg-transparent px-1 -mx-1 text-base font-semibold text-body outline-none transition-colors hover:bg-overlay/10 focus:bg-surface focus:ring-1 focus:ring-accent/30"
         />
 
-        <span className="shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums text-body">
-          {CURRENCY} {formatAmount(total)}
-        </span>
+        {total !== null && (
+          <span className="shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums text-body">
+            {CURRENCY} {formatAmount(total)}
+          </span>
+        )}
       </div>
     </div>
   );

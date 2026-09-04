@@ -8,6 +8,7 @@ import ProjectsToolbar, {
 } from '@/components/dashboard/ProjectsToolbar';
 import ProjectsView from '@/components/dashboard/ProjectsView';
 import NewProjectModal from '@/components/dashboard/NewProjectModal';
+import CollaborateModal from '@/components/dashboard/CollaborateModal';
 import {
   useProjects,
   useCreateProject,
@@ -56,12 +57,17 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState<ProjectTab>('all');
   const [showNewProject, setShowNewProject] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
+  const [sharing, setSharing] = useState<Project | null>(null);
 
   const projects = useMemo(() => projectsData?.data?.projects ?? [], [projectsData]);
 
   const visible = useMemo(() => {
-    // Every project is mine until sharing exists; "shared" is therefore empty.
-    let result = activeTab === 'shared' ? [] : projects;
+    let result =
+      activeTab === 'shared'
+        ? projects.filter((p) => p.role && p.role !== 'owner')
+        : activeTab === 'mine'
+          ? projects.filter((p) => !p.role || p.role === 'owner')
+          : projects;
     const q = search.trim().toLowerCase();
     if (q) {
       result = result.filter(
@@ -135,7 +141,8 @@ const Dashboard = () => {
         <div className="border-b border-border bg-surface px-6 py-5">
           <h1 className="text-lg font-semibold text-body">Personal Workspace</h1>
           <p className="mt-0.5 text-sm text-muted">
-            {projects.length} active project{projects.length === 1 ? '' : 's'}
+            {projects.filter((p) => !p.role || p.role === 'owner').length} active project
+            {projects.filter((p) => !p.role || p.role === 'owner').length === 1 ? '' : 's'}
           </p>
         </div>
 
@@ -168,6 +175,7 @@ const Dashboard = () => {
               onDuplicate={(id) => duplicateProject({ id })}
               onRename={(project) => setEditing(project)}
               onDelete={handleDelete}
+              onShare={(project) => setSharing(project)}
             />
           )}
         </div>
@@ -179,6 +187,14 @@ const Dashboard = () => {
         onClose={() => setShowNewProject(false)}
         onCreate={handleCreate}
       />
+      {sharing && (
+        <CollaborateModal
+          projectId={String(sharing.id)}
+          projectTitle={sharing.title}
+          open
+          onClose={() => setSharing(null)}
+        />
+      )}
       <NewProjectModal
         mode="edit"
         isOpen={editing !== null}

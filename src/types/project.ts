@@ -1,3 +1,5 @@
+import type { ProjectPerson, ProjectRole } from './members';
+
 export interface Project {
   id: string;
   client_uuid?: string;
@@ -7,6 +9,12 @@ export interface Project {
   elements?: number;
   createdAt?: string;
   updatedAt?: string;
+  /** My role on it — 'owner' for my own projects (docs/sharing-plan.md). */
+  role?: ProjectRole;
+  /** The owner, for projects shared with me. */
+  owner?: Omit<ProjectPerson, 'role' | 'since'>;
+  /** People on the project besides the owner. */
+  members?: ProjectPerson[];
 }
 
 export interface ProjectStats {

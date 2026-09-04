@@ -11,6 +11,7 @@ import {
   type MeasurementPatchBody,
 } from '@/services/entitySync.service';
 import { commentSync, type AddCommentBody } from '@/services/comments.service';
+import { projectCan } from '@/store/useProjectAccessStore';
 import { ApiError } from '@/lib/api-client';
 
 /**
@@ -484,6 +485,12 @@ const drainInternal = async (projectId: string): Promise<void> => {
 
 export const syncQueue = {
   enqueue: (op: SyncOp): void => {
+    // A read-only role's UI is disabled; anything that slips through must
+    // not sit in the queue failing with 403 forever.
+    if (!projectCan().edit && !op.kind.startsWith('comment.')) {
+      console.warn('[syncQueue] dropped write for read-only role', op.kind);
+      return;
+    }
     const queue = ensureQueue(op.projectId);
     queues[op.projectId] = dedupOnEnqueue(
       queue,

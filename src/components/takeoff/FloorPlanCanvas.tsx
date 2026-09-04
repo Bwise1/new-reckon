@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from "react";
+import { useProjectAccessStore } from '@/store/useProjectAccessStore';
 import type { DrawTool, TakeoffItem, TakeoffMode } from "@/types/takeoff";
 import {
   Line,
@@ -207,6 +208,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   // (vertices, perpendiculars, intersections). Both persisted per browser.
   // The status bar renders through a portal into the shell's full-width slot
   // (prototype "base" layout) while its state stays in this component.
+  const projectCanEdit = useProjectAccessStore((st) => st.can.edit);
   const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
   useEffect(() => {
     setStatusSlot(document.getElementById("reckon-status-slot"));
@@ -2299,6 +2301,7 @@ if (!prev && activeTool) {
   return (
     <div className="flex-1 flex flex-col relative overflow-hidden min-h-0">
       <CanvasToolbar
+        readOnly={!projectCanEdit}
         calibrationMode={calibrationMode}
         currentScale={currentScale}
         activeTool={activeToolProp ?? activeTool}

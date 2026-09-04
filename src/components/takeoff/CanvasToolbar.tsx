@@ -39,6 +39,8 @@ interface CanvasToolbarProps {
   onStartKnownCalibration: () => void;
   onClearScale: () => void;
   onSelectTool: (type: DrawTool) => void;
+  /** Reviewer/Viewer: measuring, calibration and editing tools are disabled. */
+  readOnly?: boolean;
   /** Single-click area detection mode (magic wand). */
   autoAreaMode: boolean;
   onToggleAutoArea: () => void;
@@ -214,6 +216,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onStartKnownCalibration,
   onClearScale,
   onSelectTool,
+  readOnly = false,
   autoAreaMode,
   onToggleAutoArea,
   onFinishTool,
@@ -308,7 +311,8 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   : 'bg-overlay/10 text-body'
               }
               activeLabelColor={calibrationMode ? 'text-accent-strong' : 'text-body'}
-              title="Scale / calibration options"
+              title={readOnly ? 'Read-only role' : 'Scale / calibration options'}
+              disabled={readOnly}
               onClick={toggleCal}
             />
           </div>
@@ -322,7 +326,8 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                 label={tool.label}
                 iconScale={tool.iconScale ?? MEASURE_ICON_SCALE}
                 active={isActive}
-                title={isActive ? `${tool.label} — click again or Done to exit` : tool.tooltip}
+                title={readOnly ? 'Read-only role' : isActive ? `${tool.label} — click again or Done to exit` : tool.tooltip}
+                disabled={readOnly}
                 onClick={() => (isActive ? onFinishTool() : onSelectTool(tool.type))}
               />
             );
@@ -330,6 +335,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           <IconButton
             icon={Wand2}
             label="Auto Area"
+            disabled={readOnly}
             active={autoAreaMode}
             title="Auto area — click once inside a room and its boundary is detected automatically"
             onClick={onToggleAutoArea}
@@ -388,8 +394,8 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         <Divider />
 
         <ToolGroup title="Edit">
-          <IconButton icon={Undo2} label="Undo" disabled={!canUndo} onClick={onUndo} />
-          <IconButton icon={Redo2} label="Redo" disabled={!canRedo} onClick={onRedo} />
+          <IconButton icon={Undo2} label="Undo" disabled={!canUndo || readOnly} onClick={onUndo} />
+          <IconButton icon={Redo2} label="Redo" disabled={!canRedo || readOnly} onClick={onRedo} />
           <IconButton
             icon={Trash2}
             label="Clear"

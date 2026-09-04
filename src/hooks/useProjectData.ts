@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCommentsStore } from '@/store/useCommentsStore';
+import { useProjectAccessStore } from '@/store/useProjectAccessStore';
 import { fetchAndMergeProjectPlans } from '@/services/planSync.service';
 import {
   boqSync,
@@ -130,6 +131,11 @@ export const useProjectData = (
 
         // Plans are already merged into the store by fetchAndMergeProjectPlans.
         void plansPromise;
+
+        // My role on this project (owner until the server says otherwise).
+        const access = (boqResponse?.data as { access?: { role: never; can: never } } | undefined)?.access;
+        if (access) useProjectAccessStore.getState().set(access);
+        else useProjectAccessStore.getState().reset();
 
         const serverBoqTree = boqResponse?.data?.elements ?? null;
         const serverBills = boqResponse?.data?.bills ?? [];

@@ -1,4 +1,5 @@
 import type { Project } from '@/types/project';
+import type { ProjectPerson, ProjectRole } from '@/types/members';
 import { getLocalBoqElementCount } from '@/utils/persistence';
 import { getProjectMeta, saveProjectMeta } from '@/utils/projectMeta';
 
@@ -14,6 +15,9 @@ type ApiProjectRow = {
   updatedAt?: string | Date;
   element_count?: number;
   elements?: number;
+  role?: ProjectRole;
+  owner?: Project['owner'] | null;
+  members?: ProjectPerson[];
 };
 
 const toDateString = (value?: string | Date): string | undefined => {
@@ -45,6 +49,9 @@ export const normalizeProject = (raw: ApiProjectRow): Project => {
     elements,
     createdAt: toDateString(raw.created_at ?? raw.createdAt),
     updatedAt: toDateString(raw.updated_at ?? raw.updatedAt),
+    role: raw.role ?? 'owner',
+    owner: raw.owner ?? undefined,
+    members: raw.members ?? [],
   };
 };
 

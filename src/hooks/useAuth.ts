@@ -18,7 +18,9 @@ export function useLogin() {
       if (identityToken) localStorage.setItem('identityToken', identityToken);
       if (accountId) localStorage.setItem('accountId', accountId);
       setAuth(user, token, refreshToken);
-      navigate('/dashboard');
+      // An invite link that sent the person here resumes after sign-in.
+      const pendingInvite = localStorage.getItem('reckon_pending_invite');
+      navigate(pendingInvite ? `/invite/${pendingInvite}` : '/dashboard');
     },
   });
 }

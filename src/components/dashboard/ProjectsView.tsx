@@ -2,6 +2,8 @@ import { FileStack } from 'lucide-react';
 import type { Project } from '@/types/project';
 import { relativeTime } from '@/utils/relativeTime';
 import ProjectMenu from './ProjectMenu';
+import CollaboratorAvatars from './CollaboratorAvatars';
+import { ROLE_LABELS } from '@/types/members';
 
 type ViewMode = 'grid' | 'list';
 
@@ -13,10 +15,32 @@ type Props = {
   onDuplicate: (projectId: string) => void;
   onRename: (project: Project) => void;
   onDelete: (project: Project) => void;
+  onShare: (project: Project) => void;
 };
 
 const elementsLabel = (n?: number) =>
   n == null ? '' : `${n} element${n === 1 ? '' : 's'}`;
+
+const canManage = (p: Project) => p.role === 'owner' || p.role === 'project_admin';
+
+/** Everyone to show on a card: the owner (for shared projects) plus members. */
+const people = (p: Project) => [
+  ...(p.owner ? [{ id: `owner-${p.id}`, name: p.owner.name, initials: p.owner.initials, avatarUrl: p.owner.avatarUrl }] : []),
+  ...(p.members ?? []),
+];
+
+const menuFor = (
+  project: Project,
+  h: Pick<Props, 'onDuplicate' | 'onRename' | 'onDelete' | 'onShare'>
+) => (
+  <ProjectMenu
+    canManage={canManage(project)}
+    onShare={canManage(project) ? () => h.onShare(project) : undefined}
+    onDuplicate={() => h.onDuplicate(String(project.id))}
+    onRename={() => h.onRename(project)}
+    onDelete={() => h.onDelete(project)}
+  />
+);
 
 /** Project cards (grid) or rows (list), as in the prototype's ProjectsView. */
 export default function ProjectsView({
@@ -27,6 +51,7 @@ export default function ProjectsView({
   onDuplicate,
   onRename,
   onDelete,
+  onShare,
 }: Props) {
   if (projects.length === 0) {
     return (
@@ -58,11 +83,10 @@ export default function ProjectsView({
             <span className="hidden w-28 shrink-0 text-right text-xs text-muted lg:block">
               {relativeTime(project.updatedAt ?? project.createdAt)}
             </span>
-            <ProjectMenu
-              onDuplicate={() => onDuplicate(String(project.id))}
-              onRename={() => onRename(project)}
-              onDelete={() => onDelete(project)}
-            />
+            <div className="hidden shrink-0 md:block">
+              <CollaboratorAvatars people={people(project)} />
+            </div>
+            {menuFor(project, { onDuplicate, onRename, onDelete, onShare })}
           </div>
         ))}
       </div>
@@ -77,22 +101,32 @@ export default function ProjectsView({
           onClick={() => onOpen(String(project.id))}
           className="group flex cursor-pointer flex-col rounded-xl border border-border bg-surface p-4 transition-colors hover:border-overlay/20 hover:shadow-sm"
         >
-          <div className="flex items-start justify-end">
-            <ProjectMenu
-              onDuplicate={() => onDuplicate(String(project.id))}
-              onRename={() => onRename(project)}
-              onDelete={() => onDelete(project)}
-            />
+          <div className="flex items-start justify-between">
+            {project.role && project.role !== 'owner' ? (
+              <span className="rounded-md bg-overlay/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                {ROLE_LABELS[project.role]}
+              </span>
+            ) : (
+              <span />
+            )}
+            {menuFor(project, { onDuplicate, onRename, onDelete, onShare })}
           </div>
           <h3 className="mt-3 truncate text-sm font-semibold text-body">{project.title}</h3>
-          <p className="mt-0.5 truncate text-xs text-muted">{project.location || 'No location'}</p>
+          <p className="mt-0.5 truncate text-xs text-muted">
+            {project.location || 'No location'}
+            {project.owner && <> · {project.owner.name}</>}
+          </p>
           <p className="mt-3 text-sm font-medium tabular-nums text-body">
             {elementsLabel(project.elements) || ' '}
           </p>
           <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-muted">
-              {project.project_type === 'material_schedule' ? 'Material schedule' : 'Bill of quantities'}
-            </span>
+            {people(project).length > 0 ? (
+              <CollaboratorAvatars people={people(project)} />
+            ) : (
+              <span className="text-[11px] font-medium uppercase tracking-wide text-muted">
+                {project.project_type === 'material_schedule' ? 'Material schedule' : 'Bill of quantities'}
+              </span>
+            )}
             <span className="shrink-0 text-xs text-muted">
               {relativeTime(project.updatedAt ?? project.createdAt)}
             </span>
