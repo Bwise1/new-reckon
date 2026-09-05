@@ -266,6 +266,15 @@ interface TakeoffStore {
   setScale: (page: number, scale: number) => void;
   clearScale: (page: number) => void;
   setCalibrationLine: (page: number, line: CalibrationLine) => void;
+  /**
+   * Set the scale AND reference line for one or more pages as a single
+   * undoable command (one undo reverts every page), recomputing each page's
+   * measurements and enqueuing the same calibration/measurement syncs that
+   * setScale + setCalibrationLine would.
+   */
+  applyCalibrationToPages: (
+    entries: Array<{ page: number; scale: number; line: CalibrationLine }>
+  ) => void;
   setCalibrationMode: (mode: boolean) => void;
   /** Rotate a page by delta degrees (90 or -90).
    *  transformPoints: optional fn to remap existing measurement points to the new orientation. */
@@ -392,6 +401,57 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         };
       });
       get().triggerAutoSave();
+    }
+  };
+
+  type ChangedQuantity = { clientUuid: string; quantity: number; deductions: Point[][] | null };
+
+  /**
+   * Recompute every measurement on `page` (of the active plan) against
+   * `newScale`, returning the next takeoffItems (corrected per-measurement
+   * quantity + item totals) and the measurements whose quantity actually
+   * changed — so re-calibrating a page keeps its existing measurements
+   * consistent instead of leaving them on the old scale. Count measurements
+   * are scale-independent and never change. Pure over `items` so callers can
+   * chain it across several pages before a single store write.
+   */
+  const recomputePageForScale = (
+    items: TakeoffItem[],
+    page: number,
+    newScale: number | null
+  ): { items: TakeoffItem[]; changed: ChangedQuantity[] } => {
+    const changed: ChangedQuantity[] = [];
+    const activePlanId = get().activePlanId;
+    const nextItems = items.map((item) => {
+      let touched = false;
+      const measurements = item.measurements.map((m) => {
+        if (m.page !== page) return m;
+        if (!measurementBelongsToPlan(m, activePlanId)) return m;
+        if (m.type === 'count') return m; // count is a tally, not a scaled length/area
+        const t = m.type === 'area' ? 'area' : m.type === 'polyline' ? 'polyline' : 'linear';
+        const nextQuantity = calculateQuantity(m.points, t, newScale, m.deductions ?? []);
+        if (nextQuantity === m.quantity) return m;
+        touched = true;
+        changed.push({ clientUuid: m.id, quantity: nextQuantity, deductions: m.deductions ?? null });
+        return { ...m, quantity: nextQuantity };
+      });
+      if (!touched) return item;
+      const totalQuantity = measurements.reduce((sum, mm) => sum + mm.quantity, 0);
+      return { ...item, measurements, totalQuantity };
+    });
+    return { items: nextItems, changed };
+  };
+
+  const syncChangedQuantities = (changed: ChangedQuantity[]) => {
+    const projectId = get().currentProjectId;
+    if (!projectId) return;
+    for (const c of changed) {
+      syncQueue.enqueue({
+        kind: 'measurement.update',
+        projectId,
+        clientUuid: c.clientUuid,
+        patch: { quantity: c.quantity },
+      });
     }
   };
 
@@ -2062,66 +2122,85 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
     const state = get();
     const previousScale = state.scales[page];
 
-    // Recompute every measurement on this page against `newScale`, returning
-    // the next takeoffItems (with corrected per-measurement quantity + item
-    // totals) and the list of measurements whose quantity actually changed —
-    // so re-calibrating a page keeps its existing measurements consistent
-    // instead of leaving them on the old scale. Count measurements are
-    // scale-independent and never change.
-    const recompute = (newScale: number | null) => {
-      const changed: Array<{ clientUuid: string; quantity: number; deductions: Point[][] | null }> = [];
-      const activePlanId = get().activePlanId;
-      const items = get().takeoffItems.map((item) => {
-        let touched = false;
-        const measurements = item.measurements.map((m) => {
-          if (m.page !== page) return m;
-          if (!measurementBelongsToPlan(m, activePlanId)) return m;
-          if (m.type === 'count') return m; // count is a tally, not a scaled length/area
-          const t = m.type === 'area' ? 'area' : m.type === 'polyline' ? 'polyline' : 'linear';
-          const nextQuantity = calculateQuantity(m.points, t, newScale, m.deductions ?? []);
-          if (nextQuantity === m.quantity) return m;
-          touched = true;
-          changed.push({ clientUuid: m.id, quantity: nextQuantity, deductions: m.deductions ?? null });
-          return { ...m, quantity: nextQuantity };
-        });
-        if (!touched) return item;
-        const totalQuantity = measurements.reduce((sum, mm) => sum + mm.quantity, 0);
-        return { ...item, measurements, totalQuantity };
-      });
-      return { items, changed };
-    };
-
-    const syncChanged = (changed: Array<{ clientUuid: string; quantity: number; deductions: Point[][] | null }>) => {
-      const projectId = get().currentProjectId;
-      if (!projectId) return;
-      for (const c of changed) {
-        syncQueue.enqueue({
-          kind: 'measurement.update',
-          projectId,
-          clientUuid: c.clientUuid,
-          patch: { quantity: c.quantity },
-        });
-      }
-    };
-
     executeCommand({
       execute: () => {
-        const { items, changed } = recompute(scale);
+        const { items, changed } = recomputePageForScale(get().takeoffItems, page, scale);
         set((state) => ({ scales: { ...state.scales, [page]: scale }, takeoffItems: items }));
-        syncChanged(changed);
+        syncChangedQuantities(changed);
       },
       undo: () => {
         const restore = previousScale ?? null;
-        const { items, changed } = recompute(restore);
+        const { items, changed } = recomputePageForScale(get().takeoffItems, page, restore);
         set((state) => {
           const newScales = { ...state.scales };
           if (previousScale !== undefined) newScales[page] = previousScale;
           else delete newScales[page];
           return { scales: newScales, takeoffItems: items };
         });
-        syncChanged(changed);
+        syncChangedQuantities(changed);
       },
       description: `Set scale for page ${page}`,
+    });
+  },
+
+  applyCalibrationToPages: (entries) => {
+    if (entries.length === 0) return;
+    const state = get();
+    const previousScales = entries.map((e) => state.scales[e.page]);
+    const previousLines = entries.map((e) => state.calibrationLines[e.page]);
+
+    // Apply a (scale, line) per entry in one store write, chaining the
+    // measurement recompute across pages so every page's quantities are
+    // corrected, then enqueue the same syncs setScale/setCalibrationLine emit.
+    const apply = (
+      scaleFor: (i: number) => number | undefined,
+      lineFor: (i: number) => CalibrationLine | undefined
+    ) => {
+      let items = get().takeoffItems;
+      const changed: ChangedQuantity[] = [];
+      const scales = { ...get().scales };
+      const calibrationLines = { ...get().calibrationLines };
+      entries.forEach((entry, i) => {
+        const scale = scaleFor(i);
+        const line = lineFor(i);
+        const result = recomputePageForScale(items, entry.page, scale ?? null);
+        items = result.items;
+        changed.push(...result.changed);
+        if (scale === undefined) delete scales[entry.page];
+        else scales[entry.page] = scale;
+        if (line === undefined) delete calibrationLines[entry.page];
+        else calibrationLines[entry.page] = line;
+      });
+      set({ scales, calibrationLines, takeoffItems: items });
+      syncChangedQuantities(changed);
+
+      const projectId = get().currentProjectId;
+      const planUuid = get().activePlanId;
+      if (!projectId || !planUuid) return;
+      entries.forEach((entry, i) => {
+        const scale = scaleFor(i);
+        const line = lineFor(i);
+        if (typeof scale === 'number' && line) {
+          syncQueue.enqueue({
+            kind: 'calibration.upsert',
+            projectId,
+            planUuid,
+            page: entry.page,
+            body: calibrationUpsertBodyFromStore(scale, line),
+          });
+        } else if (line === undefined) {
+          syncQueue.enqueue({ kind: 'calibration.delete', projectId, planUuid, page: entry.page });
+        }
+      });
+    };
+
+    executeCommand({
+      execute: () => apply((i) => entries[i].scale, (i) => entries[i].line),
+      undo: () => apply((i) => previousScales[i], (i) => previousLines[i]),
+      description:
+        entries.length === 1
+          ? `Set scale for page ${entries[0].page}`
+          : `Set scale for ${entries.length} pages`,
     });
   },
 

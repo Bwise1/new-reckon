@@ -1101,11 +1101,42 @@ export const useCanvasMedia = ({
         [pdfDoc, activePlanId, currentPage, rotations, containerRef, clearRegionPatch]
     );
 
+    // Display footprint scale (bitmap px per PDF pt) for ANY page of the active
+    // plan, not just the one on screen. documentDisplayScale depends on the
+    // sheet's natural size, so an A1 and an A3 page in the same PDF land on
+    // different px-per-metre — apply-to-all calibration needs each page's own
+    // value to convert a scale set on one page. Memoised per plan:page; image
+    // and DXF plans (single page, no pdfDoc) return the current display scale.
+    const pageDisplayScaleCache = useRef<Map<string, number>>(new Map());
+    const getPageDisplayScale = useCallback(
+        async (page: number): Promise<number> => {
+            const current = displayScaleRef.current?.scale ?? 1;
+            if (!pdfDoc || !activePlanId) return current;
+            const key = `${activePlanId}:${page}`;
+            const cached = pageDisplayScaleCache.current.get(key);
+            if (cached !== undefined) return cached;
+            try {
+                const pdfPage = await pdfDoc.getPage(page);
+                const viewport = pdfPage.getViewport({ scale: 1 });
+                // Rotation swaps width/height but the formula uses the longest
+                // edge, so the footprint scale is rotation-invariant.
+                const scale = documentDisplayScale(viewport.width, viewport.height);
+                pageDisplayScaleCache.current.set(key, scale);
+                return scale;
+            } catch (error) {
+                console.warn("[canvas-media] could not read page size", page, error);
+                return current;
+            }
+        },
+        [pdfDoc, activePlanId]
+    );
+
     const hasLoadedPlan = Boolean(image);
     const currentRotation = rotations[currentPage] ?? 0;
 
     return {
         handleFileUpload,
+        getPageDisplayScale,
         // PDF page-picker modal wiring (consumed by PlanNavigator).
         pageSelectFile,
         resolvePageSelect,

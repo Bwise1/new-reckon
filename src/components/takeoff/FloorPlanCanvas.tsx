@@ -91,7 +91,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     backgroundImage,
     setCalibrationMode,
     setScale,
-    setCalibrationLine,
+    applyCalibrationToPages,
     setTakeoffItems,
     setCurrentPage,
     setNumPages: setStoreNumPages,
@@ -128,7 +128,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       backgroundImage: s.backgroundImage,
       setCalibrationMode: s.setCalibrationMode,
       setScale: s.setScale,
-      setCalibrationLine: s.setCalibrationLine,
+      applyCalibrationToPages: s.applyCalibrationToPages,
       setTakeoffItems: s.setTakeoffItems,
       setCurrentPage: s.setCurrentPage,
       setNumPages: s.setNumPages,
@@ -319,9 +319,6 @@ if (!prev && activeTool) {
     }),
     [autoSnapEnabled, pdfSnapEnabled]
   );
-  const [pendingCalibration, setPendingCalibration] = useState<
-    { p1: Point; p2: Point } | null
-  >(null);
   // Calibration flow (prototype order): clicking Calibrate opens the dialog to
   // enter the real distance + unit; the entered value (metres) is held here
   // while the user draws the reference line, then the scale is computed.
@@ -409,7 +406,7 @@ if (!prev && activeTool) {
   const rotateAllPages = useTakeoffStore((s) => s.rotateAllPages);
   const activeRealWidthLive = useTakeoffStore((s) => s.activeRealWidth);
 
-  const { handleFileUpload, pageSelectFile, resolvePageSelect, changePage, rerenderCurrentPage, refreshRegionPatch, regionPatch, detectedScale, refitToView, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfDisplaySize, pdfSegmentIndexRef } =
+  const { handleFileUpload, getPageDisplayScale, pageSelectFile, resolvePageSelect, changePage, rerenderCurrentPage, refreshRegionPatch, regionPatch, detectedScale, refitToView, hasLoadedPlan, planLoadStatus, planLoadError, currentRotation, pdfNaturalSize, pdfDisplaySize, pdfSegmentIndexRef } =
     useCanvasMedia({
     containerRef,
     backgroundImage,
@@ -815,10 +812,6 @@ if (!prev && activeTool) {
     }
 
     if (calibrationMode) {
-      if (pendingCalibration) {
-        // Waiting on the distance modal — ignore further canvas clicks.
-        return;
-      }
       if (!calibrationPoint1) {
         setCalibrationPoint1(point);
         return;
@@ -839,17 +832,44 @@ if (!prev && activeTool) {
         const scaleValidation = validateScale(newScale);
         if (scaleValidation.isValid) {
           const line = { p1: calibrationPoint1, p2: finalPoint, distance: pendingRealMetres };
-          // Every page renders at the same DPI, so the scale and its reference
-          // line copy cleanly to all pages. Copying the line (not just the
-          // scale) means each page's calibration is persisted (the sync upsert
-          // needs the line).
-          const pages = pendingApplyToAll && numPages > 1
-            ? Array.from({ length: numPages }, (_, i) => i + 1)
-            : [currentPage];
-          for (const p of pages) {
-            setScale(p, newScale);
-            setCalibrationLine(p, line);
-          }
+          const applyToAll = pendingApplyToAll && numPages > 1;
+          const sourcePage = currentPage;
+          // Pages do NOT share a px-per-metre: each page's display footprint
+          // scale depends on its own sheet size (an A1 page rasterises at a
+          // different bitmap px/pt than an A3 page in the same PDF). So for
+          // apply-to-all, convert the scale (and the reference line's points)
+          // by ratio_p = displayScale_p / displayScale_current before setting
+          // it on page p. Copying the line (not just the scale) means each
+          // page's calibration is persisted (the sync upsert needs the line).
+          // The page sizes come from pdf.js asynchronously; everything is
+          // committed in ONE store command once they are known.
+          void (async () => {
+            let entries: Array<{ page: number; scale: number; line: typeof line }>;
+            if (applyToAll) {
+              const pages = Array.from({ length: numPages }, (_, i) => i + 1);
+              const [dsCurrent, ...dsPages] = await Promise.all([
+                getPageDisplayScale(sourcePage),
+                ...pages.map((p) => getPageDisplayScale(p)),
+              ]);
+              entries = pages.map((p, i) => {
+                const ratio = dsCurrent > 0 && dsPages[i] > 0 ? dsPages[i] / dsCurrent : 1;
+                return {
+                  page: p,
+                  scale: newScale * ratio,
+                  line: {
+                    p1: { x: line.p1.x * ratio, y: line.p1.y * ratio },
+                    p2: { x: line.p2.x * ratio, y: line.p2.y * ratio },
+                    distance: line.distance,
+                  },
+                };
+              });
+            } else {
+              entries = [{ page: sourcePage, scale: newScale, line }];
+            }
+            applyCalibrationToPages(entries);
+          })().catch((error) => {
+            console.warn("Calibration could not be applied:", error);
+          });
         } else {
           console.warn("Invalid scale:", scaleValidation.error);
         }
@@ -1198,7 +1218,6 @@ if (!prev && activeTool) {
       isSelectMode,
       calibrationMode,
       calibrationPoint1,
-      pendingCalibration,
       activePlanId,
       activeTool,
       activeColor,
@@ -1229,6 +1248,11 @@ if (!prev && activeTool) {
       boqTargeting,
       exitBoqTargeting,
       arcPending,
+      numPages,
+      pendingRealMetres,
+      pendingApplyToAll,
+      getPageDisplayScale,
+      applyCalibrationToPages,
     ]
   );
 
@@ -1940,8 +1964,7 @@ if (!prev && activeTool) {
           currentPoints.length > 0 ||
           deductionTarget !== null ||
           areaContextMenu !== null ||
-          calibrationMode ||
-          pendingCalibration !== null;
+          calibrationMode;
         if (hasTransient || arcPending !== null) {
           setCurrentPoints([]);
           setArcPending(null);
@@ -1949,7 +1972,6 @@ if (!prev && activeTool) {
           setAreaContextMenu(null);
           setCalibrationMode(false);
           setCalibrationPoint1(null);
-          setPendingCalibration(null);
           return;
         }
         // 2) End the measuring session but KEEP the staged value (same stash
@@ -2129,7 +2151,6 @@ if (!prev && activeTool) {
     calibrationMode,
     deductionTarget,
     onFinishTool,
-    pendingCalibration,
     arcPending,
   ]);
 
@@ -4009,7 +4030,7 @@ if (!prev && activeTool) {
       <CalibrationDialog
         open={showCalibrateDialog}
         pageCount={numPages}
-        pageLabel={activePlanName || undefined}
+        currentPage={currentPage}
         onCancel={() => setShowCalibrateDialog(false)}
         onConfirm={(distanceMetres, applyToAll) => {
           // Hold the real distance, then enter draw mode: the scale is set the
@@ -4019,7 +4040,6 @@ if (!prev && activeTool) {
           setPendingApplyToAll(applyToAll);
           setCalibrationMode(true);
           setCalibrationPoint1(null);
-          setPendingCalibration(null);
           setIsPanningMode(false);
           setIsSelectMode(false);
           setActiveTool(null);

@@ -6,8 +6,8 @@ interface CalibrationDialogProps {
   open: boolean;
   /** Total pages on the plan — an "apply to all" option shows when > 1. */
   pageCount?: number;
-  /** Label of the current page, shown in the apply-to-all hint. */
-  pageLabel?: string;
+  /** The page being calibrated (1-based), shown in the apply-to-all hint. */
+  currentPage?: number;
   /** distanceMetres is already unit-converted; applyToAll copies it to every page. */
   onConfirm: (distanceMetres: number, applyToAll: boolean) => void;
   onCancel: () => void;
@@ -23,7 +23,7 @@ interface CalibrationDialogProps {
 const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
   open,
   pageCount = 1,
-  pageLabel,
+  currentPage,
   onConfirm,
   onCancel,
 }) => {
@@ -135,7 +135,7 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
               <span className="text-xs font-medium text-body">
                 Apply to all {pageCount} pages
                 <span className="block text-[11px] font-normal text-muted">
-                  Otherwise this scale only applies to{pageLabel ? ` “${pageLabel}”` : ' the current page'}
+                  Otherwise this scale only applies to {currentPage ? `page ${currentPage}` : 'the current page'}
                 </span>
               </span>
               <input
