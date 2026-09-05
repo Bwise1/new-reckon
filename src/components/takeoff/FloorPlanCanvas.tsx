@@ -322,6 +322,20 @@ if (!prev && activeTool) {
   const [pendingCalibration, setPendingCalibration] = useState<
     { p1: Point; p2: Point } | null
   >(null);
+  // Calibration flow (prototype order): clicking Calibrate opens the dialog to
+  // enter the real distance + unit; the entered value (metres) is held here
+  // while the user draws the reference line, then the scale is computed.
+  const [showCalibrateDialog, setShowCalibrateDialog] = useState(false);
+  const [pendingRealMetres, setPendingRealMetres] = useState<number | null>(null);
+  const [pendingApplyToAll, setPendingApplyToAll] = useState(false);
+  // If calibration mode is left without drawing the line (Esc, tool switch),
+  // drop the pending distance so it can't leak into the next calibration.
+  useEffect(() => {
+    if (!calibrationMode && pendingRealMetres != null) {
+      setPendingRealMetres(null);
+      setPendingApplyToAll(false);
+    }
+  }, [calibrationMode, pendingRealMetres]);
   // When set, points collected in `currentPoints` are treated as an
   // in-progress deduction for the referenced area measurement instead of
   // a new outer polygon. Set explicitly via right-click "Add deduction".
@@ -804,10 +818,32 @@ if (!prev && activeTool) {
         // Same click as p1 — ignore and let the user click again.
         return;
       }
-      // One calibration path: the drawn line opens the Set-scale dialog, where
-      // the user enters its real length (with a unit) and optionally applies
-      // the scale to every page.
-      setPendingCalibration({ p1: calibrationPoint1, p2: finalPoint });
+      // The real distance (metres) was entered in the Calibrate dialog before
+      // drawing; the scale is set the moment this reference line is drawn.
+      if (pendingRealMetres != null) {
+        const newScale = pixelDist / pendingRealMetres;
+        const scaleValidation = validateScale(newScale);
+        if (scaleValidation.isValid) {
+          const line = { p1: calibrationPoint1, p2: finalPoint, distance: pendingRealMetres };
+          // Every page renders at the same DPI, so the scale and its reference
+          // line copy cleanly to all pages. Copying the line (not just the
+          // scale) means each page's calibration is persisted (the sync upsert
+          // needs the line).
+          const pages = pendingApplyToAll && numPages > 1
+            ? Array.from({ length: numPages }, (_, i) => i + 1)
+            : [currentPage];
+          for (const p of pages) {
+            setScale(p, newScale);
+            setCalibrationLine(p, line);
+          }
+        } else {
+          console.warn("Invalid scale:", scaleValidation.error);
+        }
+      }
+      setPendingRealMetres(null);
+      setPendingApplyToAll(false);
+      setCalibrationMode(false);
+      setCalibrationPoint1(null);
       return;
     }
 
@@ -2340,15 +2376,7 @@ if (!prev && activeTool) {
             useTakeoffStore.setState({ activeRealWidth: w });
           }
         }}
-        onStartCalibration={() => {
-          setCalibrationMode(true);
-          setCalibrationPoint1(null);
-          setPendingCalibration(null);
-          setIsPanningMode(false);
-          setIsSelectMode(false);
-          setActiveTool(null);
-          setCurrentPoints([]);
-        }}
+        onStartCalibration={() => setShowCalibrateDialog(true)}
         onClearScale={() => clearScale(currentPage)}
         isPanningMode={isPanningMode}
         onTogglePan={() => {
@@ -3846,15 +3874,7 @@ if (!prev && activeTool) {
         onToggleAutoSnap={toggleAutoSnap}
         crosshairEnabled={crosshairEnabled}
         onToggleCrosshair={toggleCrosshair}
-        onCalibrateClick={() => {
-          setCalibrationMode(true);
-          setCalibrationPoint1(null);
-          setPendingCalibration(null);
-          setIsPanningMode(false);
-          setIsSelectMode(false);
-          setActiveTool(null);
-          setCurrentPoints([]);
-        }}
+        onCalibrateClick={() => setShowCalibrateDialog(true)}
         mousePos={mousePos}
       />,
           statusSlot
@@ -3895,54 +3915,23 @@ if (!prev && activeTool) {
         );
       })()}
       <CalibrationDialog
-        open={!!pendingCalibration}
-        pixelDistance={
-          pendingCalibration
-            ? calculateDistance(pendingCalibration.p1, pendingCalibration.p2)
-            : 0
-        }
+        open={showCalibrateDialog}
         pageCount={numPages}
-        onCancel={() => {
-          setPendingCalibration(null);
+        pageLabel={activePlanName || undefined}
+        onCancel={() => setShowCalibrateDialog(false)}
+        onConfirm={(distanceMetres, applyToAll) => {
+          // Hold the real distance, then enter draw mode: the scale is set the
+          // moment the reference line is drawn on the plan.
+          setShowCalibrateDialog(false);
+          setPendingRealMetres(distanceMetres);
+          setPendingApplyToAll(applyToAll);
+          setCalibrationMode(true);
           setCalibrationPoint1(null);
-          setCalibrationMode(false);
-        }}
-        onConfirm={(dist, applyToAll) => {
-          if (!pendingCalibration) return;
-          const pixelDist = calculateDistance(
-            pendingCalibration.p1,
-            pendingCalibration.p2
-          );
-          const newScale = pixelDist / dist;
-          const scaleValidation = validateScale(newScale);
-          if (!scaleValidation.isValid) {
-            // Bad scale — keep the modal open by not clearing pending state.
-            // The dialog's own validation handles positive numbers; this catches
-            // pathological pixel-distance edge cases.
-            console.warn("Invalid scale:", scaleValidation.error);
-            return;
-          }
-          // The reference line was drawn on the current page; because every
-          // page of a plan renders at the same DPI/footprint, that same
-          // pixel line represents the same real-world distance on every page.
-          // "Apply to all" copies the scale AND the reference line to each
-          // page, so each page's calibration persists (the sync upsert needs
-          // the line, not just the scale) and the user calibrates once.
-          const line = {
-            p1: pendingCalibration.p1,
-            p2: pendingCalibration.p2,
-            distance: dist,
-          };
-          const pages = applyToAll && numPages > 1
-            ? Array.from({ length: numPages }, (_, i) => i + 1)
-            : [currentPage];
-          for (const p of pages) {
-            setScale(p, newScale);
-            setCalibrationLine(p, line);
-          }
           setPendingCalibration(null);
-          setCalibrationPoint1(null);
-          setCalibrationMode(false);
+          setIsPanningMode(false);
+          setIsSelectMode(false);
+          setActiveTool(null);
+          setCurrentPoints([]);
         }}
       />
       {areaContextMenu && (() => {
