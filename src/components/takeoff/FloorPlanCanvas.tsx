@@ -233,6 +233,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   // set, finishing the calibration line applies the scale with no second
   // dialog. null = legacy draw-first flow.
   const [knownCalibration, setKnownCalibration] = useState<number | null>(null);
+  // Whether the pending known-dimension calibration should apply to every page.
+  const [knownApplyToAll, setKnownApplyToAll] = useState(false);
   const [showKnownDialog, setShowKnownDialog] = useState(false);
   // Drafting toggles, persisted like other canvas prefs. Ortho makes angle
   // snapping permanent (Shift still works as a momentary hold); Auto Scroll
@@ -813,18 +815,23 @@ if (!prev && activeTool) {
         const newScale = pixelDist / knownCalibration;
         const scaleValidation = validateScale(newScale);
         if (scaleValidation.isValid) {
-          setScale(currentPage, newScale);
-          setCalibrationLine(currentPage, {
-            p1: calibrationPoint1,
-            p2: finalPoint,
-            distance: knownCalibration,
-          });
+          const line = { p1: calibrationPoint1, p2: finalPoint, distance: knownCalibration };
+          // Same rule as the Calibrate dialog: every page renders at the same
+          // DPI, so the scale + reference line copy cleanly to all pages.
+          const pages = knownApplyToAll && numPages > 1
+            ? Array.from({ length: numPages }, (_, i) => i + 1)
+            : [currentPage];
+          for (const p of pages) {
+            setScale(p, newScale);
+            setCalibrationLine(p, line);
+          }
         } else {
           console.warn("Invalid scale:", scaleValidation.error);
         }
         setKnownCalibration(null);
-        setCalibrationPoint1(null);
+        setKnownApplyToAll(false);
         setCalibrationMode(false);
+        setCalibrationPoint1(null);
         return;
       }
       setPendingCalibration({ p1: calibrationPoint1, p2: finalPoint });
@@ -2363,6 +2370,7 @@ if (!prev && activeTool) {
         onStartCalibration={() => {
           setCalibrationMode(true);
           setKnownCalibration(null);
+          setKnownApplyToAll(false);
           setCalibrationPoint1(null);
           setPendingCalibration(null);
           setIsPanningMode(false);
@@ -3873,6 +3881,7 @@ if (!prev && activeTool) {
         onCalibrateClick={() => {
           setCalibrationMode(true);
           setKnownCalibration(null);
+          setKnownApplyToAll(false);
           setCalibrationPoint1(null);
           setPendingCalibration(null);
           setIsPanningMode(false);
@@ -3921,10 +3930,12 @@ if (!prev && activeTool) {
       })()}
       <KnownDimensionDialog
         open={showKnownDialog}
+        pageCount={numPages}
         onCancel={() => setShowKnownDialog(false)}
-        onConfirm={(distance) => {
+        onConfirm={(distance, applyToAll) => {
           setShowKnownDialog(false);
           setKnownCalibration(distance);
+          setKnownApplyToAll(applyToAll);
           setCalibrationMode(true);
           setCalibrationPoint1(null);
           setPendingCalibration(null);
@@ -3941,12 +3952,13 @@ if (!prev && activeTool) {
             ? calculateDistance(pendingCalibration.p1, pendingCalibration.p2)
             : 0
         }
+        pageCount={numPages}
         onCancel={() => {
           setPendingCalibration(null);
           setCalibrationPoint1(null);
           setCalibrationMode(false);
         }}
-        onConfirm={(dist) => {
+        onConfirm={(dist, applyToAll) => {
           if (!pendingCalibration) return;
           const pixelDist = calculateDistance(
             pendingCalibration.p1,
@@ -3961,12 +3973,24 @@ if (!prev && activeTool) {
             console.warn("Invalid scale:", scaleValidation.error);
             return;
           }
-          setScale(currentPage, newScale);
-          setCalibrationLine(currentPage, {
+          // The reference line was drawn on the current page; because every
+          // page of a plan renders at the same DPI/footprint, that same
+          // pixel line represents the same real-world distance on every page.
+          // "Apply to all" copies the scale AND the reference line to each
+          // page, so each page's calibration persists (the sync upsert needs
+          // the line, not just the scale) and the user calibrates once.
+          const line = {
             p1: pendingCalibration.p1,
             p2: pendingCalibration.p2,
             distance: dist,
-          });
+          };
+          const pages = applyToAll && numPages > 1
+            ? Array.from({ length: numPages }, (_, i) => i + 1)
+            : [currentPage];
+          for (const p of pages) {
+            setScale(p, newScale);
+            setCalibrationLine(p, line);
+          }
           setPendingCalibration(null);
           setCalibrationPoint1(null);
           setCalibrationMode(false);

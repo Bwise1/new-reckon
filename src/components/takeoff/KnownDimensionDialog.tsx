@@ -2,7 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 
 interface KnownDimensionDialogProps {
   open: boolean;
-  onConfirm: (distance: number) => void;
+  /** Total pages on the plan — an "apply to all" option shows when > 1. */
+  pageCount?: number;
+  onConfirm: (distance: number, applyToAll: boolean) => void;
   onCancel: () => void;
 }
 
@@ -14,11 +16,13 @@ interface KnownDimensionDialogProps {
  */
 const KnownDimensionDialog: React.FC<KnownDimensionDialogProps> = ({
   open,
+  pageCount = 1,
   onConfirm,
   onCancel,
 }) => {
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [applyToAll, setApplyToAll] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [wasOpen, setWasOpen] = useState(open);
@@ -27,6 +31,7 @@ const KnownDimensionDialog: React.FC<KnownDimensionDialogProps> = ({
     if (open) {
       setValue('');
       setError(null);
+      setApplyToAll(false);
     }
   }
 
@@ -44,7 +49,7 @@ const KnownDimensionDialog: React.FC<KnownDimensionDialogProps> = ({
       setError('Enter a positive number');
       return;
     }
-    onConfirm(parsed);
+    onConfirm(parsed, applyToAll);
   };
 
   return (
@@ -80,6 +85,23 @@ const KnownDimensionDialog: React.FC<KnownDimensionDialogProps> = ({
           </span>
         </div>
         {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
+
+        {pageCount > 1 && (
+          <label className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-md border border-border bg-surface-muted px-3 py-2.5">
+            <span className="text-xs font-medium text-body">
+              Apply to all {pageCount} pages
+              <span className="block text-[11px] font-normal text-muted">
+                Otherwise this scale only applies to the current page.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={applyToAll}
+              onChange={(e) => setApplyToAll(e.target.checked)}
+              className="h-4 w-4 shrink-0 accent-accent"
+            />
+          </label>
+        )}
 
         <div className="mt-4 flex justify-end gap-2">
           <button
