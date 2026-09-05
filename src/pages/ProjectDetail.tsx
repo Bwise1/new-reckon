@@ -10,6 +10,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useProject } from '@/hooks/useProjects';
 import { useProjectData } from '@/hooks/useProjectData';
+import { useProjectRealtime } from '@/realtime/useProjectRealtime';
 import { ApiError } from '@/lib/api-client';
 import type { DrawTool } from '@/types/takeoff';
 
@@ -41,6 +42,11 @@ const ProjectDetail = () => {
     location: project?.location,
     skip: projectDenied,
   });
+
+  // Live collaboration (presence, cursors, remote ops, locks). Joins only once
+  // the project is open and hydrated, so a reconnect-resync can never race
+  // the initial load. Gated by VITE_REALTIME inside the hook.
+  useProjectRealtime(id && !projectDenied && isProjectDataReady ? id : undefined);
 
   // FloorPlanCanvas must stay mounted for its plan-loading hook to run at
   // all, so we can't gate on this by conditionally rendering the canvas —

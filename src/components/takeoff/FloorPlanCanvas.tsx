@@ -41,6 +41,11 @@ import {
 } from "@/utils/takeoffMeasurement";
 import { measurementBelongsToPlan } from "@/utils/planDocument";
 import { useConfirm } from "@/contexts/ConfirmProvider";
+import PresenceLayer from "@/components/takeoff/PresenceLayer";
+import PresenceStrip from "@/components/takeoff/PresenceStrip";
+import { sendCursor, sendDraft } from "@/realtime/actions";
+import type { Presence } from "@/realtime/types";
+import { useRealtimeStore } from "@/store/useRealtimeStore";
 
 const MIN_DISTANCE = 0.001; // Minimum valid distance in image pixels
 const MIN_LINEAR_EDIT_DISTANCE = 2; // Prevent collapsing line while editing
@@ -1345,6 +1350,8 @@ if (!prev && activeTool) {
           };
 
           setMousePos(point);
+          // Collaborators see our pointer in plan-pixel space (throttled inside).
+          sendCursor(currentPage, point.x, point.y);
 
           // Update snapped point
           const snapped = getSnappedPoint(point);
@@ -1367,7 +1374,7 @@ if (!prev && activeTool) {
       processMouseMove();
 
     },
-    [stagePos, stageScale, getSnappedPoint, stageSize, setMousePos, setSnappedPoint, image, imageScale]
+    [stagePos, stageScale, getSnappedPoint, stageSize, setMousePos, setSnappedPoint, image, imageScale, currentPage]
   );
 
   // Handle double click / Enter / right-click to finish the current run.
@@ -2220,6 +2227,65 @@ if (!prev && activeTool) {
       };
     },
     [containerRef, stageSize.width, stageSize.height, stageScale]
+  );
+
+  // ---- Live collaboration: what we broadcast, and following a colleague ----
+  // Latest view values for callbacks that run after an async page change.
+  const viewRef = useRef({ imageScale, stageScale, mousePos, currentPage, stageSize });
+  viewRef.current = { imageScale, stageScale, mousePos, currentPage, stageSize };
+
+  // Our in-progress run, so others watch the shape form. An empty point list
+  // on finish/cancel clears it on their side. (sendDraft no-ops when read-only.)
+  const draftSentRef = useRef(false);
+  useEffect(() => {
+    if (currentPoints.length > 0 && activeTool) {
+      sendDraft(currentPage, activeTool, currentPoints);
+      draftSentRef.current = true;
+    } else if (draftSentRef.current) {
+      draftSentRef.current = false;
+      sendDraft(currentPage, null, []);
+    }
+  }, [currentPoints, activeTool, currentPage]);
+
+  // Presence "page" rides on cursor samples — announce a page change even
+  // before the mouse moves (last known position, else the sheet centre).
+  useEffect(() => {
+    const v = viewRef.current;
+    const safe = v.imageScale > 0 ? v.imageScale : 1;
+    const p = v.mousePos ?? { x: v.stageSize.width / safe / 2, y: v.stageSize.height / safe / 2 };
+    sendCursor(currentPage, p.x, p.y);
+  }, [currentPage]);
+
+  // Follow: jump to their page, then centre the view on their latest cursor.
+  const followMember = useCallback(
+    (member: Presence) => {
+      const centreOnCursor = () => {
+        const cursor = useRealtimeStore.getState().cursors[member.userId];
+        const container = containerRef.current;
+        if (!cursor || !container) return;
+        const { imageScale: img, stageScale: sc } = viewRef.current;
+        const safe = img > 0 ? img : 1;
+        setStagePos(
+          clampStagePos(
+            {
+              x: container.offsetWidth / 2 - cursor.tx * safe * sc,
+              y: container.offsetHeight / 2 - cursor.ty * safe * sc,
+            },
+            sc
+          )
+        );
+      };
+      const delta = member.page - viewRef.current.currentPage;
+      if (delta !== 0) {
+        changePage(delta);
+        // The new page rasterises asynchronously and may refit imageScale;
+        // pan once it has had a moment to settle.
+        window.setTimeout(centreOnCursor, 600);
+      } else {
+        centreOnCursor();
+      }
+    },
+    [changePage, clampStagePos, containerRef, setStagePos]
   );
 
   // Auto Scroll: while a measuring tool is armed and the cursor sits in the
@@ -3889,8 +3955,18 @@ if (!prev && activeTool) {
               );
             })()}
         </>}
+        presenceLayer={
+          <PresenceLayer
+            currentPage={currentPage}
+            activePlanId={activePlanId}
+            imageScale={imageScale}
+            stageScale={stageScale}
+            takeoffItems={takeoffItems}
+          />
+        }
         overlayChildren={
           <>
+            <PresenceStrip onFollow={followMember} />
             {/* Full-viewport crosshair while a measuring tool is armed. Locks
                 to the snapped point when snapping, so the hairlines double as
                 a snap read-out across the whole sheet. */}

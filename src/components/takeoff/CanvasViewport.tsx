@@ -34,6 +34,9 @@ interface CanvasViewportProps {
   onStageDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
   measurementsChildren: React.ReactNode;
   draftChildren: React.ReactNode;
+  /** A complete Konva `<Layer>` (collaborators' cursors, drafts, lock
+   *  outlines) mounted above the draft layer. It applies its own imageScale. */
+  presenceLayer?: React.ReactNode;
   /** Plain HTML overlay (e.g. the hover tooltip), rendered as a sibling of
    * the Stage so it can be positioned with CSS in raw stage/screen pixels. */
   overlayChildren?: React.ReactNode;
@@ -59,6 +62,7 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
   onStageDragEnd,
   measurementsChildren,
   draftChildren,
+  presenceLayer,
   overlayChildren,
 }) => {
   // The Stage is sized to the PANE, not the plan. stageSize is the sheet
@@ -170,6 +174,9 @@ const CanvasViewport: React.FC<CanvasViewportProps> = ({
             {draftChildren}
           </Group>
         </Layer>
+
+        {/* Layer 4: other people — cursors, live drafts, lock outlines. */}
+        {presenceLayer}
       </Stage>
       {overlayChildren}
     </div>
