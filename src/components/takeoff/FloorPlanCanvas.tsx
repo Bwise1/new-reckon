@@ -343,6 +343,15 @@ if (!prev && activeTool) {
   // curve, after which the arc is tessellated and appended to currentPoints so
   // the run stays an ordinary polyline. null = normal straight segments.
   const [arcPending, setArcPending] = useState<'awaiting-end' | { end: Point } | null>(null);
+  // Where each committed segment of the in-progress run began (currentPoints
+  // length BEFORE the append). A straight click adds one point, but an arc
+  // appends a whole tessellated sweep — so Ctrl+Z mid-run slices back to the
+  // last recorded start and removes the arc as one unit instead of one vertex
+  // at a time. Cleared whenever the run is emptied.
+  const segmentStartsRef = useRef<number[]>([]);
+  useEffect(() => {
+    if (currentPoints.length === 0) segmentStartsRef.current = [];
+  }, [currentPoints.length]);
   // Arc mode only makes sense mid-run on the linear/area tools; drop it whenever
   // the run ends (finished/cleared) or the tool changes.
   useEffect(() => {
@@ -910,16 +919,22 @@ if (!prev && activeTool) {
       const effectiveScale = stageScale * (imageScale > 0 ? imageScale : 1);
       const clickSep = MIN_CLICK_SEPARATION_SCREEN / effectiveScale;
       const arcStart = currentPoints[currentPoints.length - 1];
+      // Mirror the ghost preview exactly: under Shift it angle-snaps the
+      // cursor relative to the run's last point (for both the end click and
+      // the curve click), so the committed arc must use the same point or
+      // the preview and the result disagree.
+      const arcPoint = isShiftPressed ? getAngleSnappedPoint(point, arcStart) : point;
       if (arcPending === "awaiting-end") {
-        if (calculateDistance(arcStart, point) < clickSep) return; // ignore stutter
-        setArcPending({ end: point });
+        if (calculateDistance(arcStart, arcPoint) < clickSep) return; // ignore stutter
+        setArcPending({ end: arcPoint });
         return;
       }
       // arcPending is { end }: this click is the point on the curve.
       const arcEnd = arcPending.end;
-      if (calculateDistance(arcEnd, point) < clickSep) return; // need a distinct curve point
-      const arcPoints = tessellateArc(arcStart, arcEnd, point);
+      if (calculateDistance(arcEnd, arcPoint) < clickSep) return; // need a distinct curve point
+      const arcPoints = tessellateArc(arcStart, arcEnd, arcPoint);
       // Drop the first tessellated point (== arcStart, already in the run).
+      segmentStartsRef.current.push(currentPoints.length);
       setCurrentPoints([...currentPoints, ...arcPoints.slice(1)]);
       setArcPending(null);
       return;
@@ -1073,6 +1088,7 @@ if (!prev && activeTool) {
         return;
       }
 
+      segmentStartsRef.current.push(currentPoints.length);
       setCurrentPoints([...currentPoints, nextPoint]);
     } else if (activeTool === "area") {
       let finalPoint = point;
@@ -1166,6 +1182,7 @@ if (!prev && activeTool) {
         return;
       }
 
+      segmentStartsRef.current.push(currentPoints.length);
       setCurrentPoints([...currentPoints, finalPoint]);
     } else if (activeTool === "arc") {
       // 3-click arc: start, end, then a point on the curve. The third click
@@ -2027,8 +2044,14 @@ if (!prev && activeTool) {
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         if (currentPoints.length > 0) {
-          // If drawing, undo last point
-          setCurrentPoints((prev) => prev.slice(0, -1));
+          // If drawing, undo the last SEGMENT: slice back to where it began
+          // so an arc's whole tessellated sweep goes in one step. Fall back
+          // to one vertex if no start was recorded. Pop outside the updater
+          // so a double-invoked updater (StrictMode) cannot pop twice.
+          const start = segmentStartsRef.current.pop();
+          setCurrentPoints((prev) =>
+            prev.slice(0, Math.max(0, Math.min(start ?? prev.length - 1, prev.length - 1)))
+          );
         } else if (canUndo) {
           // Otherwise, undo last command
           undo();
