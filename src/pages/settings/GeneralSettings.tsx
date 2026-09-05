@@ -45,22 +45,38 @@ export default function GeneralSettings() {
         setLogoUrl(d.org.logoUrl ?? null);
       })
       .catch(() => {
+        // Fall back to what the switcher already knows; reset all three so a
+        // previous org's values cannot linger in the form.
         setName(active.name ?? '');
+        setSlug(active.slug ?? '');
+        setLogoUrl(null);
       });
   }, [isOrg, active]);
 
-  // Debounced auto-save of whatever changed.
+  // Debounced auto-save. Edits are MERGED into one pending patch and flushed
+  // together: with a single `fields` per timer, typing a name and then a slug
+  // inside the debounce window dropped the name.
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const queueSave = (fields: Record<string, unknown>) => {
+  const pendingRef = useRef<Record<string, unknown>>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const queueSave = (patch: Record<string, unknown>) => {
     if (!active) return;
+    const orgId = active.id;
+    pendingRef.current = { ...pendingRef.current, ...patch };
     setSaved('saving');
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
+      const fields = pendingRef.current;
+      pendingRef.current = {};
       try {
-        await accountsService.updateOrg(active.id, fields);
+        await accountsService.updateOrg(orgId, fields);
+        setSaveError(null);
         setSaved('done');
         void loadWorkspaces(); // pick up a rename in the switcher
-      } catch {
+      } catch (e) {
+        // Surface the server's reason (e.g. 409 "That handle is already
+        // taken") rather than a generic failure.
+        setSaveError(e instanceof Error && e.message ? e.message : null);
         setSaved('error');
       }
     }, 600);
@@ -95,7 +111,10 @@ export default function GeneralSettings() {
   }
 
   const savedLabel =
-    saved === 'saving' ? 'Saving…' : saved === 'done' ? 'Saved.' : saved === 'error' ? 'Could not save.' : 'Changes save automatically.';
+    saved === 'saving' ? 'Saving…'
+    : saved === 'done' ? 'Saved.'
+    : saved === 'error' ? (saveError ?? 'Could not save.')
+    : 'Changes save automatically.';
 
   return (
     <SettingsLayout>

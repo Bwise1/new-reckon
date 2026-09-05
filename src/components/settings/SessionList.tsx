@@ -48,6 +48,8 @@ export default function SessionList() {
   const [sessions, setSessions] = useState<AccountSession[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Inline feedback for a failed revoke; `error` above is for the list load.
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const load = () =>
     accountsService
@@ -61,9 +63,12 @@ export default function SessionList() {
 
   const revoke = async (id: string) => {
     setBusy(true);
+    setActionError(null);
     try {
       await accountsService.revokeSession(id);
       setSessions((prev) => prev?.filter((s) => s.id !== id) ?? null);
+    } catch (e) {
+      setActionError(e instanceof Error && e.message ? e.message : 'Could not revoke that session.');
     } finally {
       setBusy(false);
     }
@@ -71,9 +76,12 @@ export default function SessionList() {
 
   const revokeOthers = async () => {
     setBusy(true);
+    setActionError(null);
     try {
       await accountsService.logoutOthers();
       setSessions((prev) => prev?.filter((s) => s.current) ?? null);
+    } catch (e) {
+      setActionError(e instanceof Error && e.message ? e.message : 'Could not sign out the other sessions.');
     } finally {
       setBusy(false);
     }
@@ -130,6 +138,10 @@ export default function SessionList() {
           );
         })}
       </ul>
+
+      {actionError ? (
+        <p role="alert" className="mt-3 text-xs text-danger">{actionError}</p>
+      ) : null}
 
       {otherCount > 0 ? (
         <button

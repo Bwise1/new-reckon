@@ -16,6 +16,7 @@ export default function TeamSettings() {
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const current = active();
   const orgId = current && current.kind !== 'personal' ? current.id : null;
@@ -44,19 +45,29 @@ export default function TeamSettings() {
     await accountsService.invite(orgId, email, role);
     await refresh();
   };
-  const setRole = async (accountId: string, role: string) => {
-    setBusy(true); try { await accountsService.setRole(orgId, accountId, role); await refresh(); } finally { setBusy(false); }
+  // Run a member/invite action with the busy flag and inline error feedback.
+  // These used to reject unhandled, so a failed call left no trace in the UI.
+  const run = async (fallback: string, fn: () => Promise<void>) => {
+    setBusy(true);
+    setActionError(null);
+    try { await fn(); }
+    catch (e) { setActionError(e instanceof Error && e.message ? e.message : fallback); }
+    finally { setBusy(false); }
   };
+  const setRole = (accountId: string, role: string) =>
+    run('Could not change that role.', async () => { await accountsService.setRole(orgId, accountId, role); await refresh(); });
   const remove = async (accountId: string) => {
     const person = detail?.members.find((m) => m.accountId === accountId);
     const ok = await confirm({ title: 'Remove member?', message: <p><span className="font-medium text-body">{person?.name ?? 'This person'}</span> will lose access to the organization.</p>, confirmLabel: 'Remove', variant: 'danger' });
     if (!ok) return;
-    setBusy(true); try { await accountsService.removeMember(orgId, accountId); await refresh(); } finally { setBusy(false); }
+    await run('Could not remove that member.', async () => { await accountsService.removeMember(orgId, accountId); await refresh(); });
   };
-  const setPolicy = async (policy: 'open' | 'restricted') => {
-    setBusy(true);
-    try { await accountsService.updateOrg(orgId, { accessPolicy: policy }); await refresh(); } finally { setBusy(false); }
-  };
+  const setPolicy = (policy: 'open' | 'restricted') =>
+    run('Could not update the access policy.', async () => { await accountsService.updateOrg(orgId, { accessPolicy: policy }); await refresh(); });
+  const resendInvite = (inviteId: string) =>
+    run('Could not resend that invite.', async () => { await accountsService.resendInvite(orgId, inviteId); });
+  const cancelInvite = (inviteId: string) =>
+    run('Could not cancel that invite.', async () => { await accountsService.cancelInvite(orgId, inviteId); await refresh(); });
 
   return (
     <SettingsLayout>
@@ -73,6 +84,10 @@ export default function TeamSettings() {
             </button>
           )}
         </div>
+
+        {actionError && (
+          <p role="alert" className="mt-3 text-sm text-danger">{actionError}</p>
+        )}
 
         {loading ? (
           <div className="mt-6 h-40 animate-pulse rounded-xl border border-border bg-surface" />
@@ -92,10 +107,10 @@ export default function TeamSettings() {
                       <p className="truncate text-sm font-medium text-body">{inv.email}</p>
                       <p className="truncate text-[11px] text-muted">Invited as {inv.role} · pending</p>
                     </div>
-                    <button type="button" title="Resend" aria-label="Resend invite" onClick={() => accountsService.resendInvite(orgId, inv.id)}
-                      className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay/10 hover:text-body cursor-pointer"><RotateCw className="h-3.5 w-3.5" /></button>
-                    <button type="button" title="Cancel" aria-label="Cancel invite" onClick={async () => { await accountsService.cancelInvite(orgId, inv.id); await refresh(); }}
-                      className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-danger/10 hover:text-danger cursor-pointer"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button type="button" title="Resend" aria-label="Resend invite" disabled={busy} onClick={() => resendInvite(inv.id)}
+                      className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay/10 hover:text-body cursor-pointer disabled:opacity-50"><RotateCw className="h-3.5 w-3.5" /></button>
+                    <button type="button" title="Cancel" aria-label="Cancel invite" disabled={busy} onClick={() => cancelInvite(inv.id)}
+                      className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-danger/10 hover:text-danger cursor-pointer disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 ))}
               </div>

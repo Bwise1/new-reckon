@@ -11,11 +11,13 @@ type Props = {
   /** "create" makes a new org; "convert" turns the personal workspace into one. */
   mode?: 'create' | 'convert';
   pending?: boolean;
+  /** Server/network failure from the last submit; shown inline, modal stays open. */
+  error?: string | null;
   onSubmit: (name: string, teamSize: string) => void;
 };
 
 /** Create New Organization — ported from the prototype (name + team size). */
-export default function CreateOrganizationModal({ open, onClose, mode = 'create', pending, onSubmit }: Props) {
+export default function CreateOrganizationModal({ open, onClose, mode = 'create', pending, error, onSubmit }: Props) {
   const { theme } = useTheme();
   const [companyName, setCompanyName] = useState('');
   const [teamSize, setTeamSize] = useState<string>(TEAM_SIZES[0]);
@@ -60,6 +62,7 @@ export default function CreateOrganizationModal({ open, onClose, mode = 'create'
                 {TEAM_SIZES.map((s) => <option key={s} value={s}>{s} people</option>)}
               </select>
             </div>
+            {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           </div>
           <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
             <button type="button" onClick={onClose}

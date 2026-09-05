@@ -25,6 +25,10 @@ export default function WorkspaceSwitcher({ ownerName }: { ownerName: string }) 
   const [creatingEdu, setCreatingEdu] = useState(false);
   const [managing, setManaging] = useState(false);
   const [pending, setPending] = useState(false);
+  // Inline feedback: a failed switch shows under the trigger; a failed create
+  // shows inside its modal, which stays open so the user can retry.
+  const [switchError, setSwitchError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -34,11 +38,27 @@ export default function WorkspaceSwitcher({ ownerName }: { ownerName: string }) 
   const name = kind === 'personal' || !current ? 'Personal Workspace' : current.name;
   const subtitle = kind === 'personal' ? 'Personal Space' : WORKSPACE_KIND_LABELS[kind];
 
+  // The list is live only when accounts is on AND it answered. If accounts is
+  // enabled but unreachable (orgs empty), show the same synthetic Personal row
+  // used when accounts is off, so the dropdown is never empty.
+  const PERSONAL_ROW = { id: 'personal', kind: 'personal' as const, name: 'Personal Workspace', slug: null, role: 'owner' as const };
+  const live = enabled && orgs.length > 0;
+  const rows = live ? orgs : [PERSONAL_ROW];
+
+  const errorMessage = (e: unknown, fallback: string) =>
+    e instanceof Error && e.message ? e.message : fallback;
+
   const choose = async (orgId: string) => {
     setOpen(false);
     setManaging(false);
     if (current?.id === orgId) return;
-    await switchTo(orgId);
+    setSwitchError(null);
+    try {
+      await switchTo(orgId);
+    } catch (e) {
+      setSwitchError(errorMessage(e, 'Could not switch workspace.'));
+      return;
+    }
     qc.invalidateQueries({ queryKey: ['projects'] });
     navigate('/dashboard');
   };
@@ -56,11 +76,14 @@ export default function WorkspaceSwitcher({ ownerName }: { ownerName: string }) 
 
   const submitCreate = async (companyName: string, teamSize: string) => {
     setPending(true);
+    setCreateError(null);
     try {
       const { accountsService } = await import('@/services/accounts.service');
       const { orgId, token } = await accountsService.createOrg(companyName, teamSize);
       setCreating(false);
       await adoptCreated(orgId, token, '/settings/team');
+    } catch (e) {
+      setCreateError(errorMessage(e, 'Could not create the organization.'));
     } finally {
       setPending(false);
     }
@@ -68,11 +91,14 @@ export default function WorkspaceSwitcher({ ownerName }: { ownerName: string }) 
 
   const submitEducational = async (courseCode: string, education: EducationPayload) => {
     setPending(true);
+    setCreateError(null);
     try {
       const { accountsService } = await import('@/services/accounts.service');
       const { orgId, token } = await accountsService.createEducational(courseCode, education);
       setCreatingEdu(false);
       await adoptCreated(orgId, token, '/settings/team');
+    } catch (e) {
+      setCreateError(errorMessage(e, 'Could not create the educational hub.'));
     } finally {
       setPending(false);
     }
@@ -93,13 +119,16 @@ export default function WorkspaceSwitcher({ ownerName }: { ownerName: string }) 
         </span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-muted transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
+      {switchError && (
+        <p role="alert" className="mt-1.5 px-1 text-[11px] text-danger">{switchError}</p>
+      )}
 
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute left-0 top-full z-20 mt-1.5 w-full min-w-[240px] rounded-lg border border-border bg-surface py-1 shadow-lg">
-            {(enabled ? orgs : [{ id: 'personal', kind: 'personal' as const, name: 'Personal Workspace', slug: null, role: 'owner' as const }]).map((ws) => (
-              <button key={ws.id} type="button" onClick={() => (enabled ? choose(ws.id) : setOpen(false))}
+            {rows.map((ws) => (
+              <button key={ws.id} type="button" onClick={() => (live ? choose(ws.id) : setOpen(false))}
                 className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-body transition-colors hover:bg-overlay/5 cursor-pointer">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-overlay/10 text-[10px] font-semibold text-body">
                   {ws.kind === 'personal' ? (ownerName ? initials(ownerName) : '?') : <WorkspaceKindIcon kind={ws.kind} className="h-3 w-3" />}
@@ -134,8 +163,8 @@ export default function WorkspaceSwitcher({ ownerName }: { ownerName: string }) 
         </>
       )}
 
-      <CreateOrganizationModal open={creating} onClose={() => setCreating(false)} pending={pending} onSubmit={submitCreate} />
-      <CreateEducationalModal open={creatingEdu} onClose={() => setCreatingEdu(false)} pending={pending} onSubmit={submitEducational} />
+      <CreateOrganizationModal open={creating} onClose={() => { setCreating(false); setCreateError(null); }} pending={pending} error={createError} onSubmit={submitCreate} />
+      <CreateEducationalModal open={creatingEdu} onClose={() => { setCreatingEdu(false); setCreateError(null); }} pending={pending} error={createError} onSubmit={submitEducational} />
       <ManageWorkspacesModal open={managing} onClose={() => setManaging(false)} onSwitch={choose} />
     </div>
   );

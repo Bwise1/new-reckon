@@ -24,12 +24,24 @@ const handleUnauthorized = (message?: string): void => {
   if (!token) return;
 
   const normalized = (message ?? '').toLowerCase();
+  // A 401 about some OTHER token (email verification, password reset, an
+  // invite link) must not sign the user out — only the session/JWT itself
+  // expiring counts. Bare 'expired' used to catch "Verification token has
+  // expired" and log a signed-in user out.
+  const isOtherTokenMessage = /\b(verification|verify|reset|invite|invitation|confirmation)\b/.test(normalized);
+  const isSessionExpiry =
+    normalized.includes('token has expired') ||
+    normalized.includes('token expired') ||
+    normalized.includes('session expired') ||
+    normalized.includes('session has expired') ||
+    normalized.includes('jwt expired');
   const isAuthMessage =
-    normalized.includes('authentication failed') ||
-    normalized.includes('invalid token') ||
-    normalized.includes('jwt') ||
-    normalized.includes('expired') ||
-    normalized.includes('unauthorized');
+    !isOtherTokenMessage &&
+    (normalized.includes('authentication failed') ||
+      normalized.includes('invalid token') ||
+      normalized.includes('jwt') ||
+      isSessionExpiry ||
+      normalized.includes('unauthorized'));
 
   if (!isAuthMessage && !normalized) return;
 

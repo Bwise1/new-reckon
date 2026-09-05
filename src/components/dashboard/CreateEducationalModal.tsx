@@ -14,13 +14,15 @@ const labelClass = 'text-xs font-semibold uppercase tracking-wide text-muted';
 type Props = {
   open: boolean;
   pending?: boolean;
+  /** Server/network failure from the last submit; shown inline, modal stays open. */
+  error?: string | null;
   onClose: () => void;
   /** name is the course code; education carries the rest. */
   onSubmit: (name: string, education: EducationPayload) => void;
 };
 
 /** Create Educational Hub — ported from the prototype, wired to the accounts service. */
-export default function CreateEducationalModal({ open, pending, onClose, onSubmit }: Props) {
+export default function CreateEducationalModal({ open, pending, error, onClose, onSubmit }: Props) {
   const { theme } = useTheme();
   const [institutionName, setInstitutionName] = useState('');
   const [institutionType, setInstitutionType] = useState<string>(INSTITUTION_TYPES[0]);
@@ -102,6 +104,7 @@ export default function CreateEducationalModal({ open, pending, onClose, onSubmi
             </div>
           </div>
 
+          {error && <p role="alert" className="px-5 pb-4 text-xs text-danger">{error}</p>}
           <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
             <button type="button" onClick={onClose}
               className="rounded-md px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-muted hover:text-body">

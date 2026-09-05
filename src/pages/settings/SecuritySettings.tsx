@@ -6,7 +6,10 @@ import { accountsEnabled } from '@/services/accounts.service';
 import { useChangePassword, useProfile } from '@/hooks/useProfile';
 
 function ChangePassword() {
-  const { data: profileData } = useProfile();
+  const { data: profileData, isPending: profilePending } = useProfile();
+  // Decide social-only vs password only once the profile is known: defaulting
+  // to "has password" while loading flashed the password UI for social users.
+  // If the profile fails to load, fall back to the password form.
   const hasPassword = Boolean(profileData?.data?.user?.hasPassword ?? true);
   const { mutateAsync: changePassword, isPending } = useChangePassword();
   const [editing, setEditing] = useState(false);
@@ -34,6 +37,15 @@ function ChangePassword() {
       setError(e instanceof Error ? e.message : 'Could not change password.');
     }
   };
+
+  if (profilePending && !profileData) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3" aria-busy="true">
+        <span className="h-4 w-64 max-w-full animate-pulse rounded bg-surface-muted" />
+        <span className="h-9 w-36 animate-pulse rounded-md bg-surface-muted" />
+      </div>
+    );
+  }
 
   if (!hasPassword) {
     return (
