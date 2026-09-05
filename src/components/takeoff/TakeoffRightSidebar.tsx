@@ -21,6 +21,9 @@ import CollaborateModal from "@/components/dashboard/CollaborateModal";
 import { useProjectAccessStore } from "@/store/useProjectAccessStore";
 import { ROLE_LABELS } from "@/types/members";
 import { useParams } from "react-router-dom";
+import { useEntityLock } from "@/realtime/useEntityLock";
+import { lockKey } from "@/realtime/types";
+import { useRealtimeStore } from "@/store/useRealtimeStore";
 
 interface TakeoffRightSidebarProps {
   className?: string;
@@ -51,6 +54,17 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
   const can = useProjectAccessStore((s) => s.can);
   const readOnly = !can.edit;
   const hideCosts = !can.seeCosts;
+
+  // Row locks (live collaboration): focusing any editable field in a card
+  // claims that BOQ item; leaving the card releases it. A row someone else
+  // holds renders read-only with their name.
+  const boqLock = useEntityLock("boq.item");
+  const rowLocks = useRealtimeStore((s) => s.locks);
+  const presenceSelfId = useRealtimeStore((s) => s.self?.userId);
+  const rowLockedBy = (itemId: string): string | null => {
+    const holder = rowLocks[lockKey("boq.item", itemId)];
+    return holder && holder.userId !== presenceSelfId ? holder.name : null;
+  };
 
   // Comments on elements and items (docs/comments-plan.md). One popover open
   // at a time, anchored beside the trigger that opened it.
@@ -406,10 +420,24 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                     const displayPendingValue = isTargetingThis
                       ? boqTargeting?.pendingValue ?? null
                       : pendingCommitForThis?.value ?? null;
+                    const lockedBy = rowLockedBy(card.id);
                     return (
+                    <div
+                      key={card.id}
+                      onFocusCapture={() => {
+                        if (readOnly || lockedBy) return;
+                        void boqLock.acquire(card.id);
+                      }}
+                      onBlurCapture={(e) => {
+                        const next = e.relatedTarget;
+                        if (next instanceof Node && e.currentTarget.contains(next)) return;
+                        boqLock.release(card.id);
+                      }}
+                    >
                     <EstimationCard
                       readOnly={readOnly}
                       hideCosts={hideCosts}
+                      lockedBy={lockedBy}
                       commentCount={threadOf("boq_item", card.id)?.comments.length ?? 0}
                       commentResolved={threadOf("boq_item", card.id)?.status === "resolved"}
                       onOpenComments={(rect) =>
@@ -422,7 +450,6 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                           rect,
                         })
                       }
-                      key={card.id}
                       data={card}
                       itemLabel={itemLabelFromIndex(index)}
                       isActive={
@@ -491,6 +518,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
                       onAddElement={handleAddElement}
                       onAddItem={() => handleAddItem(element.id)}
                     />
+                    </div>
                     );
                   })}
                 </div>

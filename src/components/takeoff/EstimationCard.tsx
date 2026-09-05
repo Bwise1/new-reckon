@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef } from "react";
-import { Copy, Link2, RotateCcw, Trash2, X } from "lucide-react";
+import { Copy, Link2, Lock, RotateCcw, Trash2, X } from "lucide-react";
 import CommentTrigger from "@/components/comments/CommentTrigger";
 import UnitSelector from "./UnitSelector";
 import FormulaInput, { type FormulaInputHandle } from "./FormulaInput";
@@ -22,6 +22,9 @@ interface EstimationCardProps {
   readOnly?: boolean;
   /** Contributor/Viewer: rates and amounts are never shown. */
   hideCosts?: boolean;
+  /** Name of the collaborator currently editing this row (live lock). The
+   *  row renders read-only with a badge while set. */
+  lockedBy?: string | null;
   /** Comment thread state for this item (docs/comments-plan.md). */
   commentCount?: number;
   commentResolved?: boolean;
@@ -73,8 +76,9 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
   itemLabel,
   onDelete,
   onCopy,
-  readOnly = false,
+  readOnly: readOnlyProp = false,
   hideCosts = false,
+  lockedBy = null,
   commentCount = 0,
   commentResolved = false,
   onOpenComments,
@@ -92,6 +96,7 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
   onClearPendingMeasured,
   className = "",
 }) => {
+  const readOnly = readOnlyProp || Boolean(lockedBy);
   const [unit, setUnit] = useState<UnitType>(data?.unit || "m3");
   const [header, setHeader] = useState(data?.header || "");
   const [description, setDescription] = useState(data?.description || "");
@@ -254,6 +259,15 @@ const EstimationCard: React.FC<EstimationCardProps> = ({
       } ${className}`}
     >
       <div onClick={(e) => e.stopPropagation()} className="space-y-2.5">
+        {lockedBy && (
+          <div
+            role="status"
+            className="flex items-center gap-1.5 rounded-md bg-overlay/10 px-2 py-1 text-[11px] font-medium text-muted"
+          >
+            <Lock className="h-3 w-3 shrink-0" strokeWidth={2} />
+            <span className="truncate">{lockedBy} is editing this</span>
+          </div>
+        )}
         <fieldset disabled={readOnly} className="contents">
         <UnitSelector selectedUnit={unit} onChange={updateUnit} />
 

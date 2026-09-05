@@ -44,8 +44,10 @@ import { useConfirm } from "@/contexts/ConfirmProvider";
 import PresenceLayer from "@/components/takeoff/PresenceLayer";
 import PresenceStrip from "@/components/takeoff/PresenceStrip";
 import { sendCursor, sendDraft } from "@/realtime/actions";
+import { LOCK_IDLE_RELEASE_MS } from "@/realtime/config";
 import type { Presence } from "@/realtime/types";
-import { useRealtimeStore } from "@/store/useRealtimeStore";
+import { useEntityLock } from "@/realtime/useEntityLock";
+import { lockHolder, useRealtimeStore } from "@/store/useRealtimeStore";
 
 const MIN_DISTANCE = 0.001; // Minimum valid distance in image pixels
 const MIN_LINEAR_EDIT_DISTANCE = 2; // Prevent collapsing line while editing
@@ -218,6 +220,107 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   // The status bar renders through a portal into the shell's full-width slot
   // (prototype "base" layout) while its state stays in this component.
   const projectCanEdit = useProjectAccessStore((st) => st.can.edit);
+
+  // ---- Edit locks (live collaboration) ----
+  // One measurement at a time may be edited by one person. The lock is taken
+  // when a shape is selected or a drag starts, refreshed while active, and
+  // released on deselect / Esc / tool change / idle. A refused lock shows
+  // "<name> is editing this" beside the shape and cancels the interaction.
+  const [lockNotice, setLockNotice] = useState<{
+    measurementId: string;
+    name: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const lockNoticeTimerRef = useRef<number | null>(null);
+  const lockViewRef = useRef({ takeoffItems, imageScale, stageScale, stagePos });
+  useEffect(() => {
+    lockViewRef.current = { takeoffItems, imageScale, stageScale, stagePos };
+  });
+  const showLockNotice = useCallback((measurementId: string, holder: Presence | null) => {
+    const { takeoffItems: items, imageScale: img, stageScale: sc, stagePos: pos } = lockViewRef.current;
+    const safe = img > 0 ? img : 1;
+    let anchor = { x: 0, y: 0 };
+    for (const item of items) {
+      const m = item.measurements.find((mm) => mm.id === measurementId);
+      if (m?.points[0]) {
+        anchor = m.points[0];
+        break;
+      }
+    }
+    setLockNotice({
+      measurementId,
+      name: holder?.name ?? "Someone",
+      x: anchor.x * safe * sc + pos.x,
+      y: anchor.y * safe * sc + pos.y,
+    });
+    if (lockNoticeTimerRef.current !== null) window.clearTimeout(lockNoticeTimerRef.current);
+    lockNoticeTimerRef.current = window.setTimeout(() => setLockNotice(null), 2500);
+  }, []);
+  const measurementLock = useEntityLock("measurement", {
+    idleReleaseMs: LOCK_IDLE_RELEASE_MS,
+    onLost: (id, holder) => {
+      // Idle release keeps the selection (the next edit re-acquires); a
+      // takeover by someone else cancels whatever we were doing to it.
+      if (!holder) return;
+      showLockNotice(id, holder);
+      setSelectedMeasurement((prev) => (prev?.measurementId === id ? null : prev));
+      setActiveDragPoint(null);
+      setIsDraggingObject(false);
+    },
+  });
+  /**
+   * Gate for a whole-shape drag / nudge: false (and the drag is stopped) when
+   * someone else holds the lock. Otherwise acquires in the background and
+   * cancels the interaction if the server refuses.
+   */
+  const beginMeasurementEdit = useCallback(
+    (measurementId: string, node?: Konva.Node): boolean => {
+      if (!projectCanEdit) return false;
+      const selfId = useRealtimeStore.getState().self?.userId;
+      const holder = lockHolder("measurement", measurementId);
+      if (holder && holder.userId !== selfId) {
+        showLockNotice(measurementId, holder);
+        node?.stopDrag();
+        return false;
+      }
+      void measurementLock.acquire(measurementId).then((ack) => {
+        if (ack.ok) return;
+        showLockNotice(measurementId, ack.holder);
+        node?.stopDrag();
+        setIsDraggingObject(false);
+        setActiveDragPoint(null);
+        setSelectedMeasurement((prev) => (prev?.measurementId === measurementId ? null : prev));
+      });
+      return true;
+    },
+    [projectCanEdit, measurementLock, showLockNotice, setIsDraggingObject, setActiveDragPoint, setSelectedMeasurement]
+  );
+  // Selecting a shape claims it; deselecting lets it go.
+  const selectedMeasurementId = selectedMeasurement?.measurementId ?? null;
+  useEffect(() => {
+    if (!selectedMeasurementId) {
+      measurementLock.release();
+      return;
+    }
+    beginMeasurementEdit(selectedMeasurementId);
+  }, [selectedMeasurementId, measurementLock, beginMeasurementEdit]);
+  // Picking up a drawing tool or entering calibration ends the edit.
+  useEffect(() => {
+    if (activeTool || calibrationMode) measurementLock.release();
+  }, [activeTool, calibrationMode, measurementLock]);
+  // Pointer activity on the held shape (hovering it or its handles, dragging
+  // a vertex) keeps the lock from idling out.
+  useEffect(() => {
+    if (!selectedMeasurementId) return;
+    const touches =
+      hoveredMeasurement?.measurementId === selectedMeasurementId ||
+      hoveredPoint?.measurementId === selectedMeasurementId ||
+      hoveredEdge?.measurementId === selectedMeasurementId ||
+      activeDragPoint?.measurementId === selectedMeasurementId;
+    if (touches) measurementLock.touch();
+  }, [selectedMeasurementId, hoveredMeasurement, hoveredPoint, hoveredEdge, activeDragPoint, measurementLock]);
+
   const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
   useEffect(() => {
     setStatusSlot(document.getElementById("reckon-status-slot"));
@@ -1904,6 +2007,7 @@ if (!prev && activeTool) {
       isFine: boolean
     ) => {
     if (!selectedMeasurement) return;
+    if (!beginMeasurementEdit(selectedMeasurement.measurementId)) return;
 
     // Premium nudge: if calibrated, step by real-world units;
     // otherwise keep screen-space behavior stable across zoom levels.
@@ -1954,6 +2058,7 @@ if (!prev && activeTool) {
       handleMeasurementDrag,
       currentScale,
       stageScale,
+      beginMeasurementEdit,
     ]
   );
 
@@ -2000,6 +2105,11 @@ if (!prev && activeTool) {
           setAreaContextMenu(null);
           setCalibrationMode(false);
           setCalibrationPoint1(null);
+          return;
+        }
+        // 1b) Drop the selection (which also hands back its edit lock).
+        if (selectedMeasurement) {
+          setSelectedMeasurement(null);
           return;
         }
         // 2) End the measuring session but KEEP the staged value (same stash
@@ -2232,7 +2342,9 @@ if (!prev && activeTool) {
   // ---- Live collaboration: what we broadcast, and following a colleague ----
   // Latest view values for callbacks that run after an async page change.
   const viewRef = useRef({ imageScale, stageScale, mousePos, currentPage, stageSize });
-  viewRef.current = { imageScale, stageScale, mousePos, currentPage, stageSize };
+  useEffect(() => {
+    viewRef.current = { imageScale, stageScale, mousePos, currentPage, stageSize };
+  });
 
   // Our in-progress run, so others watch the shape form. An empty point list
   // on finish/cancel clears it on their side. (sendDraft no-ops when read-only.)
@@ -2659,6 +2771,7 @@ if (!prev && activeTool) {
                         draggable={isSelectMode}
                         onDragStart={(e) => {
                           if (e.target !== e.currentTarget) return;
+                          if (!beginMeasurementEdit(m.id, e.target)) return;
                           setIsDraggingObject(true);
                           const container = e.target.getStage()?.container();
                           if (container) container.style.cursor = "grabbing";
@@ -2947,6 +3060,7 @@ if (!prev && activeTool) {
                         draggable={isSelectMode}
                         onDragStart={(e) => {
                           if (e.target !== e.currentTarget) return;
+                          if (!beginMeasurementEdit(m.id, e.target)) return;
                           setIsDraggingObject(true);
                           const container = e.target.getStage()?.container();
                           if (container) container.style.cursor = "grabbing";
@@ -3130,6 +3244,7 @@ if (!prev && activeTool) {
                         draggable={isSelectMode}
                         onDragStart={(e) => {
                           if (e.target !== e.currentTarget) return;
+                          if (!beginMeasurementEdit(m.id, e.target)) return;
                           setIsDraggingObject(true);
                           const container = e.target.getStage()?.container();
                           if (container) container.style.cursor = "grabbing";
@@ -3495,6 +3610,7 @@ if (!prev && activeTool) {
                         draggable={true}
                         onDragStart={(e) => {
                           e.cancelBubble = true;
+                          if (!beginMeasurementEdit(m.id, e.target)) return;
                           setIsDraggingObject(true);
                             setActiveDragPoint({
                               itemId: item.id,
@@ -3992,6 +4108,15 @@ if (!prev && activeTool) {
                 </div>
               );
             })()}
+            {lockNotice ? (
+              <div
+                role="status"
+                className="absolute z-30 pointer-events-none rounded-md bg-charcoal/90 px-2 py-1 text-xs font-semibold text-white shadow-lg whitespace-nowrap"
+                style={{ left: lockNotice.x + 12, top: lockNotice.y - 30 }}
+              >
+                {lockNotice.name} is editing this
+              </div>
+            ) : null}
             {hoveredMeasurement && hoverTooltipText && screenPointerPos ? (
               <div
                 className="absolute z-30 pointer-events-none rounded-md bg-charcoal/90 px-2 py-1 text-xs font-semibold text-white shadow-lg"
