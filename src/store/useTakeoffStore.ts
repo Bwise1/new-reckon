@@ -13,12 +13,13 @@ import type {
   PlanDiscipline,
   Point,
 } from '@/types/takeoff';
-import { calculateAreaWithDeductions } from '@/utils/measurementUtils';
+import { calculateAreaWithDeductions, calculateQuantity } from '@/utils/measurementUtils';
 import {
   emptyPlanDocumentState,
   type PlanDocumentState,
   hydrateActivePlanView,
   resolvePlanBackgroundForCanvas,
+  measurementBelongsToPlan,
 } from '@/utils/planDocument';
 import { inferPlanMediaKind } from '@/utils/planMediaLoader';
 import { clearAllPlanPdfs, clearPlanPdf } from '@/utils/planPdfCache';
@@ -2060,25 +2061,65 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   setScale: (page, scale) => {
     const state = get();
     const previousScale = state.scales[page];
-    
+
+    // Recompute every measurement on this page against `newScale`, returning
+    // the next takeoffItems (with corrected per-measurement quantity + item
+    // totals) and the list of measurements whose quantity actually changed —
+    // so re-calibrating a page keeps its existing measurements consistent
+    // instead of leaving them on the old scale. Count measurements are
+    // scale-independent and never change.
+    const recompute = (newScale: number | null) => {
+      const changed: Array<{ clientUuid: string; quantity: number; deductions: Point[][] | null }> = [];
+      const activePlanId = get().activePlanId;
+      const items = get().takeoffItems.map((item) => {
+        let touched = false;
+        const measurements = item.measurements.map((m) => {
+          if (m.page !== page) return m;
+          if (!measurementBelongsToPlan(m, activePlanId)) return m;
+          if (m.type === 'count') return m; // count is a tally, not a scaled length/area
+          const t = m.type === 'area' ? 'area' : m.type === 'polyline' ? 'polyline' : 'linear';
+          const nextQuantity = calculateQuantity(m.points, t, newScale, m.deductions ?? []);
+          if (nextQuantity === m.quantity) return m;
+          touched = true;
+          changed.push({ clientUuid: m.id, quantity: nextQuantity, deductions: m.deductions ?? null });
+          return { ...m, quantity: nextQuantity };
+        });
+        if (!touched) return item;
+        const totalQuantity = measurements.reduce((sum, mm) => sum + mm.quantity, 0);
+        return { ...item, measurements, totalQuantity };
+      });
+      return { items, changed };
+    };
+
+    const syncChanged = (changed: Array<{ clientUuid: string; quantity: number; deductions: Point[][] | null }>) => {
+      const projectId = get().currentProjectId;
+      if (!projectId) return;
+      for (const c of changed) {
+        syncQueue.enqueue({
+          kind: 'measurement.update',
+          projectId,
+          clientUuid: c.clientUuid,
+          patch: { quantity: c.quantity },
+        });
+      }
+    };
+
     executeCommand({
       execute: () => {
-        set((state) => ({
-          scales: { ...state.scales, [page]: scale },
-        }));
+        const { items, changed } = recompute(scale);
+        set((state) => ({ scales: { ...state.scales, [page]: scale }, takeoffItems: items }));
+        syncChanged(changed);
       },
       undo: () => {
-        if (previousScale !== undefined) {
-          set((state) => ({
-            scales: { ...state.scales, [page]: previousScale },
-          }));
-        } else {
-          set((state) => {
-            const newScales = { ...state.scales };
-            delete newScales[page];
-            return { scales: newScales };
-          });
-        }
+        const restore = previousScale ?? null;
+        const { items, changed } = recompute(restore);
+        set((state) => {
+          const newScales = { ...state.scales };
+          if (previousScale !== undefined) newScales[page] = previousScale;
+          else delete newScales[page];
+          return { scales: newScales, takeoffItems: items };
+        });
+        syncChanged(changed);
       },
       description: `Set scale for page ${page}`,
     });
