@@ -5,6 +5,14 @@ import { useRealtimeStore } from "@/store/useRealtimeStore";
 import { ROLE_LABELS } from "@/types/members";
 
 /**
+ * " · page N" for a member we have seen a cursor from; nothing until then —
+ * the server only learns a member's page from cursor samples, so a viewer who
+ * has not moved yet (or a plan with no sheet open) has no page to show.
+ */
+const pageLabel = (page: number | null | undefined): string =>
+  typeof page === "number" && Number.isFinite(page) && page > 0 ? ` · page ${page}` : "";
+
+/**
  * Who is in the project right now — top-right of the canvas. Up to
  * PRESENCE_STRIP_MAX avatars (ring in each person's colour; "you" gets none),
  * then a "+N" button that opens the full list. Picking a person follows
@@ -103,7 +111,7 @@ const PresenceStrip: React.FC<PresenceStripProps> = ({ onFollow }) => {
             {visible.map((m) => (
               <span
                 key={m.userId}
-                title={m.userId === self?.userId ? `${m.name} (you)` : `${m.name} · page ${m.page}`}
+                title={m.userId === self?.userId ? `${m.name} (you)` : `${m.name}${pageLabel(m.page)}`}
                 className="inline-flex rounded-full"
               >
                 <Avatar member={m} isSelf={m.userId === self?.userId} />
@@ -152,7 +160,7 @@ const PresenceStrip: React.FC<PresenceStripProps> = ({ onFollow }) => {
                     {isSelf ? " (you)" : ""}
                   </span>
                   <span className="block truncate text-[11px] text-muted">
-                    {ROLE_LABELS[m.role] ?? m.role} · page {m.page}
+                    {ROLE_LABELS[m.role] ?? m.role}{pageLabel(m.page)}
                   </span>
                 </span>
                 {!isSelf && <span className="text-[11px] text-muted">follow</span>}
