@@ -33,10 +33,8 @@ interface CanvasToolbarProps {
   activeColor: string;
   activeRealWidth: number;
   selectedMeasurementId?: string | null;
-  /** Calibration: draw the line first, then type its distance (legacy flow). */
+  /** Enter calibration mode: draw a reference line, then set its scale. */
   onStartCalibration: () => void;
-  /** Calibration: type the known dimension first, then draw the line. */
-  onStartKnownCalibration: () => void;
   onClearScale: () => void;
   onSelectTool: (type: DrawTool) => void;
   /** Reviewer/Viewer: measuring, calibration and editing tools are disabled. */
@@ -213,7 +211,6 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   activeRealWidth,
   selectedMeasurementId,
   onStartCalibration,
-  onStartKnownCalibration,
   onClearScale,
   onSelectTool,
   readOnly = false,
@@ -448,26 +445,13 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               type="button"
               onClick={() => {
                 setCalOpen(false);
-                onStartKnownCalibration();
-              }}
-              className="block w-full px-3 py-2 text-left hover:bg-overlay/5 cursor-pointer"
-            >
-              <span className="font-medium text-body">Use known dimension</span>
-              <span className="block text-[11px] text-muted">
-                Type a measurement, then draw it on the plan
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setCalOpen(false);
                 onStartCalibration();
               }}
               className="block w-full px-3 py-2 text-left hover:bg-overlay/5 cursor-pointer"
             >
-              <span className="font-medium text-body">Draw, then enter distance</span>
+              <span className="font-medium text-body">Set scale</span>
               <span className="block text-[11px] text-muted">
-                Trace a line first, type its real length after
+                Draw a line of known length, then enter its real distance
               </span>
             </button>
             <button

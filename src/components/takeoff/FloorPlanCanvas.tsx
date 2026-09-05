@@ -30,7 +30,6 @@ import CalibrationDialog from "@/components/takeoff/CalibrationDialog";
 import { createPortal } from "react-dom";
 import CanvasStatusBar from "@/components/takeoff/CanvasStatusBar";
 import PageSelectModal from "@/components/takeoff/PageSelectModal";
-import KnownDimensionDialog from "@/components/takeoff/KnownDimensionDialog";
 import CanvasViewport from "@/components/takeoff/CanvasViewport";
 import { ratioToPxPerMeter } from "@/utils/pdfScaleDetector";
 import { detectRoomPolygon } from "@/utils/areaDetection";
@@ -232,10 +231,6 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   // Known-dimension calibration: the distance is typed BEFORE drawing; when
   // set, finishing the calibration line applies the scale with no second
   // dialog. null = legacy draw-first flow.
-  const [knownCalibration, setKnownCalibration] = useState<number | null>(null);
-  // Whether the pending known-dimension calibration should apply to every page.
-  const [knownApplyToAll, setKnownApplyToAll] = useState(false);
-  const [showKnownDialog, setShowKnownDialog] = useState(false);
   // Drafting toggles, persisted like other canvas prefs. Ortho makes angle
   // snapping permanent (Shift still works as a momentary hold); Auto Scroll
   // pans the sheet when the cursor reaches the pane edge mid-measurement.
@@ -809,31 +804,9 @@ if (!prev && activeTool) {
         // Same click as p1 — ignore and let the user click again.
         return;
       }
-      if (knownCalibration != null) {
-        // Known-dimension flow: the real distance was typed up front, so the
-        // scale applies the moment the line is drawn — no second dialog.
-        const newScale = pixelDist / knownCalibration;
-        const scaleValidation = validateScale(newScale);
-        if (scaleValidation.isValid) {
-          const line = { p1: calibrationPoint1, p2: finalPoint, distance: knownCalibration };
-          // Same rule as the Calibrate dialog: every page renders at the same
-          // DPI, so the scale + reference line copy cleanly to all pages.
-          const pages = knownApplyToAll && numPages > 1
-            ? Array.from({ length: numPages }, (_, i) => i + 1)
-            : [currentPage];
-          for (const p of pages) {
-            setScale(p, newScale);
-            setCalibrationLine(p, line);
-          }
-        } else {
-          console.warn("Invalid scale:", scaleValidation.error);
-        }
-        setKnownCalibration(null);
-        setKnownApplyToAll(false);
-        setCalibrationMode(false);
-        setCalibrationPoint1(null);
-        return;
-      }
+      // One calibration path: the drawn line opens the Set-scale dialog, where
+      // the user enters its real length (with a unit) and optionally applies
+      // the scale to every page.
       setPendingCalibration({ p1: calibrationPoint1, p2: finalPoint });
       return;
     }
@@ -2369,17 +2342,12 @@ if (!prev && activeTool) {
         }}
         onStartCalibration={() => {
           setCalibrationMode(true);
-          setKnownCalibration(null);
-          setKnownApplyToAll(false);
           setCalibrationPoint1(null);
           setPendingCalibration(null);
           setIsPanningMode(false);
           setIsSelectMode(false);
           setActiveTool(null);
           setCurrentPoints([]);
-        }}
-        onStartKnownCalibration={() => {
-          setShowKnownDialog(true);
         }}
         onClearScale={() => clearScale(currentPage)}
         isPanningMode={isPanningMode}
@@ -3880,8 +3848,6 @@ if (!prev && activeTool) {
         onToggleCrosshair={toggleCrosshair}
         onCalibrateClick={() => {
           setCalibrationMode(true);
-          setKnownCalibration(null);
-          setKnownApplyToAll(false);
           setCalibrationPoint1(null);
           setPendingCalibration(null);
           setIsPanningMode(false);
@@ -3928,23 +3894,6 @@ if (!prev && activeTool) {
           </div>
         );
       })()}
-      <KnownDimensionDialog
-        open={showKnownDialog}
-        pageCount={numPages}
-        onCancel={() => setShowKnownDialog(false)}
-        onConfirm={(distance, applyToAll) => {
-          setShowKnownDialog(false);
-          setKnownCalibration(distance);
-          setKnownApplyToAll(applyToAll);
-          setCalibrationMode(true);
-          setCalibrationPoint1(null);
-          setPendingCalibration(null);
-          setIsPanningMode(false);
-          setIsSelectMode(false);
-          setActiveTool(null);
-          setCurrentPoints([]);
-        }}
-      />
       <CalibrationDialog
         open={!!pendingCalibration}
         pixelDistance={

@@ -1,14 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { CALIBRATION_UNITS, toMetres, type CalibrationUnit } from '@/utils/calibrationUnits';
 
 interface CalibrationDialogProps {
   open: boolean;
   pixelDistance: number;
   /** Total pages on the plan — an "apply to all" option shows when > 1. */
   pageCount?: number;
-  onConfirm: (distance: number, applyToAll: boolean) => void;
+  /** distanceMetres is already unit-converted; applyToAll copies it to every page. */
+  onConfirm: (distanceMetres: number, applyToAll: boolean) => void;
   onCancel: () => void;
 }
 
+/**
+ * The single calibration modal: after drawing a reference line, enter its
+ * real-world length, pick a unit, and optionally apply the scale to every
+ * page. The value is converted to metres before it leaves this dialog, so the
+ * rest of the app stays metric.
+ */
 const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
   open,
   pixelDistance,
@@ -17,6 +25,7 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
   onCancel,
 }) => {
   const [value, setValue] = useState('');
+  const [unit, setUnit] = useState<CalibrationUnit>('m');
   const [error, setError] = useState<string | null>(null);
   const [applyToAll, setApplyToAll] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -28,6 +37,7 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
     setWasOpen(open);
     if (open) {
       setValue('');
+      setUnit('m');
       setError(null);
       setApplyToAll(false);
     }
@@ -48,15 +58,16 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
       setError('Enter a positive number');
       return;
     }
-    onConfirm(parsed, applyToAll);
+    onConfirm(toMetres(parsed, unit), applyToAll);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/40">
       <div className="bg-surface rounded-lg shadow-xl w-full max-w-sm mx-4 p-5">
-        <h2 className="text-base font-semibold text-body">Set calibration distance</h2>
+        <h2 className="text-base font-semibold text-body">Set scale</h2>
         <p className="mt-1 text-xs text-muted">
-          Line length: {pixelDistance.toFixed(1)} px. Enter the real-world distance this line represents.
+          Line length: {pixelDistance.toFixed(1)} px. Enter the real-world distance this line
+          represents.
         </p>
 
         <div className="mt-4 flex items-stretch rounded-md border border-border overflow-hidden focus-within:ring-2 focus-within:ring-accent/30">
@@ -82,11 +93,20 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
               }
             }}
             placeholder="e.g. 2.5"
-            className="flex-1 px-3 py-2 text-sm outline-none"
+            className="flex-1 px-3 py-2 text-sm outline-none bg-transparent text-body"
           />
-          <span className="px-3 py-2 bg-surface-muted text-sm text-muted border-l border-border">
-            m
-          </span>
+          <select
+            value={unit}
+            onChange={(e) => setUnit(e.target.value as CalibrationUnit)}
+            aria-label="Unit"
+            className="px-2 bg-surface-muted text-sm text-body border-l border-border outline-none cursor-pointer"
+          >
+            {CALIBRATION_UNITS.map((u) => (
+              <option key={u} value={u}>
+                {u}
+              </option>
+            ))}
+          </select>
         </div>
 
         {error && <p className="mt-2 text-xs text-danger">{error}</p>}
@@ -121,7 +141,7 @@ const CalibrationDialog: React.FC<CalibrationDialogProps> = ({
             onClick={submit}
             className="px-3 py-1.5 text-sm rounded-md bg-accent text-accent-fg hover:bg-accent-strong font-semibold"
           >
-            Confirm
+            Set Scale
           </button>
         </div>
       </div>
