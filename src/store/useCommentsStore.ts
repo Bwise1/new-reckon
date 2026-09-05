@@ -22,7 +22,12 @@ interface CommentsState {
   /** People who can see the project — the mention picker's list. */
   members: CommentMember[];
   load: (projectId: string) => Promise<void>;
+  /** Refetch threads only (members untouched) — after a remote comment op. */
+  reloadThreads: () => Promise<void>;
   clear: () => void;
+  /** Silent remote updates (no sync-queue write). */
+  applyRemoteStatus: (threadClientUuid: string, status: 'open' | 'resolved') => void;
+  applyRemoteDelete: (commentClientUuid: string) => void;
   threadFor: (kind: CommentAnchorKind, anchorClientUuid: string) => CommentThread | undefined;
   addComment: (
     kind: CommentAnchorKind,
@@ -48,8 +53,15 @@ export const useCommentsStore = create<CommentsState>((set, get) => ({
       .members(projectId)
       .then((r) => set({ members: r.data.members }))
       .catch((error) => console.warn('[comments] members failed', error));
+    await get().reloadThreads();
+  },
+
+  reloadThreads: async () => {
+    const { projectId } = get();
+    if (!projectId) return;
     try {
       const res = await commentSync.list(projectId);
+      if (get().projectId !== projectId) return;
       const threads: Record<string, CommentThread> = {};
       for (const t of res.data.threads) {
         if (t.anchorKind !== 'boq_element' && t.anchorKind !== 'boq_item') continue;
@@ -63,6 +75,29 @@ export const useCommentsStore = create<CommentsState>((set, get) => ({
   },
 
   clear: () => set({ projectId: null, threads: {}, members: [] }),
+
+  applyRemoteStatus: (threadClientUuid, status) =>
+    set((s) => {
+      const entry = Object.entries(s.threads).find(([, t]) => t.clientUuid === threadClientUuid);
+      if (!entry) return s;
+      const [key, thread] = entry;
+      if (thread.status === status) return s;
+      return { threads: { ...s.threads, [key]: { ...thread, status } } };
+    }),
+
+  applyRemoteDelete: (commentClientUuid) =>
+    set((s) => {
+      const entry = Object.entries(s.threads).find(([, t]) =>
+        t.comments.some((c) => c.clientUuid === commentClientUuid)
+      );
+      if (!entry) return s;
+      const [key, thread] = entry;
+      const comments = thread.comments.filter((c) => c.clientUuid !== commentClientUuid);
+      const next = { ...s.threads };
+      if (comments.length === 0) delete next[key];
+      else next[key] = { ...thread, comments };
+      return { threads: next };
+    }),
 
   threadFor: (kind, anchorClientUuid) => get().threads[commentTargetKey(kind, anchorClientUuid)],
 

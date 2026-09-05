@@ -40,6 +40,11 @@ import {
   normalizeTakeoffItems,
   unitForTakeoffMode,
 } from '@/utils/takeoffMeasurement';
+import type { RemoteOp } from '@/realtime/types';
+import { parseCommentStatus, reduceRemoteOp } from '@/realtime/remoteOps';
+import { useCommentsStore } from '@/store/useCommentsStore';
+import { useAuthStore } from '@/stores/auth.store';
+import { useRealtimeStore } from '@/store/useRealtimeStore';
 
 // Command pattern for undo/redo
 interface Command {
@@ -305,6 +310,13 @@ interface TakeoffStore {
   ) => void;
   deleteElementItem: (elementId: string, itemId: string) => void;
   duplicateElementItem: (elementId: string, itemId: string) => void;
+
+  /**
+   * Live collaboration: apply a mutation another client already landed on
+   * the server. SILENT — no undo entry, no sync-queue write, no autosave.
+   * Ignores our own echoes and ops for a project that is not open.
+   */
+  applyRemoteOp: (op: RemoteOp) => void;
 
   // Undo/Redo actions
   undo: () => void;
@@ -2592,6 +2604,39 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
       },
       description: 'Duplicate item',
     });
+  },
+
+  applyRemoteOp: (op) => {
+    const state = get();
+    // Only the open project, and never our own echo (the sender's store has
+    // already applied it — and re-applying an update over a newer local edit
+    // would roll the user back).
+    if (!state.currentProjectId || String(op.projectId) !== state.currentProjectId) return;
+    const myId = useAuthStore.getState().user?.id;
+    const mySocketId = useRealtimeStore.getState().self?.userId;
+    if ((myId !== undefined && String(op.by) === String(myId)) || (mySocketId !== undefined && op.by === mySocketId)) {
+      return;
+    }
+
+    if (op.kind === 'comment.create' || op.kind === 'comment.delete' || op.kind === 'comment.thread.status') {
+      const comments = useCommentsStore.getState();
+      if (op.kind === 'comment.thread.status') {
+        const status = parseCommentStatus(op);
+        if (status) comments.applyRemoteStatus(op.clientUuid, status);
+        else void comments.reloadThreads();
+      } else if (op.kind === 'comment.delete') {
+        comments.applyRemoteDelete(op.clientUuid);
+      } else {
+        // A new comment carries an author + timestamps we only trust from
+        // the server — refetch the thread list rather than reconstruct it.
+        void comments.reloadThreads();
+      }
+      return;
+    }
+
+    const patch = reduceRemoteOp(state, op);
+    if (!patch) return;
+    set(patch);
   },
 
   // Undo/Redo actions

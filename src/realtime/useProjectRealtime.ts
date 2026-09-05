@@ -80,6 +80,10 @@ export const useProjectRealtime = (projectId: string | undefined) => {
       store.setDraft(e.userId, { page: e.page, tool: e.tool, points: e.points ?? [] });
     };
     const onLock: ServerToClientEvents['lock.state'] = (state) => store.setLock(state);
+    const onOp: ServerToClientEvents['op'] = (op) => {
+      if (typeof op.rev === 'number') store.setRev(op.rev);
+      useTakeoffStore.getState().applyRemoteOp(op);
+    };
 
     const socket = realtimeSocket.get();
     socket.on('connect', onConnect);
@@ -88,6 +92,7 @@ export const useProjectRealtime = (projectId: string | undefined) => {
     socket.on('cursor', onCursor);
     socket.on('draft', onDraft);
     socket.on('lock.state', onLock);
+    socket.on('op', onOp);
 
     if (socket.connected) onConnect();
     else realtimeSocket.connect();
@@ -106,6 +111,7 @@ export const useProjectRealtime = (projectId: string | undefined) => {
       socket.off('cursor', onCursor);
       socket.off('draft', onDraft);
       socket.off('lock.state', onLock);
+      socket.off('op', onOp);
       store.reset();
       // Nothing else uses the socket outside a takeoff page — close it so a
       // backgrounded dashboard tab holds no idle connection.
