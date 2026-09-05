@@ -30,7 +30,14 @@ const create = (): RealtimeSocket => {
     // A function so every (re)connect attempt reads the CURRENT token — the
     // REST interceptor and refreshIdentityToken both rotate localStorage.
     auth: (cb) => cb({ token: localStorage.getItem('token') ?? '' }),
-    transports: ['websocket', 'polling'],
+    // Polling first, then upgrade to WebSocket (socket.io's default order).
+    // websocket-first is NOT safe here: engine.io does not fall back to the
+    // next transport when the first one fails (only with tryAllTransports),
+    // so a browser whose WebSocket is blocked (extension, corporate proxy)
+    // would loop on "WebSocket connection failed" and never connect at all.
+    // Polling always gets through; the upgrade is attempted and, if it
+    // fails, the session silently stays on polling.
+    transports: ['polling', 'websocket'],
     autoConnect: false,
   });
 
@@ -40,7 +47,11 @@ const create = (): RealtimeSocket => {
 
   s.on('connect_error', (error) => {
     const message = (error?.message ?? '').toLowerCase();
-    if (!message.includes('unauthorized')) return;
+    if (!message.includes('unauthorized')) {
+      // Transport-level failure (socket.io keeps retrying with backoff).
+      console.warn('[realtime] connect failed:', error?.message ?? error);
+      return;
+    }
     // A middleware rejection is terminal for socket.io (no auto-retry), so
     // refresh once and reconnect by hand. A second rejection means the
     // session is really gone; the REST layer's 401 handling takes it from
