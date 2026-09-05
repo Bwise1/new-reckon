@@ -336,6 +336,20 @@ if (!prev && activeTool) {
       setPendingApplyToAll(false);
     }
   }, [calibrationMode, pendingRealMetres]);
+  // Arc-in-path (PlanSwift-style): while drawing a Linear or Area run, press A
+  // to make the next segment an arc. 'awaiting-end' = A pressed, the next click
+  // is the arc's end; { end } = end placed, the next click is a point on the
+  // curve, after which the arc is tessellated and appended to currentPoints so
+  // the run stays an ordinary polyline. null = normal straight segments.
+  const [arcPending, setArcPending] = useState<'awaiting-end' | { end: Point } | null>(null);
+  // Arc mode only makes sense mid-run on the linear/area tools; drop it whenever
+  // the run ends (finished/cleared) or the tool changes.
+  useEffect(() => {
+    if (arcPending !== null && (currentPoints.length === 0 || (activeTool !== 'linear' && activeTool !== 'area'))) {
+      setArcPending(null);
+    }
+  }, [arcPending, currentPoints.length, activeTool]);
+
   // When set, points collected in `currentPoints` are treated as an
   // in-progress deduction for the referenced area measurement instead of
   // a new outer polygon. Set explicitly via right-click "Add deduction".
@@ -859,6 +873,33 @@ if (!prev && activeTool) {
 
     const canvasItemId = ensureCanvasItemId();
     const now = new Date().toISOString();
+
+    // Arc-in-path: while A-mode is armed during a Linear/Area run, the next two
+    // clicks define an arc (end, then a point on the curve). We tessellate it
+    // and append the interior points to currentPoints, so the run stays an
+    // ordinary polyline and finish/quantity/export logic is untouched.
+    if (
+      arcPending !== null &&
+      (activeTool === "linear" || activeTool === "area") &&
+      currentPoints.length > 0
+    ) {
+      const effectiveScale = stageScale * (imageScale > 0 ? imageScale : 1);
+      const clickSep = MIN_CLICK_SEPARATION_SCREEN / effectiveScale;
+      const arcStart = currentPoints[currentPoints.length - 1];
+      if (arcPending === "awaiting-end") {
+        if (calculateDistance(arcStart, point) < clickSep) return; // ignore stutter
+        setArcPending({ end: point });
+        return;
+      }
+      // arcPending is { end }: this click is the point on the curve.
+      const arcEnd = arcPending.end;
+      if (calculateDistance(arcEnd, point) < clickSep) return; // need a distinct curve point
+      const arcPoints = tessellateArc(arcStart, arcEnd, point);
+      // Drop the first tessellated point (== arcStart, already in the run).
+      setCurrentPoints([...currentPoints, ...arcPoints.slice(1)]);
+      setArcPending(null);
+      return;
+    }
 
     if (activeTool === "count") {
       const canvasItem = takeoffItems.find((item) => item.id === canvasItemId);
@@ -1900,8 +1941,9 @@ if (!prev && activeTool) {
           areaContextMenu !== null ||
           calibrationMode ||
           pendingCalibration !== null;
-        if (hasTransient) {
+        if (hasTransient || arcPending !== null) {
           setCurrentPoints([]);
+          setArcPending(null);
           setDeductionTarget(null);
           setAreaContextMenu(null);
           setCalibrationMode(false);
@@ -1940,6 +1982,19 @@ if (!prev && activeTool) {
       if (e.key === "Enter" && currentPoints.length > 0) {
         e.preventDefault();
         handleDblClick();
+      }
+      // Press A to make the next segment an arc (PlanSwift-style), while a
+      // Linear/Area run is in progress. Toggles off if pressed again before
+      // the arc's end is placed.
+      if (
+        (e.key === "a" || e.key === "A") &&
+        !e.ctrlKey && !e.metaKey && !e.altKey &&
+        (activeTool === "linear" || activeTool === "area") &&
+        currentPoints.length > 0
+      ) {
+        e.preventDefault();
+        setArcPending((prev) => (prev === null ? "awaiting-end" : null));
+        return;
       }
       if (e.key === "Shift") setIsShiftPressed(true);
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
@@ -3451,6 +3506,35 @@ if (!prev && activeTool) {
                     if (snapped) previewPoint = snapped.point;
                   }
 
+                  // Arc mode: preview the curve instead of a straight segment.
+                  if (arcPending !== null) {
+                    const arcPreview =
+                      arcPending === "awaiting-end"
+                        ? [lastPoint, previewPoint] // chord to prospective end
+                        : tessellateArc(lastPoint, arcPending.end, previewPoint);
+                    const arcQty = calculateQuantity(arcPreview, "polyline", currentScale);
+                    return (
+                      <Group opacity={0.5}>
+                        <Line
+                          points={arcPreview.flatMap((p) => [p.x, p.y])}
+                          stroke={activeColor}
+                          strokeWidth={2 * strokeScale}
+                          dash={[5 * strokeScale, 5 * strokeScale]}
+                        />
+                        <Text
+                          x={previewPoint.x}
+                          y={previewPoint.y}
+                          text={formatDistance(arcQty)}
+                          fontSize={LABEL_FONT_SIZE * labelScale}
+                          fill={activeColor}
+                          align="center"
+                          verticalAlign="bottom"
+                          offsetY={10 * labelScale}
+                        />
+                      </Group>
+                    );
+                  }
+
                   const dx = previewPoint.x - lastPoint.x;
                   const dy = previewPoint.y - lastPoint.y;
                   const angle = Math.atan2(dy, dx);
@@ -3896,10 +3980,16 @@ if (!prev && activeTool) {
         } else if (pendingSectionGroup && activeTool) {
           text = "New section — every shape you draw joins that measurement. Esc to stop";
           accent = "bg-accent/90";
+        } else if (arcPending === "awaiting-end") {
+          text = "Arc — click the end of the curve";
+          accent = "bg-accent/90";
+        } else if (arcPending !== null) {
+          text = "Arc — click a point on the curve";
+          accent = "bg-accent/90";
         } else if (activeTool === "linear") {
-          text = "Linear — click points, double-click / Enter to finish";
+          text = "Linear — click points, A for an arc, double-click / Enter to finish";
         } else if (activeTool === "area") {
-          text = "Area — click points, double-click / Enter to close";
+          text = "Area — click points, A for an arc, double-click / Enter to close";
         } else if (activeTool === "arc") {
           text = "Arc — click start and end, then a point on the curve";
         } else if (activeTool === "count") {
