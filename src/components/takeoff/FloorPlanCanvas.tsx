@@ -103,7 +103,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     setCalibrationMode,
     setScale,
     applyCalibrationToPages,
-    setTakeoffItems,
+    removeMeasurementsForPlan,
     setCurrentPage,
     setNumPages: setStoreNumPages,
     setBackgroundImage,
@@ -140,7 +140,7 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       setCalibrationMode: s.setCalibrationMode,
       setScale: s.setScale,
       applyCalibrationToPages: s.applyCalibrationToPages,
-      setTakeoffItems: s.setTakeoffItems,
+      removeMeasurementsForPlan: s.removeMeasurementsForPlan,
       setCurrentPage: s.setCurrentPage,
       setNumPages: s.setNumPages,
       setBackgroundImage: s.setBackgroundImage,
@@ -1646,36 +1646,19 @@ if (!prev && activeTool) {
     if (!activePlanId) return;
     const ok = await confirm({
       title: 'Clear all measurements?',
-      message: 'Every measurement on this plan will be removed. This cannot be undone.',
+      message: 'Every measurement on this plan will be removed.',
       confirmLabel: 'Clear all',
       variant: 'danger',
     });
     if (!ok) return;
 
-    const nextItems = takeoffItems.map((item) => {
-      const keptMeasurements = item.measurements.filter(
-        (measurement) => !measurementBelongsToPlan(measurement, activePlanId)
-      );
-      const removedQuantity = item.measurements
-        .filter((measurement) => measurementBelongsToPlan(measurement, activePlanId))
-        .reduce((sum, measurement) => sum + measurement.quantity, 0);
-
-      if (keptMeasurements.length === item.measurements.length) {
-        return item;
-      }
-
-      return {
-        ...item,
-        measurements: keptMeasurements,
-        totalQuantity: item.totalQuantity - removedQuantity,
-      };
-    });
-
     setSelectedMeasurement(null);
     setCurrentPoints([]);
     activeCountMeasurementRef.current = null;
-    setTakeoffItems(nextItems);
-  }, [activePlanId, setTakeoffItems, setCurrentPoints, takeoffItems, confirm]);
+    // Store action: syncs one measurement.delete per measurement (so the
+    // server and live collaborators see it) and is undoable.
+    removeMeasurementsForPlan(activePlanId);
+  }, [activePlanId, removeMeasurementsForPlan, setCurrentPoints, confirm]);
 
   // Apply Shift-lock to a vertex drag position so the ghost matches commit.
   // Anchor = other endpoint (linear) or previous polygon vertex (area).

@@ -220,6 +220,13 @@ interface TakeoffStore {
 
   addMeasurement: (itemId: string, measurement: Measurement) => void;
   removeMeasurement: (itemId: string, measurementId: string) => void;
+  /**
+   * Remove every measurement on a plan (all pages) — the canvas's "Clear
+   * all". Goes through the sync queue as one measurement.delete per
+   * measurement so the server (and every live collaborator) sees it; a plain
+   * setTakeoffItems would only change local state.
+   */
+  removeMeasurementsForPlan: (planId: string) => void;
   toggleMeasurementHidden: (itemId: string, measurementId: string) => void;
   /** Rename a measurement (empty string clears back to the auto label). */
   renameMeasurement: (itemId: string, measurementId: string, name: string) => void;
@@ -1863,6 +1870,73 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         }
       },
       description: 'Remove measurement',
+    });
+  },
+
+  removeMeasurementsForPlan: (planId) => {
+    const previousItems = get().takeoffItems;
+    const removed: { itemId: string; measurement: Measurement }[] = [];
+    for (const item of previousItems) {
+      for (const m of item.measurements) {
+        if (measurementBelongsToPlan(m, planId)) removed.push({ itemId: item.id, measurement: m });
+      }
+    }
+    if (removed.length === 0) return;
+    const removedIds = new Set(removed.map((r) => r.measurement.id));
+
+    executeCommand({
+      execute: () => {
+        const boqBefore = get().boqElements;
+        set((state) => ({
+          takeoffItems: state.takeoffItems.map((item) => {
+            const kept = item.measurements.filter((m) => !removedIds.has(m.id));
+            if (kept.length === item.measurements.length) return item;
+            const removedQuantity = item.measurements
+              .filter((m) => removedIds.has(m.id))
+              .reduce((sum, m) => sum + m.quantity, 0);
+            return {
+              ...item,
+              measurements: kept,
+              totalQuantity: item.totalQuantity - removedQuantity,
+            };
+          }),
+          // Drop the BOQ history chips that mirrored the removed measurements.
+          boqElements: state.boqElements.map((element) => ({
+            ...element,
+            items: element.items.map((item) => ({
+              ...item,
+              history: item.history.filter(
+                (entry) => !entry.sourceMeasurementId || !removedIds.has(entry.sourceMeasurementId)
+              ),
+            })),
+          })),
+        }));
+        const projectId = get().currentProjectId;
+        if (projectId) {
+          for (const { measurement } of removed) {
+            syncQueue.enqueue({ kind: 'measurement.delete', projectId, clientUuid: measurement.id });
+          }
+        }
+        enqueueBoqOpsFromDiff(boqBefore);
+      },
+      undo: () => {
+        const boqBefore = get().boqElements;
+        set({ takeoffItems: previousItems });
+        for (const { measurement } of removed) {
+          if (measurement.boqElementId && measurement.boqItemId) {
+            get().bindMeasurementToItem(measurement.id, measurement.boqElementId, measurement.boqItemId);
+          }
+        }
+        const projectId = get().currentProjectId;
+        if (projectId) {
+          for (const { itemId, measurement } of removed) {
+            const body = measurementCreateBodyFromStore(itemId, planId, measurement);
+            if (body) syncQueue.enqueue({ kind: 'measurement.create', projectId, body });
+          }
+        }
+        enqueueBoqOpsFromDiff(boqBefore);
+      },
+      description: 'Clear plan measurements',
     });
   },
 
