@@ -1,34 +1,42 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, X } from 'lucide-react';
-import * as pdfjsLib from 'pdfjs-dist';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+import { loadPdfjs } from '@/utils/pdfjsLoader';
 
 type Props = {
   /** The picked PDF file; the modal opens when this is non-null. */
   file: File | null;
   onCancel: () => void;
-  /** Selected page numbers (1-based, ascending). */
-  onConfirm: (pages: number[]) => void;
+  /** Selected page numbers (1-based, ascending) and the document's page count. */
+  onConfirm: (pages: number[], totalPages: number) => void;
 };
 
 const THUMB_W = 150; // px render width for previews
+// How long a load may take before the "Reading document…" shell appears. A
+// single-page PDF that opens faster than this auto-confirms with no UI at all.
+const LOADING_SHELL_DELAY_MS = 350;
 
 /**
  * PDF page picker (zzTakeoff-style): a lazy-thumbnail grid where the user
  * checks the pages to import. Only chosen pages are kept — the caller builds a
  * trimmed PDF from them, so unselected pages never reach the platform and never
  * count against storage. Thumbnails render on scroll to stay smooth for large
- * drawing sets.
+ * drawing sets. A single-page document needs no choice: it confirms itself
+ * without rendering anything. pdf.js is loaded on demand (loadPdfjs) so the
+ * canvas importing this modal statically does not pull it into the main chunk.
  */
 export default function PageSelectModal({ file, onCancel, onConfirm }: Props) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [showLoadingShell, setShowLoadingShell] = useState(false);
+  // Latest confirm callback, read from the load effect without re-running it.
+  const onConfirmRef = useRef(onConfirm);
+  useEffect(() => {
+    onConfirmRef.current = onConfirm;
+  }, [onConfirm]);
 
   // Load the PDF when a file arrives; reset selection each time.
   useEffect(() => {
@@ -37,16 +45,26 @@ export default function PageSelectModal({ file, onCancel, onConfirm }: Props) {
       setNumPages(0);
       setSelected(new Set());
       setLoadError(null);
+      setShowLoadingShell(false);
       return;
     }
     let cancelled = false;
     let loaded: PDFDocumentProxy | null = null;
+    const shellTimer = window.setTimeout(() => setShowLoadingShell(true), LOADING_SHELL_DELAY_MS);
     (async () => {
       try {
+        const pdfjsLib = await loadPdfjs();
         const buffer = await file.arrayBuffer();
         const doc = await pdfjsLib.getDocument({ data: buffer }).promise;
         if (cancelled) {
           void doc.destroy();
+          return;
+        }
+        if (doc.numPages <= 1) {
+          // Nothing to choose — keep the only page and never show the picker.
+          window.clearTimeout(shellTimer);
+          void doc.destroy();
+          onConfirmRef.current([1], doc.numPages);
           return;
         }
         loaded = doc;
@@ -60,6 +78,7 @@ export default function PageSelectModal({ file, onCancel, onConfirm }: Props) {
     })();
     return () => {
       cancelled = true;
+      window.clearTimeout(shellTimer);
       if (loaded) void loaded.destroy();
     };
   }, [file]);
@@ -79,6 +98,9 @@ export default function PageSelectModal({ file, onCancel, onConfirm }: Props) {
     setSelected((prev) => (prev.size === numPages ? new Set() : new Set(allPages)));
 
   if (!file) return null;
+  // Still opening the document: render nothing until it has been slow enough
+  // to deserve a shell, so single-page PDFs auto-confirm without a flash.
+  if (!pdf && !loadError && !showLoadingShell) return null;
 
   return createPortal(
     <div
@@ -159,7 +181,7 @@ export default function PageSelectModal({ file, onCancel, onConfirm }: Props) {
           <button
             type="button"
             disabled={selected.size === 0}
-            onClick={() => onConfirm([...selected].sort((a, b) => a - b))}
+            onClick={() => onConfirm([...selected].sort((a, b) => a - b), numPages)}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-fg transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             Import {selected.size} page{selected.size === 1 ? '' : 's'}

@@ -24,7 +24,8 @@ interface PlanNavigatorProps {
   onSelectPlan: (planId: string) => void;
   onSelectMeasurement: (itemId: string, measurementId: string) => void;
   onDeleteMeasurement: (itemId: string, measurementId: string) => void;
-  onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  /** Resolves with the new plan's id, or null if nothing was added. */
+  onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => Promise<string | null>;
 }
 
 type SidebarTab = 'plan' | 'history';
@@ -247,15 +248,18 @@ const PlanNavigator: React.FC<PlanNavigatorProps> = ({
     uploadRef.current?.click();
   };
 
-  const handleUploadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onFileUpload(e);
+  const handleUploadChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const discipline = pendingDiscipline;
-    if (discipline) {
-      const newPlanId = useTakeoffStore.getState().activePlanId;
-      if (newPlanId) setPlanDiscipline(newPlanId, discipline);
-    }
     setPendingDiscipline(null);
+    // The handler captures the File synchronously, so the input can be
+    // cleared right away (lets the same file be picked again).
+    const result = onFileUpload(e);
     e.target.value = '';
+    // The upload is async (PDF page picker, parsing) — the plan only exists
+    // once it resolves. Reading activePlanId before that tagged the PREVIOUS
+    // plan with the chosen discipline.
+    const newPlanId = await result;
+    if (discipline && newPlanId) setPlanDiscipline(newPlanId, discipline);
   };
 
   const toggleGroup = (key: string) => {

@@ -7,6 +7,7 @@ import { isProjectSyncDisabled } from "@/services/projectSync.service";
 import { useTakeoffStore } from "@/store/useTakeoffStore";
 import { getPlanPdf, setPlanPdf } from "@/utils/planPdfCache";
 import { inferPlanMediaKind, loadPlanFromRemoteUrl } from "@/utils/planMediaLoader";
+import { loadPdfjs } from "@/utils/pdfjsLoader";
 import { extractPdfSegments, SegmentIndex } from "@/utils/pdfLineExtractor";
 import { getCachedSegments, setCachedSegments, segmentCacheKey } from "@/utils/pdfSegmentCache";
 import { detectDrawingScale } from "@/utils/pdfScaleDetector";
@@ -37,6 +38,13 @@ const documentDisplayScale = (naturalW: number, naturalH: number) =>
     Math.min(RENDER_DPI / 72, RENDER_MAX_EDGE / Math.max(naturalW, naturalH));
 const capRenderScale = (scale: number, w: number, h: number) =>
     Math.min(scale, Math.sqrt(MAX_RENDER_PIXELS / (w * h)), MAX_RENDER_DIM / Math.max(w, h));
+
+/** What the PDF page picker resolves with: the kept pages (1-based,
+ *  ascending) and how many pages the document has in total. */
+export interface PageSelection {
+    pages: number[];
+    totalPages: number;
+}
 
 interface UseCanvasMediaParams {
     containerRef: React.RefObject<HTMLDivElement | null>;
@@ -92,21 +100,24 @@ export const useCanvasMedia = ({
     const loadGenerationRef = useRef(0);
     const recoveryAttemptedRef = useRef<Set<string>>(new Set());
 
-    // PDF page picker: when a multi-page PDF is uploaded we pause and ask which
-    // pages to import, so only those are kept and counted toward storage. The
-    // modal resolves this deferred promise with the chosen pages, or null on
-    // cancel. `pageSelectFile` drives the modal's visibility.
+    // PDF page picker: every PDF upload goes through the picker, which opens
+    // the document ONCE (a separate pdf.js probe here would read the file into
+    // memory a second time). Single-page PDFs auto-confirm inside the modal
+    // without showing UI; multi-page ones ask which pages to import, so only
+    // those are kept and counted toward storage. The modal resolves this
+    // deferred promise with the chosen pages + the document's total page
+    // count, or null on cancel. `pageSelectFile` drives the modal's visibility.
     const [pageSelectFile, setPageSelectFile] = useState<File | null>(null);
-    const pageSelectResolver = useRef<((pages: number[] | null) => void) | null>(null);
+    const pageSelectResolver = useRef<((result: PageSelection | null) => void) | null>(null);
     const askPagesToImport = useCallback((file: File) => {
         setPageSelectFile(file);
-        return new Promise<number[] | null>((resolve) => {
+        return new Promise<PageSelection | null>((resolve) => {
             pageSelectResolver.current = resolve;
         });
     }, []);
-    const resolvePageSelect = useCallback((pages: number[] | null) => {
+    const resolvePageSelect = useCallback((result: PageSelection | null) => {
         setPageSelectFile(null);
-        pageSelectResolver.current?.(pages);
+        pageSelectResolver.current?.(result);
         pageSelectResolver.current = null;
     }, []);
 
@@ -772,15 +783,22 @@ export const useCanvasMedia = ({
     }, [containerRef, image, pdfDisplaySize, setImageScale, setStageSize]);
 
     const MAX_FILE_SIZE_MB = 250;
+    /**
+     * Handle a plan file pick. Resolves with the new plan's id once the plan
+     * has been added to the store (so callers can attach metadata like the
+     * discipline to the RIGHT plan), or null if the pick was empty, invalid,
+     * or cancelled in the page picker. The File is captured synchronously
+     * before any await, so callers may clear the input right after calling.
+     */
     const handleFileUpload = useCallback(
-        async (e: React.ChangeEvent<HTMLInputElement>) => {
+        async (e: React.ChangeEvent<HTMLInputElement>): Promise<string | null> => {
             const file = e.target.files?.[0];
-            if (!file) return;
+            if (!file) return null;
 
             if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
                 setPlanLoadStatus("error");
                 setPlanLoadError(`File is too large (${(file.size / 1024 / 1024).toFixed(0)} MB). Maximum is ${MAX_FILE_SIZE_MB} MB.`);
-                return;
+                return null;
             }
 
             const ALLOWED_TYPES = new Set([
@@ -795,32 +813,28 @@ export const useCanvasMedia = ({
                 setPlanLoadError(
                     "Only PDF, JPEG, PNG, and DXF files are supported. Convert other formats (incl. DWG → DXF) before uploading."
                 );
-                return;
+                return null;
             }
 
-            // Multi-page PDFs: let the user pick which pages to import, then
-            // rebuild a PDF of just those (vector preserved, so no crispness
-            // loss). Only the kept pages are uploaded, so only they count
-            // toward storage. Single-page PDFs and images skip the picker.
+            // PDFs: the picker opens the document (single-page ones auto-confirm
+            // with no UI). If the user keeps only some pages, rebuild a PDF of
+            // just those (vector preserved, so no crispness loss) so only the
+            // kept pages are uploaded and count toward storage. Keeping every
+            // page uploads the original File untouched — no rebuild.
             let uploadFile = file;
             if (file.type === "application/pdf") {
-                try {
-                    const pdfjsLib = await import("pdfjs-dist");
-                    const probe = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
-                    const total = probe.numPages;
-                    void probe.destroy();
-                    if (total > 1) {
-                        const chosen = await askPagesToImport(file);
-                        if (!chosen) return; // cancelled — nothing uploaded
-                        if (chosen.length < total) {
-                            const { buildTrimmedPdf } = await import("@/utils/pdfPageSelect");
-                            uploadFile = await buildTrimmedPdf(file, chosen);
-                        }
+                const chosen = await askPagesToImport(file);
+                if (!chosen) return null; // cancelled — nothing uploaded
+                if (chosen.pages.length < chosen.totalPages) {
+                    try {
+                        const { buildTrimmedPdf } = await import("@/utils/pdfPageSelect");
+                        uploadFile = await buildTrimmedPdf(file, chosen.pages);
+                    } catch (error) {
+                        // If splitting fails, fall back to the whole file — the
+                        // PDF branch below will surface any real open error.
+                        console.warn("[canvas-media] page trim failed, uploading whole file", error);
+                        uploadFile = file;
                     }
-                } catch {
-                    // If probing/splitting fails, fall back to the whole file —
-                    // the PDF branch below will surface any real open error.
-                    uploadFile = file;
                 }
             }
 
@@ -876,7 +890,7 @@ export const useCanvasMedia = ({
                 }
             } else if (uploadFile.type === "application/pdf") {
                 try {
-                    const pdfjsLib = await import("pdfjs-dist");
+                    const pdfjsLib = await loadPdfjs();
                     // Use the (possibly trimmed) upload file so the canvas shows
                     // exactly what was imported and stored.
                     const buffer = await uploadFile.arrayBuffer();
@@ -926,8 +940,10 @@ export const useCanvasMedia = ({
                 reader.readAsDataURL(file);
                 void uploadPlanToCloud(planId, file, 1);
             }
+            return planId;
         },
         [
+            askPagesToImport,
             addPlanFromUpload,
             removePlan,
             fitImageToStage,

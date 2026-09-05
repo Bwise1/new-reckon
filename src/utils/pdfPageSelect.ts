@@ -20,9 +20,11 @@ export async function buildTrimmedPdf(
   copied.forEach((page) => out.addPage(page));
 
   const bytes = await out.save();
-  // Copy into a plain ArrayBuffer-backed blob part (pdf-lib's Uint8Array is
-  // typed over ArrayBufferLike, which the File constructor's types reject).
-  const blob = new Blob([bytes.slice()], { type: 'application/pdf' });
+  // pdf-lib's Uint8Array is typed over ArrayBufferLike, which the Blob
+  // constructor's types reject. Re-view the same buffer (no copy — the
+  // trimmed PDF can be hundreds of MB) and narrow the type for TS.
+  const part = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength) as Uint8Array<ArrayBuffer>;
+  const blob = new Blob([part], { type: 'application/pdf' });
   // Name it so the original stem is recognizable but clearly a selection.
   const stem = source.name.replace(/\.pdf$/i, '');
   const name = pages.length === srcDoc.getPageCount() ? source.name : `${stem} (${pages.length} pages).pdf`;

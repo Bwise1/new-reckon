@@ -60,7 +60,11 @@ interface FloorPlanCanvasProps {
   onSelectTool: (type: DrawTool) => void;
   onFinishTool: () => void;
   onColorChange: (color: string) => void;
-  registerUploadHandler: (handler: (e: React.ChangeEvent<HTMLInputElement>) => void) => void;
+  /** Receives the upload handler; it resolves with the new plan's id, or null
+   *  when nothing was added (invalid file, cancelled page picker). */
+  registerUploadHandler: (
+    handler: (e: React.ChangeEvent<HTMLInputElement>) => Promise<string | null>
+  ) => void;
   onPlanLoadStatusChange?: (status: "idle" | "loading" | "ready" | "error") => void;
 }
 
@@ -4156,7 +4160,7 @@ if (!prev && activeTool) {
       <PageSelectModal
         file={pageSelectFile}
         onCancel={() => resolvePageSelect(null)}
-        onConfirm={(pages) => resolvePageSelect(pages)}
+        onConfirm={(pages, totalPages) => resolvePageSelect({ pages, totalPages })}
       />
     </div>
   );

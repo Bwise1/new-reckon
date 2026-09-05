@@ -1,11 +1,8 @@
-import * as pdfjsLib from 'pdfjs-dist';
-// Bundle the pdf.js worker locally (Vite emits it into the build) instead of
-// loading from the unpkg CDN. This makes the canvas work fully offline and in
-// the packaged desktop (Tauri) app, which has no guaranteed network.
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+// Type-only: pdf.js itself is loaded on demand through loadPdfjs so this
+// module (imported by the store) does not drag ~1 MB into the main chunk.
+import type * as pdfjsLib from 'pdfjs-dist';
 import { fetchPlanBlobWithCache } from '@/utils/planBlobCache';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+import { loadPdfjs } from '@/utils/pdfjsLoader';
 
 export type PlanMediaKind = 'pdf' | 'image' | 'unknown';
 
@@ -67,7 +64,8 @@ export const loadPdfFromUrl = async (url: string): Promise<pdfjsLib.PDFDocumentP
   // Cache-backed fetch: network first, IndexedDB fallback when offline.
   const blob = await fetchPlanBlobWithCache(url);
   const buffer = await blob.arrayBuffer();
-  return pdfjsLib.getDocument({ data: buffer }).promise;
+  const pdfjs = await loadPdfjs();
+  return pdfjs.getDocument({ data: buffer }).promise;
 };
 
 /** Load image from Cloudinary URL; returns the URL for use as img.src (with CORS). */

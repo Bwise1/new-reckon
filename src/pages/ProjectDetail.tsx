@@ -70,9 +70,9 @@ const ProjectDetail = () => {
     return () => window.clearTimeout(timer);
   }, [planLoadStatus, planLoadTimedOut]);
 
-  const uploadHandlerRef = useRef<((e: React.ChangeEvent<HTMLInputElement>) => void) | null>(
-    null
-  );
+  const uploadHandlerRef = useRef<
+    ((e: React.ChangeEvent<HTMLInputElement>) => Promise<string | null>) | null
+  >(null);
 
   // Shallow selector, not a whole-store subscription: this page re-rendered on
   // every unrelated store mutation otherwise.
@@ -199,9 +199,8 @@ const ProjectDetail = () => {
     removeMeasurement(itemId, measurementId);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    uploadHandlerRef.current?.(e);
-  };
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>): Promise<string | null> =>
+    uploadHandlerRef.current?.(e) ?? Promise.resolve(null);
 
   const projectTitle = project?.title
     ? `${project.title}${project.title.toLowerCase().includes('project') ? '' : ' Project'}`
