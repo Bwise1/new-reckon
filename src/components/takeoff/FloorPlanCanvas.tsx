@@ -1228,6 +1228,7 @@ if (!prev && activeTool) {
       imageScale,
       boqTargeting,
       exitBoqTargeting,
+      arcPending,
     ]
   );
 
@@ -2129,6 +2130,7 @@ if (!prev && activeTool) {
     deductionTarget,
     onFinishTool,
     pendingCalibration,
+    arcPending,
   ]);
 
   // Keep at least a margin of the plan on screen in every direction, so panning
