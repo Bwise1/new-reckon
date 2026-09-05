@@ -123,7 +123,10 @@ const PresenceLayer: React.FC<PresenceLayerProps> = ({
 
         {Object.entries(drafts).map(([id, draft]) => {
           const member = byId.get(Number(id));
+          // Pages are numbered per plan: only show a draft made on THIS plan
+          // (an older client that sends no planId is shown on page match alone).
           if (!member || draft.page !== currentPage || draft.points.length === 0) return null;
+          if (draft.planId && activePlanId && draft.planId !== activePlanId) return null;
           if (draft.tool === "count") {
             return (
               <Group key={`draft-${id}`} opacity={0.6}>
@@ -167,6 +170,7 @@ const PresenceLayer: React.FC<PresenceLayerProps> = ({
         {Object.entries(cursors).map(([id, cursor]) => {
           const member = byId.get(Number(id));
           if (!member || cursor.page !== currentPage) return null;
+          if (cursor.planId && activePlanId && cursor.planId !== activePlanId) return null;
           return (
             <Group key={`cursor-${id}`} x={cursor.x} y={cursor.y} scaleX={labelScale} scaleY={labelScale}>
               <Line

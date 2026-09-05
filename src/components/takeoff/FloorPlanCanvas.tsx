@@ -1454,7 +1454,7 @@ if (!prev && activeTool) {
 
           setMousePos(point);
           // Collaborators see our pointer in plan-pixel space (throttled inside).
-          sendCursor(currentPage, point.x, point.y);
+          sendCursor(activePlanId, currentPage, point.x, point.y);
 
           // Update snapped point
           const snapped = getSnappedPoint(point);
@@ -2351,11 +2351,11 @@ if (!prev && activeTool) {
   const draftSentRef = useRef(false);
   useEffect(() => {
     if (currentPoints.length > 0 && activeTool) {
-      sendDraft(currentPage, activeTool, currentPoints);
+      sendDraft(activePlanId, currentPage, activeTool, currentPoints);
       draftSentRef.current = true;
     } else if (draftSentRef.current) {
       draftSentRef.current = false;
-      sendDraft(currentPage, null, []);
+      sendDraft(activePlanId, currentPage, null, []);
     }
   }, [currentPoints, activeTool, currentPage]);
 
@@ -2365,7 +2365,7 @@ if (!prev && activeTool) {
     const v = viewRef.current;
     const safe = v.imageScale > 0 ? v.imageScale : 1;
     const p = v.mousePos ?? { x: v.stageSize.width / safe / 2, y: v.stageSize.height / safe / 2 };
-    sendCursor(currentPage, p.x, p.y);
+    sendCursor(activePlanId, currentPage, p.x, p.y);
   }, [currentPage]);
 
   // Follow: jump to their page, then centre the view on their latest cursor.

@@ -45,6 +45,8 @@ export interface RemoteOp {
 
 export interface CursorEvent {
   userId: number;
+  /** Plan (client uuid) the page belongs to; absent from older clients. */
+  planId?: string | null;
   page: number;
   x: number;
   y: number;
@@ -52,6 +54,8 @@ export interface CursorEvent {
 
 export interface DraftEvent {
   userId: number;
+  /** Plan (client uuid) the page belongs to; absent from older clients. */
+  planId?: string | null;
   page: number;
   tool: string | null;
   points: Point[];
@@ -74,8 +78,8 @@ export interface ServerToClientEvents {
 export interface ClientToServerEvents {
   'project.join': (payload: { projectId: number }, ack: (res: JoinAck) => void) => void;
   'project.leave': (payload: { projectId: number }) => void;
-  cursor: (payload: { projectId: number; page: number; x: number; y: number }) => void;
-  draft: (payload: { projectId: number; page: number; tool: string | null; points: Point[] }) => void;
+  cursor: (payload: { projectId: number; planId: string | null; page: number; x: number; y: number }) => void;
+  draft: (payload: { projectId: number; planId: string | null; page: number; tool: string | null; points: Point[] }) => void;
   'lock.acquire': (
     payload: { projectId: number; entityType: LockEntityType; entityId: string },
     ack: (res: LockAck) => void

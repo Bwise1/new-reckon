@@ -17,33 +17,33 @@ const joinedProjectId = (): number | null => useRealtimeStore.getState().project
 const canSend = (): boolean =>
   REALTIME_ENABLED && joinedProjectId() !== null && realtimeSocket.connected;
 
-const emitCursor = throttleTrailing((page: number, x: number, y: number) => {
+const emitCursor = throttleTrailing((planId: string | null, page: number, x: number, y: number) => {
   const projectId = joinedProjectId();
   if (projectId === null || !realtimeSocket.connected) return;
   // Volatile: a cursor sample that cannot go out right now is worthless by
   // the time the socket recovers — drop it rather than queue it.
-  realtimeSocket.get().volatile.emit('cursor', { projectId, page, x, y });
+  realtimeSocket.get().volatile.emit('cursor', { projectId, planId, page, x, y });
 }, 1000 / CURSOR_HZ);
 
-const emitDraft = throttleTrailing((page: number, tool: string | null, points: Point[]) => {
+const emitDraft = throttleTrailing((planId: string | null, page: number, tool: string | null, points: Point[]) => {
   const projectId = joinedProjectId();
   if (projectId === null || !realtimeSocket.connected) return;
-  realtimeSocket.get().volatile.emit('draft', { projectId, page, tool, points });
+  realtimeSocket.get().volatile.emit('draft', { projectId, planId, page, tool, points });
 }, 1000 / DRAFT_HZ);
 
 /** Plan-pixel cursor position on `page` (the stored-measurement space). */
-export const sendCursor = (page: number, x: number, y: number): void => {
+export const sendCursor = (planId: string | null, page: number, x: number, y: number): void => {
   if (!canSend()) return;
-  emitCursor(page, x, y);
+  emitCursor(planId, page, x, y);
 };
 
 /**
  * The in-progress run (`currentPoints`). Send `points: []` when a run ends or
  * is cancelled so the other side clears it. Read-only roles never draft.
  */
-export const sendDraft = (page: number, tool: string | null, points: Point[]): void => {
+export const sendDraft = (planId: string | null, page: number, tool: string | null, points: Point[]): void => {
   if (!canSend() || !projectCan().edit) return;
-  emitDraft(page, tool, points);
+  emitDraft(planId, page, tool, points);
 };
 
 const LOCK_ACK_TIMEOUT_MS = 5000;

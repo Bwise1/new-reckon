@@ -10,6 +10,8 @@ import type { Point } from '@/types/takeoff';
  */
 
 export interface RemoteCursor {
+  /** Plan (client uuid) the page belongs to; null from older clients. */
+  planId: string | null;
   page: number;
   /** Rendered position (lerped towards the target each frame). */
   x: number;
@@ -22,6 +24,8 @@ export interface RemoteCursor {
 }
 
 export interface RemoteDraft {
+  /** Plan (client uuid) the page belongs to; null from older clients. */
+  planId: string | null;
   page: number;
   tool: string | null;
   points: Point[];
@@ -42,7 +46,7 @@ interface RealtimeState {
   setConnected: (connected: boolean) => void;
   setJoined: (projectId: number, self: Presence, members: Presence[], locks: LockState[], rev: number) => void;
   setMembers: (members: Presence[]) => void;
-  setCursor: (userId: number, page: number, x: number, y: number) => void;
+  setCursor: (userId: number, planId: string | null, page: number, x: number, y: number) => void;
   setDraft: (userId: number, draft: RemoteDraft) => void;
   setLock: (state: LockState) => void;
   setRev: (rev: number) => void;
@@ -130,7 +134,7 @@ export const useRealtimeStore = create<RealtimeState>((set) => ({
       return { members, cursors, drafts, self };
     }),
 
-  setCursor: (userId, page, x, y) => {
+  setCursor: (userId, planId, page, x, y) => {
     set((s) => {
       const prev = s.cursors[userId];
       const at = Date.now();
@@ -141,8 +145,8 @@ export const useRealtimeStore = create<RealtimeState>((set) => ({
         cursors: {
           ...s.cursors,
           [userId]: jump
-            ? { page, x, y, tx: x, ty: y, at }
-            : { ...prev, page, tx: x, ty: y, at },
+            ? { planId, page, x, y, tx: x, ty: y, at }
+            : { ...prev, planId, page, tx: x, ty: y, at },
         },
       };
     });

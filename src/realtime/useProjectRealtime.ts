@@ -73,11 +73,11 @@ export const useProjectRealtime = (projectId: string | undefined) => {
     const onPresence: ServerToClientEvents['presence.state'] = (members) => store.setMembers(members);
     const onCursor: ServerToClientEvents['cursor'] = (e) => {
       if (e.userId === useRealtimeStore.getState().self?.userId) return;
-      store.setCursor(e.userId, e.page, e.x, e.y);
+      store.setCursor(e.userId, e.planId ?? null, e.page, e.x, e.y);
     };
     const onDraft: ServerToClientEvents['draft'] = (e) => {
       if (e.userId === useRealtimeStore.getState().self?.userId) return;
-      store.setDraft(e.userId, { page: e.page, tool: e.tool, points: e.points ?? [] });
+      store.setDraft(e.userId, { planId: e.planId ?? null, page: e.page, tool: e.tool, points: e.points ?? [] });
     };
     const onLock: ServerToClientEvents['lock.state'] = (state) => store.setLock(state);
     const onOp: ServerToClientEvents['op'] = (op) => {
