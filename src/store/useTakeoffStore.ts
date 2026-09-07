@@ -3,6 +3,7 @@ import { projectCan } from '@/store/useProjectAccessStore';
 import type {
   TakeoffItem,
   DrawTool,
+  DrawMode,
   Measurement,
   CalibrationLine,
   EstimationCardData,
@@ -61,6 +62,10 @@ interface TakeoffStore {
   takeoffItems: TakeoffItem[];
   activeItemId: string | null;
   activeTool: DrawTool | null;
+  /** How Area and Linear digitize clicks: "point" collects every vertex,
+   *  "box" takes two opposite corners and commits the rectangle itself.
+   *  A standing preference — it outlives tool changes, like activeColor. */
+  drawMode: DrawMode;
   /** Measuring-session id (tool pick-up → put-down). Shapes finished during
    *  the session share it as sectionGroupId → one panel pill. Not persisted. */
   measureSessionId: string | null;
@@ -205,6 +210,7 @@ interface TakeoffStore {
   moveTakeoffItemDown: (id: string) => void;
   setActiveItemId: (id: string | null) => void;
   setActiveTool: (tool: DrawTool | null) => void;
+  setDrawMode: (mode: DrawMode) => void;
   setPendingSectionGroup: (groupId: string | null) => void;
   /** Retro-tag an existing measurement with a section group (used when
    *  "New section" targets a measurement that predates grouping). */
@@ -369,6 +375,7 @@ const initialState = {
   takeoffItems: [],
   activeItemId: null,
   activeTool: null,
+  drawMode: 'point' as DrawMode,
   measureSessionId: null,
   pendingSectionGroup: null,
   activeColor: MARKUP_COLORS[0],
@@ -1293,6 +1300,11 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
   },
 
   setPendingSectionGroup: (groupId) => set({ pendingSectionGroup: groupId }),
+
+  // Switching draw mode mid-shape would leave orphaned vertices that mean
+  // something different in the new mode, so the caller clears the in-progress
+  // points; this only stores the preference.
+  setDrawMode: (mode) => set({ drawMode: mode }),
 
   setMeasurementSectionGroup: (itemId, measurementId, groupId) => {
     let updated: Measurement | null = null;

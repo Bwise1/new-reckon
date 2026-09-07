@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, type ComponentType, type ReactNode } from 'react';
+import React, { useState, useRef, useEffect, Fragment, type ComponentType, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Hand,
@@ -10,10 +10,11 @@ import {
   Maximize,
   Minimize,
 } from 'lucide-react';
-import type { DrawTool } from '@/types/takeoff';
+import type { DrawTool, DrawMode } from '@/types/takeoff';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import RotateMenu from './RotateMenu';
+import DrawModeMenu from './DrawModeMenu';
 import MarkupColorPicker from './MarkupColorPicker';
 import { useProjectTheme } from '@/hooks/useProjectTheme';
 import {
@@ -42,6 +43,9 @@ interface CanvasToolbarProps {
   /** Single-click area detection mode (magic wand). */
   autoAreaMode: boolean;
   onToggleAutoArea: () => void;
+  /** Point-to-point vs box (2 opposite corners) for Area and Linear. */
+  drawMode: DrawMode;
+  onDrawModeChange: (mode: DrawMode) => void;
   /** Put the active tool down (clicking the active tool button, or Esc). */
   onFinishTool: () => void;
   onColorChange: (color: string) => void;
@@ -168,6 +172,9 @@ function usePortalDropdown() {
 const DEFAULT_ICON_SCALE = 'h-[17.1px] w-[17.1px]';
 const MEASURE_ICON_SCALE = 'h-[21.78px] w-[21.78px]';
 
+/** Tools whose clicks can be digitized as a box (two opposite corners). */
+const DRAW_MODE_TOOLS = new Set<DrawTool>(['area', 'linear']);
+
 const MEASURE_TOOLS: {
   type: DrawTool;
   label: string;
@@ -215,6 +222,8 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onSelectTool,
   readOnly = false,
   autoAreaMode,
+  drawMode,
+  onDrawModeChange,
   onToggleAutoArea,
   onFinishTool,
   onColorChange,
@@ -316,9 +325,8 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           {MEASURE_TOOLS.map((tool) => {
             const isActive =
               activeTool === tool.type || (tool.type === 'linear' && activeTool === 'polyline');
-            return (
+            const button = (
               <IconButton
-                key={tool.type}
                 icon={tool.icon}
                 label={tool.label}
                 iconScale={tool.iconScale ?? MEASURE_ICON_SCALE}
@@ -327,6 +335,22 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                 disabled={readOnly}
                 onClick={() => (isActive ? onFinishTool() : onSelectTool(tool.type))}
               />
+            );
+            // Only Area and Linear can be drawn as a box; Arc and Count have
+            // no rectangle form, so they get no caret.
+            if (!DRAW_MODE_TOOLS.has(tool.type)) {
+              return <Fragment key={tool.type}>{button}</Fragment>;
+            }
+            return (
+              <div key={tool.type} className="group relative flex">
+                {button}
+                <DrawModeMenu
+                  mode={drawMode}
+                  onChange={onDrawModeChange}
+                  disabled={readOnly}
+                  portalTheme={portalTheme}
+                />
+              </div>
             );
           })}
           <IconButton

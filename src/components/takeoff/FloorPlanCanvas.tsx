@@ -24,7 +24,7 @@ import {
 } from "@/utils/measurementUtils";
 import { useCanvasState } from "@/components/takeoff/hooks/useCanvasState";
 import { useCanvasMedia } from "@/components/takeoff/hooks/useCanvasMedia";
-import { useCanvasInteractions } from "@/components/takeoff/hooks/useCanvasInteractions";
+import { useCanvasInteractions, rectangleFromCorners } from "@/components/takeoff/hooks/useCanvasInteractions";
 import CanvasToolbar from "@/components/takeoff/CanvasToolbar";
 import CalibrationDialog from "@/components/takeoff/CalibrationDialog";
 import { createPortal } from "react-dom";
@@ -96,6 +96,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
     activeColor,
     activeRealWidth,
     setActiveTool,
+    drawMode,
+    setDrawMode,
     scales,
     calibrationMode,
     currentPage,
@@ -133,6 +135,8 @@ const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
       activeColor: s.activeColor,
       activeRealWidth: s.activeRealWidth,
       setActiveTool: s.setActiveTool,
+      drawMode: s.drawMode,
+      setDrawMode: s.setDrawMode,
       scales: s.scales,
       calibrationMode: s.calibrationMode,
       currentPage: s.currentPage,
@@ -1133,6 +1137,53 @@ if (!prev && activeTool) {
         );
       }
 
+      // ── Box mode ────────────────────────────────────────────────────────
+      // A box on the linear tool is a CLOSED RECTANGULAR PERIMETER, matching
+      // what closing a linear run near its first vertex already does: the
+      // measurement stays a polyline and its quantity is boundary length, not
+      // enclosed area. The closing edge is included by repeating the first
+      // corner.
+      if (drawMode === "box") {
+        if (currentPoints.length === 0) {
+          setCurrentPoints([nextPoint]);
+          return;
+        }
+        const corners = rectangleFromCorners(currentPoints[0], point, isShiftPressed);
+        if (!corners) return; // degenerate drag — ignore, keep the anchor
+        const ring = [...corners, corners[0]];
+        const perimeter = calculateQuantity(ring, "polyline", currentScale);
+        const confidence = currentScale
+          ? Math.min(1.0, perimeter / (currentScale * 10))
+          : 0.5;
+        const boxMeasurement: Measurement = {
+          id: generateClientId(),
+          points: ring,
+          quantity: perimeter,
+          planId: activePlanId,
+          page: currentPage,
+          type: "polyline",
+          color: activeColor,
+          // Same opt-in real-width band as any other linear run.
+          strokeWidth:
+            activeRealWidth > 0 && currentScale != null
+              ? Math.max(activeRealWidth * currentScale, 2)
+              : 2,
+          metadata: {
+            createdAt: now,
+            lastModified: now,
+            confidence: Math.max(0.1, confidence),
+          },
+        };
+        const validation = validateMeasurement(boxMeasurement, "polyline");
+        if (validation.isValid) {
+          addMeasurement(ensureCanvasItemId(), boxMeasurement);
+        } else {
+          console.warn("Invalid measurement:", validation.error);
+        }
+        setCurrentPoints([]);
+        return;
+      }
+
       // Closing a linear run near the first vertex makes a CLOSED PERIMETER,
       // not an area. The measurement stays a polyline and its quantity is the
       // total boundary length (all segments including the closing edge back to
@@ -1205,6 +1256,49 @@ if (!prev && activeTool) {
           point,
           currentPoints[currentPoints.length - 1]
         );
+      }
+
+      // ── Box mode ────────────────────────────────────────────────────────
+      // Two opposite corners make the rectangle: the first click anchors,
+      // the second commits. Deductions keep their own flow below — a
+      // rectangular deduction is still just a 4-point polygon, so box mode
+      // feeds it the same way rather than duplicating that branch.
+      if (drawMode === "box" && !deductionTarget) {
+        if (currentPoints.length === 0) {
+          setCurrentPoints([finalPoint]);
+          return;
+        }
+        const corners = rectangleFromCorners(currentPoints[0], point, isShiftPressed);
+        if (!corners) return; // degenerate drag — ignore, keep the anchor
+        const area = calculateAreaFromPoints(corners);
+        const pixelArea = calculateArea(corners);
+        const confidence = currentScale
+          ? Math.min(1.0, pixelArea / (currentScale * currentScale * 100))
+          : 0.5;
+        const boxMeasurement: Measurement = {
+          id: generateClientId(),
+          points: corners,
+          quantity: area,
+          planId: activePlanId,
+          page: currentPage,
+          type: "area",
+          color: activeColor,
+          // Areas always commit hairline — see the auto-close branch below.
+          strokeWidth: 2,
+          metadata: {
+            createdAt: now,
+            lastModified: now,
+            confidence: Math.max(0.1, confidence),
+          },
+        };
+        const validation = validateMeasurement(boxMeasurement, "area");
+        if (validation.isValid) {
+          addMeasurement(ensureCanvasItemId(), boxMeasurement);
+        } else {
+          console.warn("Invalid measurement:", validation.error);
+        }
+        setCurrentPoints([]);
+        return;
       }
 
       // Deduction entry is explicit-only: right-click on an area → "Add deduction".
@@ -2597,6 +2691,16 @@ if (!prev && activeTool) {
         selectedMeasurementId={selectedMeasurement?.measurementId ?? null}
         onSelectTool={onSelectTool}
         autoAreaMode={autoAreaMode}
+        drawMode={drawMode}
+        onDrawModeChange={(mode) => {
+          if (mode === drawMode) return;
+          // Vertices already placed mean something different in the other
+          // mode (a polygon's 3rd point vs a box's opposite corner), so the
+          // in-progress shape is dropped rather than reinterpreted.
+          setCurrentPoints([]);
+          setArcPending(null);
+          setDrawMode(mode);
+        }}
         onToggleAutoArea={() => {
           if (autoAreaMode) {
             setAutoAreaMode(false);
@@ -3745,6 +3849,54 @@ if (!prev && activeTool) {
                           align="center"
                           verticalAlign="bottom"
                           offsetY={10 * labelScale}
+                        />
+                      </Group>
+                    );
+                  }
+
+                  // Box mode: preview the whole rectangle from the anchor,
+                  // labelled with what will actually be committed — area for
+                  // the area tool, perimeter for linear. Shift squares it.
+                  if (drawMode === "box") {
+                    const anchor = currentPoints[0];
+                    // Snapping already moved previewPoint; the raw pointer is
+                    // the opposite corner, so square-ing reads off the same
+                    // point the commit will use.
+                    const corners = rectangleFromCorners(
+                      anchor,
+                      previewPoint,
+                      isShiftPressed
+                    );
+                    if (!corners) return null;
+                    const isArea = activeTool === "area";
+                    const label = isArea
+                      ? formatArea(calculateAreaFromPoints(corners))
+                      : formatDistance(
+                          calculateQuantity(
+                            [...corners, corners[0]],
+                            "polyline",
+                            currentScale
+                          )
+                        );
+                    return (
+                      <Group opacity={0.5}>
+                        <Line
+                          points={corners.flatMap((p) => [p.x, p.y])}
+                          closed
+                          stroke={activeColor}
+                          strokeWidth={2 * strokeScale}
+                          dash={[5 * strokeScale, 5 * strokeScale]}
+                          fill={isArea ? activeColor : undefined}
+                          opacity={isArea ? 0.2 : 1}
+                        />
+                        <Text
+                          x={(anchor.x + corners[2].x) / 2}
+                          y={(anchor.y + corners[2].y) / 2}
+                          text={label}
+                          fontSize={LABEL_FONT_SIZE * labelScale}
+                          fill={activeColor}
+                          align="center"
+                          verticalAlign="middle"
                         />
                       </Group>
                     );

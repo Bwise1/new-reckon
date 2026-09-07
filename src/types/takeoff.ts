@@ -4,6 +4,11 @@ export type TakeoffMode = "linear" | "area" | "count" | "polyline";
  *  into an ordinary polyline measurement, so stored types stay TakeoffMode. */
 export type DrawTool = TakeoffMode | "arc";
 
+/** How Area and Linear digitize clicks. "point" collects every vertex and
+ *  finishes explicitly; "box" takes two opposite corners and commits the
+ *  rectangle. Input-only — both produce ordinary TakeoffMode measurements. */
+export type DrawMode = "point" | "box";
+
 export interface Point {
   x: number;
   y: number;

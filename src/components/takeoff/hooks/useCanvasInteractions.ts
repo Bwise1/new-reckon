@@ -264,3 +264,51 @@ if (pdfSnap) {
   };
 };
 
+/** Smallest side, in image px, that still counts as a rectangle. Below this a
+ *  "box" is a stray click or a double-click landing twice on one spot, and the
+ *  resulting sliver would be a nuisance measurement to hunt down and delete. */
+const MIN_BOX_SIDE = 2;
+
+/**
+ * The four corners of the axis-aligned rectangle spanned by two opposite
+ * corners, clockwise from `anchor`. With `square` the shorter axis is grown to
+ * the longer one (Shift = perfect square), keeping the drag's direction on both
+ * axes so it still tracks the cursor's quadrant.
+ *
+ * Returns null when either side is degenerate: box mode commits on the second
+ * click, so a stutter- or double-click would otherwise write a zero-area
+ * measurement. The caller keeps the anchor and waits for a real second corner.
+ *
+ * Pure and module-level — box geometry needs no canvas state, which also makes
+ * it directly testable.
+ */
+export const rectangleFromCorners = (
+  anchor: Point,
+  opposite: Point,
+  square = false
+): Point[] | null => {
+  let { x, y } = opposite;
+
+  if (square) {
+    const dx = x - anchor.x;
+    const dy = y - anchor.y;
+    const side = Math.max(Math.abs(dx), Math.abs(dy));
+    // Math.sign(0) is 0, which would collapse the square onto the anchor;
+    // default those axes to positive so a purely horizontal or vertical drag
+    // still yields a square.
+    x = anchor.x + (dx < 0 ? -side : side);
+    y = anchor.y + (dy < 0 ? -side : side);
+  }
+
+  if (Math.abs(x - anchor.x) < MIN_BOX_SIDE || Math.abs(y - anchor.y) < MIN_BOX_SIDE) {
+    return null;
+  }
+
+  return [
+    { x: anchor.x, y: anchor.y },
+    { x, y: anchor.y },
+    { x, y },
+    { x: anchor.x, y },
+  ];
+};
+
