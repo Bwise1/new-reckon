@@ -95,17 +95,11 @@ export const destinationAfterSignIn = (): string => {
   return returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/dashboard';
 };
 
-/**
- * Leave for the portal. `login` goes straight to /authorize, which shows the
- * login form only when there is no portal session; `signup` opens the
- * portal's signup page with /authorize as its return_to, so creating and
- * verifying the account flows straight back here signed in.
- */
-export const beginSignIn = async (mode: 'login' | 'signup' = 'login'): Promise<void> => {
+/** A fresh /authorize path (with PKCE state stored for the callback). */
+const newAuthorizeRequest = async (): Promise<string> => {
   const verifier = randomString(48);
   const state = randomString(24);
   sessionStorage.setItem(PKCE_KEY, JSON.stringify({ verifier, state }));
-
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     redirect_uri: redirectUri(),
@@ -113,7 +107,17 @@ export const beginSignIn = async (mode: 'login' | 'signup' = 'login'): Promise<v
     code_challenge_method: 'S256',
     state,
   });
-  const authorize = `${authorizePath()}?${params.toString()}`;
+  return `${authorizePath()}?${params.toString()}`;
+};
+
+/**
+ * Leave for the portal. `login` goes straight to /authorize, which shows the
+ * login form only when there is no portal session; `signup` opens the
+ * portal's signup page with /authorize as its return_to, so creating and
+ * verifying the account flows straight back here signed in.
+ */
+export const beginSignIn = async (mode: 'login' | 'signup' = 'login'): Promise<void> => {
+  const authorize = await newAuthorizeRequest();
   const target =
     mode === 'signup'
       ? `${portalOrigin()}/signup?return_to=${encodeURIComponent(authorize)}`
@@ -210,19 +214,16 @@ export const completeSignIn = async (code: string, state: string): Promise<strin
 };
 
 /**
- * Sign out of Reckon Bill: forget the session here and revoke it on the
- * identity service so the refresh token is dead too. The portal's own cookie
- * is a separate session and is left alone — that is what lets the next
- * sign-in skip the form. "Sign out of every Reckon app" is the portal's
- * /logout, offered on the signed-out page.
+ * Sign out: forget the session here, revoke it on the identity service, and
+ * end the portal's session too. The last part matters because /login sends
+ * the browser straight to /authorize, where a surviving portal cookie would
+ * sign the person back in without a form — sign-out would look broken. The
+ * portal's /logout shows its login form and, with return_to, brings a
+ * sign-in from there straight back to this app.
  */
-export const signOut = (): void => {
+export const signOut = async (): Promise<never> => {
   const refreshToken = localStorage.getItem('refreshToken');
-  for (const key of ['token', 'user', 'refreshToken', 'identityToken', 'accountId']) {
-    localStorage.removeItem(key);
-  }
-  useAuthStore.getState().clearAuth();
-  if (AUTH_URL && refreshToken) {
+  if (refreshToken) {
     // Best effort; a failure here only leaves a refresh token that expires anyway.
     void fetch(`${AUTH_URL}/logout`, {
       method: 'POST',
@@ -231,4 +232,15 @@ export const signOut = (): void => {
       keepalive: true,
     }).catch(() => undefined);
   }
+  const authorize = await newAuthorizeRequest();
+  // Leave FIRST, and never touch the auth store: emptying it would make
+  // ProtectedRoute redirect to /login, whose own trip to /authorize would
+  // win the race against this navigation and — the portal cookie still
+  // being alive at that instant — sign the person straight back in.
+  window.location.assign(`${portalOrigin()}/logout?return_to=${encodeURIComponent(authorize)}`);
+  for (const key of ['token', 'user', 'refreshToken', 'identityToken', 'accountId']) {
+    localStorage.removeItem(key);
+  }
+  // The page is unloading; nothing after this should run.
+  return new Promise<never>(() => undefined);
 };

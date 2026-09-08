@@ -42,18 +42,16 @@ export function useLogout() {
   const clearAuth = useAuthStore((state) => state.clearAuth);
 
   return useMutation({
-    mutationFn: () => {
-      // signOut also revokes the session on the identity service when the
-      // suite portal is in use; the legacy path only forgets local state.
-      if (suiteAuthEnabled()) signOut();
+    mutationFn: async () => {
+      // With the suite portal, signOut leaves for the portal's logout and
+      // never resolves (the page is unloading); the legacy path only
+      // forgets local state and stays on this app's form.
+      if (suiteAuthEnabled()) await signOut();
       else authService.logout();
-      return Promise.resolve();
     },
     onSuccess: () => {
       clearAuth();
-      // signed_out=1 stops the login route bouncing straight back to the
-      // portal, whose cookie would sign the person in again without a form.
-      navigate(suiteAuthEnabled() ? '/login?signed_out=1' : '/login');
+      navigate('/login');
     },
   });
 }
