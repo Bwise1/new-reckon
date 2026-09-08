@@ -43,7 +43,11 @@ const handleUnauthorized = (message?: string): void => {
       isSessionExpiry ||
       normalized.includes('unauthorized'));
 
-  if (!isAuthMessage && !normalized) return;
+  // Only a message about THIS session signs the user out. An empty message
+  // counts as one (a bare 401 from the auth middleware); a non-empty message
+  // that failed the filter above — "Verification token has expired", say —
+  // is about something else and must be left alone.
+  if (normalized && !isAuthMessage) return;
 
   isHandlingAuthFailure = true;
   if (typeof window !== 'undefined') {

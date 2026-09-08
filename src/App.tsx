@@ -3,6 +3,7 @@ import { QueryProvider } from './lib/react-query';
 import { ConfirmProvider } from './contexts/ConfirmProvider';
 import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
+import AuthCallback from './pages/auth/Callback';
 import Dashboard from './pages/Dashboard';
 import ProjectDetail from './pages/ProjectDetail';
 import Settings from './pages/Settings';
@@ -36,6 +37,9 @@ function AppRoutes() {
         <Route path="/settings/team" element={<TeamSettings />} />
         <Route path="/settings/account" element={<Settings />} />
       </Route>
+
+      {/* Where the suite portal returns after sign-in (see lib/suiteAuth). */}
+      <Route path="/auth/callback" element={<AuthCallback />} />
 
       {/* Reachable signed in or out: it decides what to show. */}
       <Route path="/invite/:token" element={<InviteAccept />} />

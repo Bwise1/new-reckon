@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/stores/auth.store';
 import type { LoginRequest, SignupRequest } from '@/types/auth';
+import { destinationAfterSignIn, signOut, suiteAuthEnabled } from '@/lib/suiteAuth';
 
 export function useLogin() {
   const navigate = useNavigate();
@@ -18,14 +19,9 @@ export function useLogin() {
       if (identityToken) localStorage.setItem('identityToken', identityToken);
       if (accountId) localStorage.setItem('accountId', accountId);
       setAuth(user, token, refreshToken);
-      // An invite link that sent the person here resumes after sign-in.
-      const pendingInvite = localStorage.getItem('reckon_pending_invite');
-      const pendingOrgInvite = localStorage.getItem('reckon_pending_org_invite');
-      navigate(
-        pendingInvite ? `/invite/${pendingInvite}`
-          : pendingOrgInvite ? `/org-invite/${pendingOrgInvite}`
-          : '/dashboard'
-      );
+      // An invite link or a protected page that sent the person here resumes
+      // after sign-in — the same rule the suite callback applies.
+      navigate(destinationAfterSignIn());
     },
   });
 }
@@ -47,12 +43,17 @@ export function useLogout() {
 
   return useMutation({
     mutationFn: () => {
-      authService.logout();
+      // signOut also revokes the session on the identity service when the
+      // suite portal is in use; the legacy path only forgets local state.
+      if (suiteAuthEnabled()) signOut();
+      else authService.logout();
       return Promise.resolve();
     },
     onSuccess: () => {
       clearAuth();
-      navigate('/login');
+      // signed_out=1 stops the login route bouncing straight back to the
+      // portal, whose cookie would sign the person in again without a form.
+      navigate(suiteAuthEnabled() ? '/login?signed_out=1' : '/login');
     },
   });
 }
