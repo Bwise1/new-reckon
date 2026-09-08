@@ -7,8 +7,17 @@ import AppleIcon from "@/assets/images/apple.png";
 import AuthLayout from "@/layouts/AuthLayout";
 import { useLogin } from "@/hooks/useAuth";
 import { validateEmail } from "@/utils/validation";
+import SuiteSignIn from "@/components/auth/SuiteSignIn";
+import { suiteAuthEnabled } from "@/lib/suiteAuth";
 
-const Login = () => {
+/**
+ * With VITE_AUTH_URL set, sign-in happens on the suite portal and this route
+ * only redirects there; the form below is the original Reckon Bill login,
+ * kept for builds that still authenticate against reckon_api directly.
+ */
+const Login = () => (suiteAuthEnabled() ? <SuiteSignIn mode="login" /> : <LegacyLogin />);
+
+const LegacyLogin = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);

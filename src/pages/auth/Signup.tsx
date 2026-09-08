@@ -6,8 +6,13 @@ import AppleIcon from "@/assets/images/apple.png";
 import AuthLayout from "@/layouts/AuthLayout";
 import { useSignup } from "@/hooks/useAuth";
 import { validateEmail, validatePassword } from "@/utils/validation";
+import SuiteSignIn from "@/components/auth/SuiteSignIn";
+import { suiteAuthEnabled } from "@/lib/suiteAuth";
 
-const Signup = () => {
+/** See Login: the portal owns signup when VITE_AUTH_URL is set. */
+const Signup = () => (suiteAuthEnabled() ? <SuiteSignIn mode="signup" /> : <LegacySignup />);
+
+const LegacySignup = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
