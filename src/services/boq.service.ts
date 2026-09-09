@@ -17,9 +17,13 @@ interface BoqProjectPayload {
   };
   elements: Array<{
     id: number;
+    /** Store id, written hidden into the Excel export so an edited file can
+     *  be imported back as an update of the same rows. */
+    client_uuid?: string;
     header: string;
     items: Array<{
       id: string;
+      client_uuid?: string;
       header: string;
       description: string;
       measurements: Array<{
@@ -33,7 +37,7 @@ interface BoqProjectPayload {
   }>;
   /** Multi-bill export: one worksheet per entry plus a summary sheet.
    *  Same element shape as the flat list above. */
-  bills?: Array<{ name: string; elements: BoqProjectPayload['elements'] }>;
+  bills?: Array<{ name: string; client_uuid?: string; elements: BoqProjectPayload['elements'] }>;
 }
 
 /** Matches mobile MeasurementsValues → API fields (unit = display metric, metric = category). */
@@ -89,7 +93,7 @@ export const buildBoqPayload = ({
   elements: BoqElementData[];
   /** Bills for the multi-sheet export; the flat `elements` stays for
    *  back-compat with servers that predate bills. */
-  bills?: { name: string; elements: BoqElementData[] }[];
+  bills?: { id?: string; name: string; elements: BoqElementData[] }[];
   contingency: number;
   vatRate: number;
 }): BoqProjectPayload => ({
@@ -108,6 +112,7 @@ export const buildBoqPayload = ({
         bills: bills
           .map((bill) => ({
             name: bill.name,
+            client_uuid: bill.id,
             elements: mapElementsForExport(bill.elements),
           }))
           .filter((bill) => bill.elements.length > 0),
@@ -122,11 +127,13 @@ export const buildBoqPayload = ({
 const mapElementsForExport = (elements: BoqElementData[]) =>
   elements.filter(elementHasContent).map((element, elementIndex) => ({
     id: elementIndex + 1,
+    client_uuid: element.id,
     header: element.title.toUpperCase(),
     items: element.items.filter(itemHasContent).map((item, itemIndex) => {
       const units = UNIT_PAYLOAD[item.unit] ?? UNIT_PAYLOAD.m3;
       return {
         id: itemLabelFromIndex(itemIndex),
+        client_uuid: item.id,
         header: item.header,
         description: item.description,
         measurements: [

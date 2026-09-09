@@ -190,6 +190,15 @@ interface TakeoffStore {
     bills: { name: string; elements: BoqElementData[] }[],
     mode: 'append' | 'replace'
   ) => void;
+  /**
+   * Apply an edited export back over this project's bills — the result of
+   * utils/boqImport mergeImportedBills. Bills are updated in place (renamed,
+   * elements/items changed, added, removed); no bill is ever deleted here.
+   * One undo step.
+   */
+  applyImportUpdate: (
+    merged: { id: string; name: string; elements: BoqElementData[] }[]
+  ) => void;
   /** Replace the whole bill structure (hydration). */
   setBillsState: (
     bills: BoqBillData[],
@@ -900,6 +909,69 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         enqueueAdditions(removed, previous.bills);
       },
       description: `Import ${added.length} bill${added.length === 1 ? '' : 's'}`,
+    });
+  },
+
+  applyImportUpdate: (merged) => {
+    const state = get();
+    if (state.boqTargeting) get().exitBoqTargeting();
+    const before = get();
+    const projectId = before.currentProjectId;
+    const existing = get().collectBills();
+
+    const activeBillId =
+      before.activeBillId && merged.some((b) => b.id === before.activeBillId)
+        ? before.activeBillId
+        : merged[0]?.id ?? null;
+    const nextBills = merged.map(({ id, name }) => ({ id, name }));
+    const stash: Record<string, BoqElementData[]> = {};
+    for (const b of merged) if (b.id !== activeBillId) stash[b.id] = b.elements;
+    const activeElements = merged.find((b) => b.id === activeBillId)?.elements ?? [createEmptyBoqElement(0)];
+
+    const previous = {
+      bills: before.bills,
+      billElements: before.billElements,
+      activeBillId: before.activeBillId,
+      boqElements: before.boqElements,
+    };
+
+    const enqueueTransition = (
+      from: { id: string; name: string; elements: BoqElementData[] }[],
+      to: { id: string; name: string; elements: BoqElementData[] }[]
+    ) => {
+      if (!projectId) return;
+      const fromById = new Map(from.map((b) => [b.id, b]));
+      to.forEach((bill, index) => {
+        const prev = fromById.get(bill.id);
+        if (!prev || prev.name !== bill.name) {
+          syncQueue.enqueue({
+            kind: 'boq.bill.upsert',
+            projectId,
+            clientUuid: bill.id,
+            body: { name: bill.name, sort_order: index },
+          });
+        }
+        for (const op of boqTreeOpsDiff(projectId, prev?.elements ?? [], bill.elements, bill.id)) {
+          syncQueue.enqueue(op);
+        }
+      });
+      for (const prev of from) {
+        if (to.some((b) => b.id === prev.id)) continue;
+        for (const op of boqTreeOpsDiff(projectId, prev.elements, [], prev.id)) syncQueue.enqueue(op);
+        syncQueue.enqueue({ kind: 'boq.bill.delete', projectId, clientUuid: prev.id });
+      }
+    };
+
+    executeCommand({
+      execute: () => {
+        set({ bills: nextBills, billElements: stash, activeBillId, boqElements: activeElements, focusedBoqCard: null });
+        enqueueTransition(existing, merged);
+      },
+      undo: () => {
+        set({ ...previous, focusedBoqCard: null });
+        enqueueTransition(merged, existing);
+      },
+      description: 'Update from Excel',
     });
   },
 

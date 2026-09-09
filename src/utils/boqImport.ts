@@ -33,10 +33,21 @@ export interface ImportedBill {
   /** Sheet tab, used as the bill name. */
   sheetName: string;
   layout: ImportLayout;
+  /** The bill this sheet was exported from, when the file says so. */
+  billId?: string;
+  /** True when element/item rows carry the ids they were exported with —
+   *  then `elements` use those ids and the file can update its project. */
+  hasIds: boolean;
   elements: BoqElementData[];
   elementCount: number;
   itemCount: number;
   warnings: string[];
+}
+
+/** From the hidden `_reckon` sheet our export writes. */
+export interface ImportSource {
+  projectId: string;
+  exportedAt: string | null;
 }
 
 export interface SkippedSheet {
@@ -47,6 +58,8 @@ export interface SkippedSheet {
 export interface BoqImportResult {
   bills: ImportedBill[];
   skipped: SkippedSheet[];
+  /** Present when the file is one of our exports. */
+  source: ImportSource | null;
 }
 
 type Cell = { v: unknown; f?: string };
@@ -154,10 +167,19 @@ const makeElement = (title: string, index: number): BoqElementData => ({
 const isReckonHeaderRow = (row: Row): boolean =>
   text(row[1]).toUpperCase() === 'DESCRIPTION' && text(row[2]).toUpperCase() === 'QTY';
 
-const parseReckonSheet = (rows: Row[], headerIndex: number): BoqElementData[] => {
+/** Column G of our export: the element's or item's store id, hidden. */
+const ID_COL = 6;
+
+const idOf = (row: Row): string | undefined => {
+  const raw = text(row[ID_COL]);
+  return raw.length >= 8 ? raw : undefined;
+};
+
+const parseReckonSheet = (rows: Row[], headerIndex: number): { elements: BoqElementData[]; hasIds: boolean } => {
   const elements: BoqElementData[] = [];
   let current: BoqElementData | null = null;
   let group = '';
+  let hasIds = false;
   // The first text-only row after the header (or a subtotal) opens an element;
   // later text-only rows inside the section are item-group headers.
   let expectElement = true;
@@ -191,6 +213,11 @@ const parseReckonSheet = (rows: Row[], headerIndex: number): BoqElementData[] =>
       }
       if (expectElement || !current) {
         current = makeElement(unshout(label), elements.length);
+        const id = idOf(row);
+        if (id) {
+          current.id = id;
+          hasIds = true;
+        }
         elements.push(current);
         group = '';
         expectElement = false;
@@ -206,17 +233,21 @@ const parseReckonSheet = (rows: Row[], headerIndex: number): BoqElementData[] =>
       elements.push(current);
       expectElement = false;
     }
-    current.items.push(
-      makeItem({
-        header: group,
-        description: label,
-        qtyCell: row[2],
-        unit: text(row[3]),
-        rate: numberOf(row[4]),
-      })
-    );
+    const item = makeItem({
+      header: group,
+      description: label,
+      qtyCell: row[2],
+      unit: text(row[3]),
+      rate: numberOf(row[4]),
+    });
+    const id = idOf(row);
+    if (id) {
+      item.id = id;
+      hasIds = true;
+    }
+    current.items.push(item);
   }
-  return elements.filter((el) => el.items.length > 0 || el.title);
+  return { elements: elements.filter((el) => el.items.length > 0 || el.title), hasIds };
 };
 
 // ─── Anyone else's spreadsheet ──────────────────────────────────────────────
@@ -334,9 +365,29 @@ export const parseBoqWorkbook = async (data: ArrayBuffer): Promise<BoqImportResu
   const bills: ImportedBill[] = [];
   const skipped: SkippedSheet[] = [];
 
+  // Our export's hidden bookkeeping sheet: which project, when, which bill
+  // each tab is. Absent on anyone else's file.
+  let source: ImportSource | null = null;
+  const billIdBySheet = new Map<string, string>();
+  const meta = workbook.Sheets['_reckon'];
+  if (meta) {
+    const metaRows = gridOf(XLSX, meta);
+    let projectId = '';
+    let exportedAt: string | null = null;
+    for (const row of metaRows) {
+      if (!row) continue;
+      const key = text(row[0]);
+      if (key === 'project_id') projectId = text(row[1]);
+      else if (key === 'exported_at') exportedAt = text(row[1]) || null;
+      else if (key === 'sheet' && text(row[1]) && text(row[2])) billIdBySheet.set(text(row[1]), text(row[2]));
+    }
+    if (projectId) source = { projectId, exportedAt };
+  }
+
   for (const sheetName of workbook.SheetNames) {
     const ws = workbook.Sheets[sheetName];
     if (!ws) continue;
+    if (sheetName === '_reckon') continue;
     if (/^(summary|general summary)$/i.test(sheetName.trim())) {
       skipped.push({ sheetName, reason: 'Summary sheet' });
       continue;
@@ -345,10 +396,16 @@ export const parseBoqWorkbook = async (data: ArrayBuffer): Promise<BoqImportResu
     const warnings: string[] = [];
     let layout: ImportLayout = 'reckon';
     let elements: BoqElementData[] = [];
+    let hasIds = false;
+
+    // The bill's id rides on the sheet (hidden G1) so a renamed tab still
+    // matches; the _reckon map is the fallback for files without it.
+    let billId = rows[0] ? idOf(rows[0]) : undefined;
+    if (!billId) billId = billIdBySheet.get(sheetName);
 
     const reckonHeader = rows.findIndex((row) => row && isReckonHeaderRow(row));
     if (reckonHeader !== -1) {
-      elements = parseReckonSheet(rows, reckonHeader);
+      ({ elements, hasIds } = parseReckonSheet(rows, reckonHeader));
     } else {
       const generic = findGenericHeader(rows);
       if (!generic) {
@@ -370,13 +427,160 @@ export const parseBoqWorkbook = async (data: ArrayBuffer): Promise<BoqImportResu
     bills.push({
       sheetName: sheetName.trim() || `Bill ${bills.length + 1}`,
       layout,
+      billId,
+      hasIds,
       elements,
       elementCount: elements.length,
       itemCount,
       warnings,
     });
   }
-  return { bills, skipped };
+  return { bills, skipped, source };
+};
+
+/**
+ * Copies with brand-new ids, for adding a file's bills as NEW bills even when
+ * the rows carry ids (importing an export into another project, say).
+ */
+export const withFreshIds = (elements: BoqElementData[]): BoqElementData[] =>
+  elements.map((el) => ({
+    ...el,
+    id: generateClientId(),
+    items: el.items.map((item) => ({
+      ...item,
+      id: generateClientId(),
+      history: item.history.map((h) => ({ ...h, id: generateClientId() })),
+    })),
+  }));
+
+// ─── Updating a project from its own edited export ──────────────────────────
+
+/**
+ * The QTY formula our export writes for a history, so an untouched cell can
+ * be told from an edited one. Mirrors reckon_api excelHelper buildQtyFormula.
+ */
+export const formulaOfHistory = (history: HistoryItem[]): string => {
+  const terms = history.map((h) => {
+    const value = String(h.value ?? '').trim();
+    const expr = value && SAFE_EXPRESSION.test(value) ? value : null;
+    return { expr: expr ?? '0', deduct: Boolean(h.isDeduct) };
+  });
+  return terms
+    .map((t, i) => (i === 0 ? (t.deduct ? `-(${t.expr})` : `(${t.expr})`) : `${t.deduct ? '-' : '+'}(${t.expr})`))
+    .join('');
+};
+
+const sameFormula = (a: string, b: string): boolean =>
+  a.replace(/^=/, '').replace(/\s+/g, '') === b.replace(/^=/, '').replace(/\s+/g, '');
+
+export interface UpdateStats {
+  changedItems: number;
+  newItems: number;
+  removedItems: number;
+  newElements: number;
+  removedElements: number;
+  /** Items whose quantity was edited in the file: their history is replaced
+   *  by manual crumbs and any measurement links are gone. */
+  quantityEdited: number;
+  renamedBills: number;
+  newBills: number;
+}
+
+export interface MergedBills {
+  bills: { id: string; name: string; elements: BoqElementData[] }[];
+  stats: UpdateStats;
+}
+
+const itemsEqual = (a: EstimationCardData, b: EstimationCardData): boolean =>
+  a.header === b.header && a.description === b.description && a.unit === b.unit && a.rate === b.rate;
+
+/**
+ * Merge an edited export back over the project's current bills. Pure.
+ *
+ * Rows with a known id update that entity in place; rows without one (or
+ * with an id the project no longer has) are new; entities the file no longer
+ * lists are removed when `deleteMissing`, else kept after the file's rows.
+ * A quantity cell whose formula still matches the item's history keeps that
+ * history untouched — ids, measurement links and all; an edited cell replaces
+ * it with the file's crumbs. Sheets without a bill id become new bills.
+ */
+export const mergeImportedBills = (
+  current: { id: string; name: string; elements: BoqElementData[] }[],
+  imported: ImportedBill[],
+  { deleteMissing }: { deleteMissing: boolean }
+): MergedBills => {
+  const stats: UpdateStats = {
+    changedItems: 0, newItems: 0, removedItems: 0, newElements: 0, removedElements: 0,
+    quantityEdited: 0, renamedBills: 0, newBills: 0,
+  };
+  const byId = new Map(current.map((b) => [b.id, b]));
+  const result = current.map((b) => ({ ...b, elements: b.elements }));
+  const handled = new Set<string>();
+
+  for (const sheet of imported) {
+    const target = sheet.billId ? byId.get(sheet.billId) : undefined;
+    if (!target) {
+      stats.newBills++;
+      result.push({ id: generateClientId(), name: sheet.sheetName, elements: withFreshIds(sheet.elements) });
+      continue;
+    }
+    handled.add(target.id);
+    const slot = result.find((b) => b.id === target.id)!;
+    if (sheet.sheetName && sheet.sheetName !== target.name) {
+      slot.name = sheet.sheetName;
+      stats.renamedBills++;
+    }
+
+    const oldElements = new Map(target.elements.map((el) => [el.id, el]));
+    const seenElements = new Set<string>();
+    const nextElements: BoqElementData[] = [];
+
+    for (const fileEl of sheet.elements) {
+      const oldEl = oldElements.get(fileEl.id);
+      if (!oldEl) {
+        stats.newElements++;
+        stats.newItems += fileEl.items.length;
+        nextElements.push({ ...fileEl, id: generateClientId(), items: withFreshIds([fileEl])[0].items });
+        continue;
+      }
+      seenElements.add(oldEl.id);
+      const oldItems = new Map(oldEl.items.map((it) => [it.id, it]));
+      const seenItems = new Set<string>();
+      const nextItems: EstimationCardData[] = [];
+      for (const fileItem of fileEl.items) {
+        const oldItem = oldItems.get(fileItem.id);
+        if (!oldItem) {
+          stats.newItems++;
+          nextItems.push({ ...fileItem, id: generateClientId(), history: fileItem.history.map((h) => ({ ...h, id: generateClientId() })) });
+          continue;
+        }
+        seenItems.add(oldItem.id);
+        // Quantity: untouched formula → keep the existing history verbatim.
+        const fileFormula = formulaOfHistory(fileItem.history);
+        const untouched = sameFormula(fileFormula, formulaOfHistory(oldItem.history));
+        const history = untouched ? oldItem.history : fileItem.history.map((h) => ({ ...h, id: generateClientId() }));
+        if (!untouched) stats.quantityEdited++;
+        const merged: EstimationCardData = { ...oldItem, header: fileItem.header, description: fileItem.description, unit: fileItem.unit, rate: fileItem.rate, qty: fileItem.qty, history };
+        if (!untouched || !itemsEqual(oldItem, merged)) stats.changedItems++;
+        nextItems.push(merged);
+      }
+      for (const oldItem of oldEl.items) {
+        if (seenItems.has(oldItem.id)) continue;
+        if (deleteMissing) stats.removedItems++;
+        else nextItems.push(oldItem);
+      }
+      nextElements.push({ ...oldEl, title: fileEl.title, items: nextItems });
+    }
+    for (const oldEl of target.elements) {
+      if (seenElements.has(oldEl.id)) continue;
+      if (deleteMissing) {
+        stats.removedElements++;
+        stats.removedItems += oldEl.items.length;
+      } else nextElements.push(oldEl);
+    }
+    slot.elements = nextElements;
+  }
+  return { bills: result, stats };
 };
 
 /** True when any item holds something a person typed or measured. */

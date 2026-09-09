@@ -1,37 +1,71 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { FileSpreadsheet, X } from 'lucide-react';
-import { parseBoqWorkbook, type BoqImportResult } from '@/utils/boqImport';
+import { useParams } from 'react-router-dom';
+import {
+  mergeImportedBills,
+  parseBoqWorkbook,
+  withFreshIds,
+  type BoqImportResult,
+} from '@/utils/boqImport';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
 
 interface BoqImportModalProps {
   open: boolean;
   onClose: () => void;
-  /** Called once bills have been added; the count is what was imported. */
+  /** Called once bills have been added or updated. */
   onImported?: (billCount: number) => void;
 }
 
-type Mode = 'append' | 'replace';
+type Mode = 'update' | 'append' | 'replace';
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /**
  * Import a BOQ from a spreadsheet: pick a file, see what was found on each
- * sheet, choose whether it adds to or replaces the project's bills, confirm.
+ * sheet, choose what to do with the project's existing bills, confirm.
+ *
+ * A file exported from THIS project (our export writes hidden ids) can also
+ * be applied as an update: rows update the entities they came from, new
+ * rows are added, and rows the file no longer has can be removed. A file
+ * from another project, or anyone else's spreadsheet, can only be added or
+ * used to replace everything.
  *
  * Nothing is written until the person confirms, and the parse runs entirely
- * in the browser — the file never leaves the machine. Sheets a person
- * unticks are simply not imported.
+ * in the browser — the file never leaves the machine.
  */
 const BoqImportModal: React.FC<BoqImportModalProps> = ({ open, onClose, onImported }) => {
+  const { id: routeProjectId } = useParams<{ id: string }>();
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [result, setResult] = useState<BoqImportResult | null>(null);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<Mode>('append');
+  const [deleteMissing, setDeleteMissing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const bills = useTakeoffStore((s) => s.bills);
+  const collectBills = useTakeoffStore((s) => s.collectBills);
   const importBills = useTakeoffStore((s) => s.importBills);
+  const applyImportUpdate = useTakeoffStore((s) => s.applyImportUpdate);
   const existingCount = bills.length;
+
+  const selected = useMemo(
+    () => result?.bills.filter((b) => !excluded.has(b.sheetName)) ?? [],
+    [result, excluded]
+  );
+
+  // Update is on offer when the file came from this very project and its
+  // rows still carry their ids (someone may have deleted the hidden column).
+  const fromThisProject =
+    Boolean(result?.source) && String(result?.source?.projectId) === String(routeProjectId ?? '');
+  const canUpdate = fromThisProject && selected.some((b) => b.hasIds && b.billId);
+  const fromOtherProject = Boolean(result?.source) && !fromThisProject;
+
+  const preview = useMemo(() => {
+    if (!canUpdate || mode !== 'update') return null;
+    return mergeImportedBills(collectBills(), selected, { deleteMissing });
+  }, [canUpdate, mode, collectBills, selected, deleteMissing]);
 
   if (!open) return null;
 
@@ -40,6 +74,7 @@ const BoqImportModal: React.FC<BoqImportModalProps> = ({ open, onClose, onImport
     setResult(null);
     setExcluded(new Set());
     setMode('append');
+    setDeleteMissing(true);
     setError(null);
   };
 
@@ -67,6 +102,11 @@ const BoqImportModal: React.FC<BoqImportModalProps> = ({ open, onClose, onImport
         );
       }
       setResult(parsed);
+      const ours =
+        Boolean(parsed.source) &&
+        String(parsed.source?.projectId) === String(routeProjectId ?? '') &&
+        parsed.bills.some((b) => b.hasIds && b.billId);
+      setMode(ours ? 'update' : 'append');
     } catch (e) {
       setError((e as Error).message || 'Could not read that file.');
     } finally {
@@ -74,7 +114,6 @@ const BoqImportModal: React.FC<BoqImportModalProps> = ({ open, onClose, onImport
     }
   };
 
-  const selected = result?.bills.filter((b) => !excluded.has(b.sheetName)) ?? [];
   const totals = selected.reduce(
     (acc, b) => ({ elements: acc.elements + b.elementCount, items: acc.items + b.itemCount }),
     { elements: 0, items: 0 }
@@ -91,13 +130,41 @@ const BoqImportModal: React.FC<BoqImportModalProps> = ({ open, onClose, onImport
 
   const confirm = () => {
     if (selected.length === 0) return;
-    importBills(
-      selected.map((b) => ({ name: b.sheetName, elements: b.elements })),
-      mode
-    );
+    if (mode === 'update' && preview) {
+      applyImportUpdate(preview.bills);
+    } else {
+      importBills(
+        selected.map((b) => ({ name: b.sheetName, elements: withFreshIds(b.elements) })),
+        mode === 'replace' ? 'replace' : 'append'
+      );
+    }
     onImported?.(selected.length);
     close();
   };
+
+  const stats = preview?.stats;
+  const confirmLabel =
+    selected.length === 0
+      ? 'Import'
+      : mode === 'update' && stats
+        ? `Update · ${plural(stats.changedItems, 'change')} · ${stats.newItems} new · ${stats.removedItems} removed`
+        : `Import ${plural(selected.length, 'bill')} · ${plural(totals.items, 'item')}`;
+
+  const modeButton = (value: Mode, label: string, danger = false) => (
+    <button
+      type="button"
+      onClick={() => setMode(value)}
+      className={`flex-1 rounded-lg border py-2 text-sm font-semibold transition ${
+        mode === value
+          ? danger
+            ? 'border-danger bg-danger text-white'
+            : 'border-accent bg-accent text-accent-fg'
+          : 'border-border text-muted hover:border-muted/60'
+      }`}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-scrim/40 p-4">
@@ -106,7 +173,7 @@ const BoqImportModal: React.FC<BoqImportModalProps> = ({ open, onClose, onImport
           <div>
             <h3 className="text-base font-bold text-body">Import BOQ from Excel</h3>
             <p className="mt-0.5 text-xs text-muted">
-              Each sheet becomes a bill. Files exported from Reckon import exactly; other layouts are read by their column names.
+              Each sheet becomes a bill. A file exported from this project can be applied as an update; other layouts are read by their column names.
             </p>
           </div>
           <button
@@ -175,7 +242,7 @@ const BoqImportModal: React.FC<BoqImportModalProps> = ({ open, onClose, onImport
                           </span>
                         </span>
                         <span className="block text-[11px] text-muted">
-                          {bill.elementCount} element{bill.elementCount === 1 ? '' : 's'} · {bill.itemCount} item{bill.itemCount === 1 ? '' : 's'}
+                          {plural(bill.elementCount, 'element')} · {plural(bill.itemCount, 'item')}
                         </span>
                         {bill.warnings.map((w) => (
                           <span key={w} className="mt-1 block text-[11px] text-warn">
@@ -194,38 +261,59 @@ const BoqImportModal: React.FC<BoqImportModalProps> = ({ open, onClose, onImport
               ))}
             </ul>
 
+            {fromOtherProject && (
+              <p className="text-[11px] text-muted">
+                This file was exported from a different project, so it can only be added here as new bills.
+              </p>
+            )}
+
             <div>
-              <p className="mb-1.5 text-sm font-semibold text-body">Existing bills</p>
+              <p className="mb-1.5 text-sm font-semibold text-body">
+                {canUpdate ? 'What to do' : 'Existing bills'}
+              </p>
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setMode('append')}
-                  className={`flex-1 rounded-lg border py-2 text-sm font-semibold transition ${
-                    mode === 'append'
-                      ? 'border-accent bg-accent text-accent-fg'
-                      : 'border-border text-muted hover:border-muted/60'
-                  }`}
-                >
-                  Keep and add
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode('replace')}
-                  className={`flex-1 rounded-lg border py-2 text-sm font-semibold transition ${
-                    mode === 'replace'
-                      ? 'border-danger bg-danger text-white'
-                      : 'border-border text-muted hover:border-muted/60'
-                  }`}
-                >
-                  Replace all
-                </button>
+                {canUpdate && modeButton('update', 'Update this project')}
+                {modeButton('append', canUpdate ? 'Add as new' : 'Keep and add')}
+                {modeButton('replace', 'Replace all', true)}
               </div>
               <p className="mt-1.5 text-[11px] text-muted">
-                {mode === 'replace'
-                  ? `Removes ${existingCount} existing bill${existingCount === 1 ? '' : 's'} before importing. You can undo.`
-                  : 'New bills are added after the ones already here. A blank project is filled in place.'}
+                {mode === 'update'
+                  ? 'Rows update the items they were exported from; new rows are added. You can undo.'
+                  : mode === 'replace'
+                    ? `Removes ${plural(existingCount, 'existing bill')} before importing. You can undo.`
+                    : 'New bills are added after the ones already here. A blank project is filled in place.'}
               </p>
             </div>
+
+            {mode === 'update' && stats && (
+              <div className="rounded-lg border border-border bg-surface-muted px-3 py-2.5 text-[12px] text-muted space-y-1.5">
+                <p className="text-body">
+                  {plural(stats.changedItems, 'item')} changed · {stats.newItems} new
+                  {stats.newElements > 0 ? ` (${plural(stats.newElements, 'new element')})` : ''}
+                  {stats.renamedBills > 0 ? ` · ${plural(stats.renamedBills, 'bill')} renamed` : ''}
+                  {stats.newBills > 0 ? ` · ${plural(stats.newBills, 'new bill')}` : ''}
+                </p>
+                {stats.quantityEdited > 0 && (
+                  <p className="text-warn">
+                    Quantity edited in Excel for {plural(stats.quantityEdited, 'item')} — their measurement links will be removed.
+                  </p>
+                )}
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={deleteMissing}
+                    onChange={(e) => setDeleteMissing(e.target.checked)}
+                    className="cursor-pointer"
+                  />
+                  <span>
+                    Also remove what the file no longer has
+                    {deleteMissing
+                      ? ` (${plural(stats.removedItems, 'item')}${stats.removedElements > 0 ? `, ${plural(stats.removedElements, 'element')}` : ''})`
+                      : ''}
+                  </span>
+                </label>
+              </div>
+            )}
           </div>
         )}
 
@@ -243,9 +331,7 @@ const BoqImportModal: React.FC<BoqImportModalProps> = ({ open, onClose, onImport
             disabled={selected.length === 0 || parsing}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-fg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
-            {selected.length === 0
-              ? 'Import'
-              : `Import ${selected.length} bill${selected.length === 1 ? '' : 's'} · ${totals.items} item${totals.items === 1 ? '' : 's'}`}
+            {confirmLabel}
           </button>
         </div>
       </div>

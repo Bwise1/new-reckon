@@ -44,6 +44,29 @@ quantity is always expressed as history: the export formula's terms, or a
 single manual crumb holding the cell's number. Cross-sheet or cell-reference
 formulas cannot be recomputed here; the cell's cached value is used.
 
+## Update from an edited export
+
+The export writes each element's and item's store id into a hidden column G,
+and a hidden `_reckon` sheet naming the project, the export time and which
+bill each tab is. A file exported from the open project therefore offers a
+third mode, **Update this project** (`mergeImportedBills`, pure, previewed
+before applying):
+
+- a row with a known id updates that item in place (description, group,
+  unit, rate, quantity);
+- a row without one is a new item or element, inserted where it sits;
+- items or elements the file no longer lists are removed — a checkbox,
+  on by default;
+- a renamed tab renames its bill; a tab with no bill id becomes a new bill.
+
+Quantities: if the QTY cell's formula still matches the item's history
+(`formulaOfHistory` mirrors the exporter), the existing history is kept
+verbatim — ids and measurement links intact. If it was edited, the file's
+crumbs replace it and the preview says how many items lost their links.
+
+A file from another project (different `project_id`) can only be added as
+new bills; ids are regenerated (`withFreshIds`) so nothing collides.
+
 ## Existing bills
 
 Default **Keep and add** appends the new bills after the existing ones (names
