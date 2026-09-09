@@ -186,6 +186,10 @@ interface TakeoffStore {
    * existing bill first. A project still holding only the empty seed bill is
    * treated as empty either way. One undo step.
    */
+  /** Import / Share lives on the canvas toolbar (prototype layout) while the
+   *  modal renders with the BOQ panel, so the two talk through this flag. */
+  boqImportOpen: boolean;
+  setBoqImportOpen: (open: boolean) => void;
   importBills: (
     bills: { name: string; elements: BoqElementData[] }[],
     mode: 'append' | 'replace'
@@ -414,6 +418,7 @@ const initialState = {
   deletedPlanIds: [],
   boqElements: [createEmptyBoqElement(0)],
   bills: [],
+  boqImportOpen: false,
   activeBillId: null,
   billElements: {},
   focusedBoqCard: null,
@@ -835,6 +840,8 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
           : state.billElements[bill.id] ?? [],
     }));
   },
+
+  setBoqImportOpen: (open) => set({ boqImportOpen: open }),
 
   importBills: (incoming, mode) => {
     const state = get();

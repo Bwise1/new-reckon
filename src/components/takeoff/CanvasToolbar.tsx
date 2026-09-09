@@ -9,6 +9,8 @@ import {
   Trash2,
   Maximize,
   Minimize,
+  CloudDownload,
+  CloudUpload,
 } from 'lucide-react';
 import type { DrawTool, DrawMode } from '@/types/takeoff';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
@@ -63,6 +65,10 @@ interface CanvasToolbarProps {
   canUndo: boolean;
   canRedo: boolean;
   onClearAll: () => void;
+  /** Import a BOQ from a spreadsheet (prototype's Import / Share group). */
+  onImport?: () => void;
+  /** Publish this BOQ to the community (prototype's "Publish"). */
+  onShare?: () => void;
 }
 
 /** Grouped toolbar section with a tiny uppercase title (Reckon-Bill layout). */
@@ -241,6 +247,8 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   canUndo,
   canRedo,
   onClearAll,
+  onImport,
+  onShare,
 }) => {
   const liveColor = useTakeoffStore((s) => s.activeColor);
   const fullscreen = useFullscreen();
@@ -451,6 +459,33 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             />
           )}
         </ToolGroup>
+
+        {(onImport || onShare) && (
+          <>
+            <Divider />
+
+            {/* Prototype's Import / Share group (Reckon-Bill Toolbar.tsx). */}
+            <ToolGroup title="Import / Share">
+              {onImport && (
+                <IconButton
+                  icon={CloudDownload}
+                  label="Import"
+                  disabled={readOnly}
+                  title="Import a BOQ from a spreadsheet"
+                  onClick={onImport}
+                />
+              )}
+              {onShare && (
+                <IconButton
+                  icon={CloudUpload}
+                  label="Publish"
+                  title="Publish this BOQ to the community"
+                  onClick={onShare}
+                />
+              )}
+            </ToolGroup>
+          </>
+        )}
       </div>
 
       {/* Scale / calibration menu */}

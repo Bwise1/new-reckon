@@ -2774,6 +2774,7 @@ if (!prev && activeTool) {
         onRedo={redo}
         canUndo={canUndo}
         canRedo={canRedo}
+        onImport={() => useTakeoffStore.getState().setBoqImportOpen(true)}
         onClearAll={() => {
           void handleClearAllMeasurements();
         }}
