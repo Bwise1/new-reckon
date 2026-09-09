@@ -46,7 +46,7 @@ export function useBoqExport() {
       // Flat list keeps older servers working; bills drive the sheet-per-bill
       // workbook. Multi-bill projects flatten every bill into the PDF path.
       elements: bills.length > 1 ? bills.flatMap((b) => b.elements) : boqElements,
-      bills: bills.map((b) => ({ name: b.name, elements: b.elements })),
+      bills: bills.map((b) => ({ id: b.id, name: b.name, elements: b.elements })),
       contingency,
       vatRate: vat,
     });
