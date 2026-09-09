@@ -1,10 +1,11 @@
 import React, { useState } from "react";
-import { ChevronDown, Play, Users } from "lucide-react";
+import { ChevronDown, FileUp, Play, Users } from "lucide-react";
 import EstimationCard from "./EstimationCard";
 import BillsOverview from "./BillsOverview";
 import PanelEdgeToggle from "./PanelEdgeToggle";
 import { ArrowLeft } from "lucide-react";
 import BoqExportModal from "./BoqExportModal";
+import BoqImportModal from "./BoqImportModal";
 import { useShallow } from "zustand/react/shallow";
 import { useTakeoffStore } from "@/store/useTakeoffStore";
 import { useBoqExport } from "@/hooks/useBoqExport";
@@ -50,6 +51,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const { id: routeProjectId } = useParams();
   const [collaborateOpen, setCollaborateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const accessRole = useProjectAccessStore((s) => s.role);
   const can = useProjectAccessStore((s) => s.can);
   const readOnly = !can.edit;
@@ -247,6 +249,17 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
           className="rounded-lg border border-border p-2 text-muted hover:bg-overlay/5 hover:text-body transition-colors disabled:opacity-40 cursor-pointer"
         >
           <Play className="h-4 w-4" strokeWidth={1.75} />
+        </button>
+        )}
+        {!readOnly && (
+        <button
+          type="button"
+          title="Import a BOQ from Excel"
+          aria-label="Import from Excel"
+          onClick={() => setImportOpen(true)}
+          className="rounded-lg border border-border p-2 text-muted hover:bg-overlay/5 hover:text-body transition-colors cursor-pointer"
+        >
+          <FileUp className="h-4 w-4" strokeWidth={1.75} />
         </button>
         )}
         <button
@@ -559,6 +572,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
           onDelete={(uuid) => deleteComment(openComment.kind, openComment.id, uuid)}
         />
       )}
+      <BoqImportModal open={importOpen} onClose={() => setImportOpen(false)} />
       <BoqExportModal
         key={`${exportModalMode}-${pricing.vatRate}-${pricing.contingency}`}
         open={exportModalMode !== null}
