@@ -9,6 +9,8 @@ import {
   Trash2,
   Maximize,
   Minimize,
+  CloudDownload,
+  CloudUpload,
 } from 'lucide-react';
 import type { DrawTool, DrawMode } from '@/types/takeoff';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
@@ -63,6 +65,12 @@ interface CanvasToolbarProps {
   canUndo: boolean;
   canRedo: boolean;
   onClearAll: () => void;
+  /** Import a BOQ from a spreadsheet (prototype's Import / Share group). */
+  onImport?: () => void;
+  /** Publish this BOQ to the community (prototype's "Publish"). Until that
+   *  screen exists the button is shown disabled, so the group keeps the
+   *  prototype's shape instead of a lone Import. */
+  onShare?: () => void;
 }
 
 /** Grouped toolbar section with a tiny uppercase title (Reckon-Bill layout). */
@@ -241,6 +249,8 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   canUndo,
   canRedo,
   onClearAll,
+  onImport,
+  onShare,
 }) => {
   const liveColor = useTakeoffStore((s) => s.activeColor);
   const fullscreen = useFullscreen();
@@ -291,7 +301,11 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
 
   return (
     <div className="shrink-0 flex w-full overflow-x-auto bg-surface border-b border-border z-10 h-[92px]">
-      <div className="flex items-center gap-1.5 mx-auto px-3">
+      {/* `m-auto` centres the row when it fits and, unlike `mx-auto`, still
+          lets both ends be scrolled to once the groups outgrow the width —
+          auto margins on a flex item collapse under overflow, which would
+          otherwise push the first group off the left edge for good. */}
+      <div className="flex items-center gap-1.5 m-auto px-3">
         <ToolGroup title="Pointer">
           <IconButton
             icon={MousePointer2}
@@ -451,6 +465,34 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             />
           )}
         </ToolGroup>
+
+        {onImport && (
+          <>
+            <Divider />
+
+            {/* Prototype's Import / Share group (Reckon-Bill Toolbar.tsx). */}
+            <ToolGroup title="Import / Share">
+              <IconButton
+                icon={CloudDownload}
+                label="Import"
+                disabled={readOnly}
+                title="Import a BOQ from a spreadsheet"
+                onClick={onImport}
+              />
+              <IconButton
+                icon={CloudUpload}
+                label="Publish"
+                disabled={!onShare || readOnly}
+                title={
+                  onShare
+                    ? 'Publish this BOQ to the community'
+                    : 'Publish to the community — coming soon'
+                }
+                onClick={onShare}
+              />
+            </ToolGroup>
+          </>
+        )}
       </div>
 
       {/* Scale / calibration menu */}

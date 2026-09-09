@@ -1,7 +1,12 @@
 # BOQ import from Excel
 
-Added 2026-09-09. Import sits beside Export in the BOQ panel header
-(`TakeoffRightSidebar`), editors only.
+Added 2026-09-09. Import lives in the canvas toolbar's **Import / Share**
+group (`CanvasToolbar`), ported from the Reckon-Bill prototype's toolbar,
+which pairs Import with Publish. Publish has no screen yet, so its button
+is shown disabled with a "coming soon" tooltip — the group keeps the
+prototype's shape, and passing `onShare` to `CanvasToolbar` enables it. The trigger is disabled for read-only roles, and the modal
+renders with the BOQ panel (`TakeoffRightSidebar`) — the two are connected
+by the store's `boqImportOpen` flag.
 
 ## What it does
 

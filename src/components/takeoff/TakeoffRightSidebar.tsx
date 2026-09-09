@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ChevronDown, FileUp, Play, Users } from "lucide-react";
+import { ChevronDown, Play, Users } from "lucide-react";
 import EstimationCard from "./EstimationCard";
 import BillsOverview from "./BillsOverview";
 import PanelEdgeToggle from "./PanelEdgeToggle";
@@ -51,7 +51,6 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const { id: routeProjectId } = useParams();
   const [collaborateOpen, setCollaborateOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
   const accessRole = useProjectAccessStore((s) => s.role);
   const can = useProjectAccessStore((s) => s.can);
   const readOnly = !can.edit;
@@ -97,6 +96,10 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
   };
   const threadOf = (kind: CommentAnchorKind, id: string) =>
     commentThreads[commentTargetKey(kind, id)];
+  // Import is triggered from the canvas toolbar's Import / Share group
+  // (prototype layout); the modal renders here, beside the BOQ it changes.
+  const boqImportOpen = useTakeoffStore((s) => s.boqImportOpen);
+  const setBoqImportOpen = useTakeoffStore((s) => s.setBoqImportOpen);
   const bills = useTakeoffStore((s) => s.bills);
   const activeBillId = useTakeoffStore((s) => s.activeBillId);
   const switchBill = useTakeoffStore((s) => s.switchBill);
@@ -249,17 +252,6 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
           className="rounded-lg border border-border p-2 text-muted hover:bg-overlay/5 hover:text-body transition-colors disabled:opacity-40 cursor-pointer"
         >
           <Play className="h-4 w-4" strokeWidth={1.75} />
-        </button>
-        )}
-        {!readOnly && (
-        <button
-          type="button"
-          title="Import a BOQ from Excel"
-          aria-label="Import from Excel"
-          onClick={() => setImportOpen(true)}
-          className="rounded-lg border border-border p-2 text-muted hover:bg-overlay/5 hover:text-body transition-colors cursor-pointer"
-        >
-          <FileUp className="h-4 w-4" strokeWidth={1.75} />
         </button>
         )}
         <button
@@ -572,7 +564,7 @@ const TakeoffRightSidebar: React.FC<TakeoffRightSidebarProps> = ({
           onDelete={(uuid) => deleteComment(openComment.kind, openComment.id, uuid)}
         />
       )}
-      <BoqImportModal open={importOpen} onClose={() => setImportOpen(false)} />
+      <BoqImportModal open={boqImportOpen} onClose={() => setBoqImportOpen(false)} />
       <BoqExportModal
         key={`${exportModalMode}-${pricing.vatRate}-${pricing.contingency}`}
         open={exportModalMode !== null}
