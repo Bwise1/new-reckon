@@ -46,9 +46,17 @@ formulas cannot be recomputed here; the cell's cached value is used.
 
 ## Update from an edited export
 
-The export writes each element's and item's store id into a hidden column G,
-and a hidden `_reckon` sheet naming the project, the export time and which
-bill each tab is. A file exported from the open project therefore offers a
+The export writes each element's and item's store id into column G, and each
+item's own group header into column H (the visible sheet emits a sub-header
+row only for items that have one, so without this an item with no header
+would inherit its neighbour's on every round trip). Both columns are declared
+hidden and 2 characters wide, but `xlsx-js-style` drops the hidden flag on
+write — rewriting the file through plain `xlsx`, which honours it, throws away
+all cell styling — so they render as two hairline columns of near-white 6pt
+text past Amount.
+
+The export also writes a hidden `_reckon` sheet naming the project, the
+export time, and which bill each tab is. A file exported from the open project therefore offers a
 third mode, **Update this project** (`mergeImportedBills`, pure, previewed
 before applying):
 

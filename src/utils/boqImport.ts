@@ -169,6 +169,10 @@ const isReckonHeaderRow = (row: Row): boolean =>
 
 /** Column G of our export: the element's or item's store id, hidden. */
 const ID_COL = 6;
+/** Column H: the item's own group header, hidden. The visible sheet writes a
+ *  sub-header row only for items that HAVE one, so without this an item with
+ *  no header would inherit the group above it on every round trip. */
+const HEADER_COL = 7;
 
 const idOf = (row: Row): string | undefined => {
   const raw = text(row[ID_COL]);
@@ -234,7 +238,11 @@ const parseReckonSheet = (rows: Row[], headerIndex: number): { elements: BoqElem
       expectElement = false;
     }
     const item = makeItem({
-      header: group,
+      // The exported header wins when the file carries one (an empty cell
+      // there means "no header", which is not the same as inheriting).
+      header: row[HEADER_COL] && row[HEADER_COL].v !== null && row[HEADER_COL].v !== undefined
+        ? text(row[HEADER_COL])
+        : group,
       description: label,
       qtyCell: row[2],
       unit: text(row[3]),
