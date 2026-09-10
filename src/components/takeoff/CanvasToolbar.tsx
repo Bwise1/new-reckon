@@ -351,20 +351,26 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               />
             );
             // Only Area and Linear can be drawn as a box; Arc and Count have
-            // no rectangle form, so they get no caret.
+            // no rectangle form, so they are plain buttons. Area and Linear
+            // take the Rotate control's shape: icon, then a label with a
+            // chevron that opens the draw-mode menu.
             if (!DRAW_MODE_TOOLS.has(tool.type)) {
               return <Fragment key={tool.type}>{button}</Fragment>;
             }
             return (
-              <div key={tool.type} className="group relative flex">
-                {button}
-                <DrawModeMenu
-                  mode={drawMode}
-                  onChange={onDrawModeChange}
-                  disabled={readOnly}
-                  portalTheme={portalTheme}
-                />
-              </div>
+              <DrawModeMenu
+                key={tool.type}
+                icon={tool.icon}
+                label={tool.label}
+                iconScale={tool.iconScale ?? MEASURE_ICON_SCALE}
+                active={isActive}
+                disabled={readOnly}
+                title={readOnly ? 'Read-only role' : isActive ? `${tool.label} — click again or Done to exit` : tool.tooltip}
+                onSelect={() => (isActive ? onFinishTool() : onSelectTool(tool.type))}
+                mode={drawMode}
+                onChange={onDrawModeChange}
+                portalTheme={portalTheme}
+              />
             );
           })}
           <IconButton
