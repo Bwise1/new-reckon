@@ -190,8 +190,24 @@ interface TakeoffStore {
    *  modal renders with the BOQ panel, so the two talk through this flag. */
   boqImportOpen: boolean;
   setBoqImportOpen: (open: boolean) => void;
+  /**
+   * Bills waiting for a project that is still opening — "import into a new
+   * project" creates the project, then navigates, and this store is only
+   * populated once that project has loaded. loadProject drains it.
+   */
+  pendingBoqImport: { name: string; elements: BoqElementData[] }[] | null;
+  setPendingBoqImport: (bills: { name: string; elements: BoqElementData[] }[]) => void;
   importBills: (
     bills: { name: string; elements: BoqElementData[] }[],
+    mode: 'append' | 'replace'
+  ) => void;
+  /**
+   * Put imported elements into the bill that is open: `append` after what is
+   * there, `replace` instead of it. One undo step, synced per entity like any
+   * edit. (Google Sheets' "append to / replace current sheet", for one bill.)
+   */
+  importIntoActiveBill: (
+    elements: BoqElementData[],
     mode: 'append' | 'replace'
   ) => void;
   /**
@@ -419,6 +435,7 @@ const initialState = {
   boqElements: [createEmptyBoqElement(0)],
   bills: [],
   boqImportOpen: false,
+  pendingBoqImport: null,
   activeBillId: null,
   billElements: {},
   focusedBoqCard: null,
@@ -593,6 +610,8 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
 
     // Persistence methods
     loadProject: (projectId: string) => {
+      // Taken before any set(): both branches below reset the store.
+      const pending = get().pendingBoqImport;
       const savedData = loadProjectFromStorage(projectId);
       if (savedData) {
         const base = {
@@ -652,6 +671,12 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
           currentProjectId: projectId
         });
         console.log('Starting new project:', projectId);
+      }
+      // "Import into a new project" left its bills here before navigating;
+      // the project exists and this store is now its own, so plant them.
+      // initialState above clears the slot, so read it before that runs.
+      if (pending && pending.length > 0) {
+        get().importBills(pending, 'replace');
       }
     },
 
@@ -843,6 +868,8 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
 
   setBoqImportOpen: (open) => set({ boqImportOpen: open }),
 
+  setPendingBoqImport: (bills) => set({ pendingBoqImport: bills }),
+
   importBills: (incoming, mode) => {
     const state = get();
     if (incoming.length === 0) return;
@@ -916,6 +943,32 @@ export const useTakeoffStore = create<TakeoffStore>((set, get) => {
         enqueueAdditions(removed, previous.bills);
       },
       description: `Import ${added.length} bill${added.length === 1 ? '' : 's'}`,
+    });
+  },
+
+  importIntoActiveBill: (elements, mode) => {
+    const state = get();
+    if (elements.length === 0) return;
+    if (state.boqTargeting) get().exitBoqTargeting();
+
+    const before = get().boqElements;
+    // A project that has only the blank seed element has nothing to keep, so
+    // appending to it would leave an empty card above the imported work.
+    const seedOnly = !elementsHaveContent(before);
+    const next = mode === 'replace' || seedOnly ? elements : [...before, ...elements];
+
+    executeCommand({
+      execute: () => {
+        set({ boqElements: next, focusedBoqCard: null });
+        enqueueBoqOpsFromDiff(before);
+      },
+      undo: () => {
+        const after = get().boqElements;
+        set({ boqElements: before, focusedBoqCard: null });
+        enqueueBoqOpsFromDiff(after);
+      },
+      description:
+        mode === 'replace' ? 'Replace bill from Excel' : 'Append to bill from Excel',
     });
   },
 

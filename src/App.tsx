@@ -15,6 +15,7 @@ import BillingSettings from './pages/settings/BillingSettings';
 import SecuritySettings from './pages/settings/SecuritySettings';
 import { GuestRoute, ProtectedRoute, RootRedirect } from './components/auth/RouteGuards';
 import PWAUpdatePrompt from './components/PWAUpdatePrompt';
+import { ErrorBoundary, NotFound } from './pages/ErrorPage';
 import './App.css';
 
 function AppRoutes() {
@@ -47,20 +48,26 @@ function AppRoutes() {
 
       <Route path="/verify-email" element={<div className="p-8">Verify Email - Coming Soon</div>} />
       <Route path="/forgot-password" element={<div className="p-8">Forgot Password - Coming Soon</div>} />
+
+      {/* Anything else: a real page rather than the blank screen an
+          unmatched route used to render. */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }
 
 function App() {
   return (
-    <QueryProvider>
-      <ConfirmProvider>
-        <Router>
-          <AppRoutes />
-        </Router>
-        <PWAUpdatePrompt />
-      </ConfirmProvider>
-    </QueryProvider>
+    <ErrorBoundary>
+      <QueryProvider>
+        <ConfirmProvider>
+          <Router>
+            <AppRoutes />
+          </Router>
+          <PWAUpdatePrompt />
+        </ConfirmProvider>
+      </QueryProvider>
+    </ErrorBoundary>
   );
 }
 

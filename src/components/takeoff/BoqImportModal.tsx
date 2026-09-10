@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { FileSpreadsheet, X } from 'lucide-react';
-import { useParams } from 'react-router-dom';
+import { Check, ChevronDown, FileSpreadsheet, X } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   mergeImportedBills,
   parseBoqWorkbook,
@@ -8,6 +8,10 @@ import {
   type BoqImportResult,
 } from '@/utils/boqImport';
 import { useTakeoffStore } from '@/store/useTakeoffStore';
+import { useCreateProject } from '@/hooks/useProjects';
+import { saveProjectMeta } from '@/utils/projectMeta';
+import { generateClientId } from '@/utils/id';
+import type { Project } from '@/types/project';
 
 interface BoqImportModalProps {
   open: boolean;
@@ -16,9 +20,29 @@ interface BoqImportModalProps {
   onImported?: (billCount: number) => void;
 }
 
-type Mode = 'update' | 'append' | 'replace';
+/**
+ * Where the file's contents go, mirroring the choice Google Sheets offers on
+ * import (create / insert / replace spreadsheet, append to / replace current
+ * sheet) in the terms of a BOQ. `update` has no Sheets equivalent: it is the
+ * one that matches rows back to the items they were exported from.
+ */
+type Mode =
+  | 'update'
+  | 'append'
+  | 'replace'
+  | 'append-bill'
+  | 'replace-bill'
+  | 'new-project';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** Strip the extension and the export's own suffix from a workbook filename. */
+const projectTitleFrom = (fileName: string): string =>
+  fileName
+    .replace(/\.[a-z]+$/i, '')
+    .replace(/[-_]BOQ([-_].*)?$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .trim() || 'Imported BOQ';
 
 /**
  * Import a BOQ from a spreadsheet: pick a file, see what was found on each
@@ -45,10 +69,18 @@ const BoqImportModal: React.FC<BoqImportModalProps> = ({ open, onClose, onImport
   const [error, setError] = useState<string | null>(null);
 
   const bills = useTakeoffStore((s) => s.bills);
+  const activeBillId = useTakeoffStore((s) => s.activeBillId);
   const collectBills = useTakeoffStore((s) => s.collectBills);
   const importBills = useTakeoffStore((s) => s.importBills);
   const applyImportUpdate = useTakeoffStore((s) => s.applyImportUpdate);
+  const importIntoActiveBill = useTakeoffStore((s) => s.importIntoActiveBill);
   const existingCount = bills.length;
+  const activeBillName = bills.find((b) => b.id === activeBillId)?.name ?? 'this bill';
+
+  const navigate = useNavigate();
+  const { mutateAsync: createProject } = useCreateProject();
+  const [busy, setBusy] = useState(false);
+  const [modeOpen, setModeOpen] = useState(false);
 
   const selected = useMemo(
     () => result?.bills.filter((b) => !excluded.has(b.sheetName)) ?? [],
@@ -128,10 +160,47 @@ const BoqImportModal: React.FC<BoqImportModalProps> = ({ open, onClose, onImport
     });
   };
 
-  const confirm = () => {
-    if (selected.length === 0) return;
+  const confirm = async () => {
+    if (selected.length === 0 || busy) return;
+
+    if (mode === 'new-project') {
+      // Create the project, then hand the file's bills to it. The import
+      // itself runs on the new project's own canvas: this store belongs to
+      // the project being left, so writing here would put the bills in the
+      // wrong one.
+      setBusy(true);
+      setError(null);
+      try {
+        const clientUuid = generateClientId();
+        const created = await createProject({
+          title: projectTitleFrom(fileName ?? ''),
+          project_type: 'bill_of_qty',
+          location: 'Lagos, Nigeria',
+          client_uuid: clientUuid,
+        } as Partial<Project>);
+        const id = created.data?.project?.id;
+        if (!id) throw new Error('The project was not created.');
+        saveProjectMeta(String(id), { clientUuid });
+        useTakeoffStore.getState().setPendingBoqImport(
+          selected.map((b) => ({ name: b.sheetName, elements: withFreshIds(b.elements) }))
+        );
+        onImported?.(selected.length);
+        close();
+        navigate(`/project/${id}`);
+      } catch (e) {
+        setBusy(false);
+        setError((e as Error).message || 'Could not create the project.');
+      }
+      return;
+    }
+
     if (mode === 'update' && preview) {
       applyImportUpdate(preview.bills);
+    } else if (mode === 'append-bill' || mode === 'replace-bill') {
+      importIntoActiveBill(
+        withFreshIds(selected[0].elements),
+        mode === 'replace-bill' ? 'replace' : 'append'
+      );
     } else {
       importBills(
         selected.map((b) => ({ name: b.sheetName, elements: withFreshIds(b.elements) })),
@@ -142,6 +211,40 @@ const BoqImportModal: React.FC<BoqImportModalProps> = ({ open, onClose, onImport
     close();
   };
 
+  // The choice of destination, in the shape Google Sheets offers on import.
+  // An option that cannot apply is shown disabled with the reason, rather
+  // than hidden — otherwise the list changes size as you tick sheets and it
+  // is never clear what you are missing.
+  const singleSheet = selected.length === 1;
+  const MODES: { mode: Mode; label: string; hint: string; disabled?: string }[] = [
+    {
+      mode: 'update',
+      label: 'Update this project',
+      hint: 'Rows update the items they came from',
+      disabled: canUpdate
+        ? undefined
+        : fromOtherProject
+          ? 'Exported from a different project'
+          : 'Only for a file exported from this project',
+    },
+    { mode: 'append', label: 'Add as new bills', hint: `Keeps the ${plural(existingCount, 'bill')} already here` },
+    { mode: 'replace', label: 'Replace all bills', hint: `Removes the ${plural(existingCount, 'bill')} already here` },
+    {
+      mode: 'append-bill',
+      label: `Append to "${activeBillName}"`,
+      hint: 'Adds the elements to the open bill',
+      disabled: singleSheet ? undefined : 'Tick exactly one sheet',
+    },
+    {
+      mode: 'replace-bill',
+      label: `Replace "${activeBillName}"`,
+      hint: 'Replaces what is in the open bill',
+      disabled: singleSheet ? undefined : 'Tick exactly one sheet',
+    },
+    { mode: 'new-project', label: 'Create a new project', hint: 'Leaves this project untouched' },
+  ];
+  const chosen = MODES.find((m) => m.mode === mode) ?? MODES[1];
+
   const stats = preview?.stats;
   const confirmLabel =
     selected.length === 0
@@ -150,21 +253,6 @@ const BoqImportModal: React.FC<BoqImportModalProps> = ({ open, onClose, onImport
         ? `Update · ${plural(stats.changedItems, 'change')} · ${stats.newItems} new · ${stats.removedItems} removed`
         : `Import ${plural(selected.length, 'bill')} · ${plural(totals.items, 'item')}`;
 
-  const modeButton = (value: Mode, label: string, danger = false) => (
-    <button
-      type="button"
-      onClick={() => setMode(value)}
-      className={`flex-1 rounded-lg border py-2 text-sm font-semibold transition ${
-        mode === value
-          ? danger
-            ? 'border-danger bg-danger text-white'
-            : 'border-accent bg-accent text-accent-fg'
-          : 'border-border text-muted hover:border-muted/60'
-      }`}
-    >
-      {label}
-    </button>
-  );
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-scrim/40 p-4">
@@ -268,20 +356,76 @@ const BoqImportModal: React.FC<BoqImportModalProps> = ({ open, onClose, onImport
             )}
 
             <div>
-              <p className="mb-1.5 text-sm font-semibold text-body">
-                {canUpdate ? 'What to do' : 'Existing bills'}
-              </p>
-              <div className="flex gap-2">
-                {canUpdate && modeButton('update', 'Update this project')}
-                {modeButton('append', canUpdate ? 'Add as new' : 'Keep and add')}
-                {modeButton('replace', 'Replace all', true)}
+              <p className="mb-1.5 text-sm font-semibold text-body">Import into</p>
+              <div className="relative">
+                <button
+                  type="button"
+                  aria-haspopup="listbox"
+                  aria-expanded={modeOpen}
+                  onClick={() => setModeOpen((o) => !o)}
+                  className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-left text-sm text-body transition hover:border-muted/60 cursor-pointer"
+                >
+                  <span className="min-w-0 flex-1 truncate">{chosen.label}</span>
+                  <ChevronDown
+                    className={`h-4 w-4 shrink-0 text-muted transition-transform ${modeOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {modeOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setModeOpen(false)} />
+                    <ul
+                      role="listbox"
+                      className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-xl"
+                    >
+                      {MODES.map((m) => (
+                        <li key={m.mode}>
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={m.mode === mode}
+                            disabled={Boolean(m.disabled)}
+                            title={m.disabled}
+                            onClick={() => {
+                              setMode(m.mode);
+                              setModeOpen(false);
+                            }}
+                            className={`flex w-full items-start gap-2 px-3 py-2 text-left transition-colors ${
+                              m.disabled
+                                ? 'cursor-default opacity-40'
+                                : 'cursor-pointer hover:bg-overlay/5'
+                            }`}
+                          >
+                            <Check
+                              className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${
+                                m.mode === mode ? 'opacity-100 text-accent' : 'opacity-0'
+                              }`}
+                              strokeWidth={2.5}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm text-body">{m.label}</span>
+                              <span className="block text-[11px] text-muted">
+                                {m.disabled ?? m.hint}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
               </div>
               <p className="mt-1.5 text-[11px] text-muted">
                 {mode === 'update'
                   ? 'Rows update the items they were exported from; new rows are added. You can undo.'
                   : mode === 'replace'
                     ? `Removes ${plural(existingCount, 'existing bill')} before importing. You can undo.`
-                    : 'New bills are added after the ones already here. A blank project is filled in place.'}
+                    : mode === 'replace-bill'
+                      ? `Replaces everything in "${activeBillName}". You can undo.`
+                      : mode === 'append-bill'
+                        ? `Adds ${plural(selected[0]?.elementCount ?? 0, 'element')} to the end of "${activeBillName}". You can undo.`
+                        : mode === 'new-project'
+                          ? 'Creates a project from the file name and opens it. This project is left as it is.'
+                          : 'New bills are added after the ones already here. A blank project is filled in place.'}
               </p>
             </div>
 
