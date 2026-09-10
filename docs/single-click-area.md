@@ -4,7 +4,10 @@ Click once inside an enclosed region (a room, a slab) and get its area
 automatically, instead of clicking every corner. PlanSwift calls this "Single
 Click"; the mechanism is a flood fill.
 
-Status: **design. Not implemented.**
+Status: **built.** Shipped as the "Auto Area" tool; the pipeline was
+reworked on 2026-09-09 (see §5.4) after the first version failed on ordinary
+drawings — every door leaked the fill, every dimension line was a wall, and
+grey or coloured linework fell below a fixed threshold.
 
 Written against the actual Reckon canvas, not a generic plan. File/line
 references are current as of this writing so you can verify each claim.
@@ -107,6 +110,35 @@ The filled region is a pixel mask. Turn its outline into vertices:
 3. **Convert** each vertex from image-pixel space to measurement space with the
    existing transform.
 4. Emit as `Measurement.points`, `type: 'area'`.
+
+### 5.4 What the shipped version adds (2026-09-09)
+
+`src/utils/areaDetection.ts` and `src/utils/wallSegments.ts`, both pure.
+
+- **Threshold**: Otsu on the luminance histogram with polarity detection,
+  not a fixed 180. Grey, coloured and white-on-dark drawings split
+  correctly. Clamped to 90–230 for near-blank pages.
+- **Wall filtering**: PDF vector segments are stroked over the bitmap as
+  before, but only the wall-like ones. Short strokes (text, ticks), hatch
+  lattices (5+ parallel strokes at one pitch) and dimension strings (a long
+  run with perpendicular witness lines at both ends) are dropped. All
+  thresholds are metres, converted through the calibration.
+- **Tiered gap bridging**: the fill is tried against the walls as drawn,
+  then with the walls dilated by 1, 2, 3… px up to roughly half a door
+  width. A tier is accepted when the fill neither passes the area guard nor
+  touches the page edge (a room never does; a leak out of the building
+  always does). The fill is then grown back to the real ink so the room
+  keeps its true extent while the gap stays closed. The result reports the
+  radius used; the canvas tells the person when an opening wider than a
+  hairline had to be closed.
+- **Snap + square**: traced vertices move onto the nearest vector corner
+  within ~8 cm, and edges within 4° of an axis are squared, with snapped
+  corners held fixed.
+- **Failure reasons** instead of one message: clicked on a line, too small,
+  or an opening wider than the bridging allows (with the size).
+
+Not yet: islands (columns, shafts) as deductions, a live preview before
+commit, and a manual boundary stroke to seal an opening by hand.
 
 ### 5.3 Performance
 

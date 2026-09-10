@@ -33,6 +33,7 @@ import PageSelectModal from "@/components/takeoff/PageSelectModal";
 import CanvasViewport from "@/components/takeoff/CanvasViewport";
 import { ratioToPxPerMeter } from "@/utils/pdfScaleDetector";
 import { detectRoomPolygon } from "@/utils/areaDetection";
+import { filterWallSegments, cornerPoints } from "@/utils/wallSegments";
 import { unrotatedToRotated } from "@/utils/pdfLineExtractor";
 import { generateClientId } from "@/utils/id";
 import {
@@ -820,8 +821,17 @@ if (!prev && activeTool) {
       ctx.imageSmoothingEnabled = true;
       ctx.drawImage(image, 0, 0, w, h);
 
-      // Stroke the extracted vector walls on top: they are gap-free and
+      // Real-world sizes in work pixels, from the calibration when there is
+      // one. Without a scale, assume a typical A1 plan at 1:100 so the
+      // thresholds are at least the right order of magnitude.
+      const pxPerM = (currentScale && currentScale > 0 ? currentScale : 40) * workScale;
+      const metres = (m: number) => m * pxPerM;
+
+      // Stroke the wall-like vector segments on top: they are gap-free and
       // anti-aliasing-free, so the fill leaks far less than on pixels alone.
+      // Dimension strings, hatching and text are left out — as walls they
+      // would carve the room up (see utils/wallSegments).
+      let corners: { x: number; y: number }[] = [];
       const index = pdfSegmentIndexRef?.current;
       const natural = pdfNaturalSize;
       if (index && natural && natural.width > 0) {
@@ -830,28 +840,61 @@ if (!prev && activeTool) {
         const unrotW = rot % 180 !== 0 ? natural.height : natural.width;
         const unrotH = rot % 180 !== 0 ? natural.width : natural.height;
         const k = displayScale * workScale;
-        ctx.strokeStyle = "#000000";
-        ctx.lineWidth = Math.max(1.25, 2 * workScale);
-        ctx.beginPath();
+        const segs: { x1: number; y1: number; x2: number; y2: number }[] = [];
         index.forEachSegment((seg) => {
           const a = unrotatedToRotated(seg.x1, seg.y1, rot, unrotW, unrotH);
           const b = unrotatedToRotated(seg.x2, seg.y2, rot, unrotW, unrotH);
-          ctx.moveTo(a.x * k, a.y * k);
-          ctx.lineTo(b.x * k, b.y * k);
+          segs.push({ x1: a.x * k, y1: a.y * k, x2: b.x * k, y2: b.y * k });
         });
+        const { walls } = filterWallSegments(segs, {
+          minLength: Math.max(2, metres(0.12)),
+          hatchMaxPitch: Math.max(4, metres(0.35)),
+          dimMinLength: Math.max(20, metres(1.5)),
+          dimMaxWitness: Math.max(6, metres(0.6)),
+        });
+        corners = cornerPoints(walls);
+        ctx.strokeStyle = "#000000";
+        ctx.lineWidth = Math.max(1.25, 2 * workScale);
+        ctx.beginPath();
+        for (const seg of walls) {
+          ctx.moveTo(seg.x1, seg.y1);
+          ctx.lineTo(seg.x2, seg.y2);
+        }
         ctx.stroke();
       }
+
+      // Bridging tiers: 1–2 px close scan breaks and anti-aliasing gaps; the
+      // wider tiers close an actual opening (an arch, a door drawn away from
+      // its wall) up to about a metre, and the result reports which was
+      // needed so the person can be told.
+      const maxBridge = Math.max(2, Math.min(8, Math.floor(metres(1.1) / 2)));
+      const bridgeRadii = [0, 1, 2];
+      for (let r = 3; r <= maxBridge; r += Math.max(1, Math.round(r / 2))) bridgeRadii.push(r);
 
       const detected = detectRoomPolygon(
         ctx.getImageData(0, 0, w, h),
         clickPoint.x * workScale,
-        clickPoint.y * workScale
+        clickPoint.y * workScale,
+        {
+          wallThreshold: "auto",
+          bridgeRadii,
+          snap: corners.length > 0 ? { points: corners, radius: Math.max(3, metres(0.08)) } : null,
+        }
       );
-      if (!detected) {
+      if (!detected.ok) {
         setAutoAreaError(
-          "No enclosed room found there — the boundary has a gap, or you clicked a line. Try another spot or trace it manually."
+          detected.reason === "on-wall"
+            ? "That's a line — click inside the room, away from its walls."
+            : detected.reason === "too-small"
+              ? "That enclosed space is too small to be a room. Click somewhere more open."
+              : `No enclosed room found — the boundary has an opening wider than about ${Math.round((maxBridge * 2) / pxPerM * 100)} cm. Draw a line across it, or trace the room manually.`
         );
         return;
+      }
+      if (detected.bridged >= 3) {
+        setAutoAreaError(
+          `Closed an opening of about ${Math.round((detected.bridged * 2) / pxPerM * 100)} cm to enclose this room — check the outline.`
+        );
       }
       const polygon = detected.points.map((pt) => ({
         x: pt.x / workScale,
@@ -862,7 +905,7 @@ if (!prev && activeTool) {
       autoCommitRef.current = true;
       setCurrentPoints(polygon);
     },
-    [image, pdfDisplaySize, pdfNaturalSize, pdfSegmentIndexRef, currentRotation, setCurrentPoints]
+    [image, pdfDisplaySize, pdfNaturalSize, pdfSegmentIndexRef, currentRotation, currentScale, setCurrentPoints]
   );
 
   const handleStageClick = useCallback(
