@@ -3,7 +3,7 @@ import { generateClientId } from '@/utils/id';
 
 export interface ProjectPlan {
   id: number;
-  project_id: number;
+  project_id: string;
   client_uuid: string;
   filename: string;
   url: string;

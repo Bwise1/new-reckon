@@ -12,7 +12,7 @@ import type { Point } from '@/types/takeoff';
  * prop-drilling; every sender no-ops unless a project is currently joined.
  */
 
-const joinedProjectId = (): number | null => useRealtimeStore.getState().projectId;
+const joinedProjectId = (): string | null => useRealtimeStore.getState().projectId;
 
 const canSend = (): boolean =>
   REALTIME_ENABLED && joinedProjectId() !== null && realtimeSocket.connected;

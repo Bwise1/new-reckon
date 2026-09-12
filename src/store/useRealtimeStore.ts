@@ -34,7 +34,7 @@ export interface RemoteDraft {
 interface RealtimeState {
   connected: boolean;
   /** Bill id of the joined project (null while not joined). */
-  projectId: number | null;
+  projectId: string | null;
   self: Presence | null;
   members: Presence[];
   cursors: Record<number, RemoteCursor>;
@@ -44,7 +44,7 @@ interface RealtimeState {
   rev: number;
 
   setConnected: (connected: boolean) => void;
-  setJoined: (projectId: number, self: Presence, members: Presence[], locks: LockState[], rev: number) => void;
+  setJoined: (projectId: string, self: Presence, members: Presence[], locks: LockState[], rev: number) => void;
   setMembers: (members: Presence[]) => void;
   setCursor: (userId: number, planId: string | null, page: number, x: number, y: number) => void;
   setDraft: (userId: number, draft: RemoteDraft) => void;
