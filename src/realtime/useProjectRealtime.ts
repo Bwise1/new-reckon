@@ -23,15 +23,13 @@ import { getProjectMeta } from '@/utils/projectMeta';
  * Gate: `VITE_REALTIME=off` makes this a no-op.
  */
 export const useProjectRealtime = (projectId: string | undefined) => {
-  const numericId = projectId ? Number(projectId) : NaN;
-  const enabled =
-    REALTIME_ENABLED && Number.isFinite(numericId) && Boolean(localStorage.getItem('token'));
+  const enabled = REALTIME_ENABLED && Boolean(projectId) && Boolean(localStorage.getItem('token'));
   const connected = useRealtimeStore((s) => s.connected);
   const resyncTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!enabled || !projectId) return;
-    const pid = numericId;
+    const pid = projectId;
     const store = useRealtimeStore.getState();
     let hasJoinedOnce = false;
     let disposed = false;
@@ -117,7 +115,7 @@ export const useProjectRealtime = (projectId: string | undefined) => {
       // backgrounded dashboard tab holds no idle connection.
       realtimeSocket.disconnect();
     };
-  }, [enabled, projectId, numericId]);
+  }, [enabled, projectId]);
 
   return { connected, sendCursor, sendDraft, acquireLock, releaseLock };
 };

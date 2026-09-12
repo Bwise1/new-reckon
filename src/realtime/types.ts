@@ -33,7 +33,7 @@ export type RemoteOpKind = SyncOp['kind'];
 /** A mutation another client made, relayed by the server after it landed. */
 export interface RemoteOp {
   kind: RemoteOpKind;
-  projectId: number;
+  projectId: string;
   clientUuid: string;
   /** Server-shaped body (the REST body the sender used), varies by kind. */
   body: Record<string, unknown> | null;
@@ -76,15 +76,15 @@ export interface ServerToClientEvents {
 }
 
 export interface ClientToServerEvents {
-  'project.join': (payload: { projectId: number }, ack: (res: JoinAck) => void) => void;
-  'project.leave': (payload: { projectId: number }) => void;
-  cursor: (payload: { projectId: number; planId: string | null; page: number; x: number; y: number }) => void;
-  draft: (payload: { projectId: number; planId: string | null; page: number; tool: string | null; points: Point[] }) => void;
+  'project.join': (payload: { projectId: string }, ack: (res: JoinAck) => void) => void;
+  'project.leave': (payload: { projectId: string }) => void;
+  cursor: (payload: { projectId: string; planId: string | null; page: number; x: number; y: number }) => void;
+  draft: (payload: { projectId: string; planId: string | null; page: number; tool: string | null; points: Point[] }) => void;
   'lock.acquire': (
-    payload: { projectId: number; entityType: LockEntityType; entityId: string },
+    payload: { projectId: string; entityType: LockEntityType; entityId: string },
     ack: (res: LockAck) => void
   ) => void;
-  'lock.release': (payload: { projectId: number; entityType: LockEntityType; entityId: string }) => void;
+  'lock.release': (payload: { projectId: string; entityType: LockEntityType; entityId: string }) => void;
 }
 
 export const lockKey = (entityType: LockEntityType, entityId: string) => `${entityType}:${entityId}`;

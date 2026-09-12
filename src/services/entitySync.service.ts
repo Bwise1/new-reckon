@@ -3,7 +3,7 @@ import { apiClient } from '@/lib/api-client';
 // ---------- Calibrations ----------
 
 export interface ApiCalibration {
-  project_id: number;
+  project_id: string;
   plan_client_uuid: string;
   page: number;
   scale_pixels_per_meter: number;
@@ -50,7 +50,7 @@ export const calibrationSync = {
 
 export interface ApiMeasurement {
   client_uuid: string;
-  project_id: number;
+  project_id: string;
   plan_client_uuid: string;
   takeoff_item_client_uuid: string;
   boq_element_id: string | null;
@@ -140,7 +140,7 @@ export const measurementSync = {
 
 export interface ApiBoqHistoryEntry {
   client_uuid: string;
-  project_id: number;
+  project_id: string;
   item_client_uuid: string;
   sort_order: number;
   value: string;
@@ -152,7 +152,7 @@ export interface ApiBoqHistoryEntry {
 
 export interface ApiBoqItem {
   client_uuid: string;
-  project_id: number;
+  project_id: string;
   element_client_uuid: string;
   sort_order: number;
   unit: string;
@@ -167,7 +167,7 @@ export interface ApiBoqItem {
 
 export interface ApiBoqBill {
   client_uuid: string;
-  project_id: number;
+  project_id: string;
   name: string;
   sort_order: number;
   created_at?: string;
@@ -176,7 +176,7 @@ export interface ApiBoqBill {
 
 export interface ApiBoqElement {
   client_uuid: string;
-  project_id: number;
+  project_id: string;
   bill_client_uuid?: string | null;
   title: string;
   sort_order: number;
