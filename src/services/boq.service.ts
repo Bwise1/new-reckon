@@ -164,12 +164,6 @@ export const boqService = {
   previewExcel: (payload: BoqProjectPayload) =>
     apiClient.post<{ data: { downloadUrl: string } }>('/projects/preview-excel', payload),
 
-  initPayment: (projectId: string, email: string) =>
-    apiClient.post<{ data: { reference: string; exportId: string } }>(`/payments/initialize/${projectId}`, { email }),
-
-  verifyPayment: (reference: string) =>
-    apiClient.get<{ data: { status: string; exportId?: string } }>(`/payments/verify?reference=${reference}`),
-
   exportPdf: (payload: BoqProjectPayload, exportId: string) =>
     apiClient.post<{ data: { downloadUrl: string } }>(`/projects/export?exportId=${exportId}`, payload),
 
